@@ -1,0 +1,5 @@
+tools/.cache/
+__pycache__/
+*.zip
+.release/
+.release-notes.md
