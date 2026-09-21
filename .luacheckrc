@@ -6,6 +6,7 @@ globals = { "FerryForeverDB", "FerryForeverDockPinMixin", "SLASH_FERRYFOREVER1",
 read_globals = {
 	"Ambiguate",
 	"C_ChatInfo",
+	"Clamp",
 	"C_Map",
 	"C_SuperTrack",
 	"C_Timer",

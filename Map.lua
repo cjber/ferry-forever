@@ -2,6 +2,8 @@ local _, ns = ...
 
 local PIN_TEMPLATE = "FerryForeverDockPinTemplate"
 local PIN_SIZE = 20
+-- Half a pin, as a fraction of a zoomed-out map.
+local EDGE = 0.015
 local provider
 
 function ns.DepartureDestination(departure)
@@ -190,6 +192,8 @@ function ProviderMixin:RefreshAllData()
 				if uiMap == mapID and position then
 					local x, y = position:GetXY()
 					if x >= 0 and x <= 1 and y >= 0 and y <= 1 then
+						-- Piers at the map's edge (Menethil) would be half cut off; keep the whole pin on the map.
+						x, y = Clamp(x, EDGE, 1 - EDGE), Clamp(y, EDGE, 1 - EDGE)
 						self.pins[dockID] = map:AcquirePin(PIN_TEMPLATE, dockID, x, y)
 					end
 				end
