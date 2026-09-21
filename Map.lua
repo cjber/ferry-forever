@@ -4,8 +4,6 @@ local PIN_TEMPLATE = "FerryForeverDockPinTemplate"
 local PIN_SIZE = 20
 -- Half a pin, as a fraction of a zoomed-out map.
 local EDGE = 0.015
--- The flight map's path thickness (FM_FlightPathDataProvider), zoomed out.
-local LINE_THICKNESS = 45
 local provider
 
 function ns.DepartureDestination(departure)
@@ -111,7 +109,7 @@ function FerryForeverDockPinMixin:RefreshTooltip()
 end
 
 function FerryForeverDockPinMixin:OnMouseEnter()
-	provider:ShowRoutes(self.dockID)
+	provider:ShowDestinations(self.dockID)
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 	self:RefreshTooltip()
 	self.tooltipElapsed = 0
@@ -129,7 +127,7 @@ function FerryForeverDockPinMixin:OnMouseEnter()
 end
 
 function FerryForeverDockPinMixin:OnMouseLeave()
-	provider:HideRoutes()
+	provider:HideDestinations()
 	self:SetScript("OnUpdate", nil)
 	if GameTooltip:IsOwned(self) then
 		GameTooltip:Hide()
@@ -138,6 +136,7 @@ end
 
 function FerryForeverDockPinMixin:OnReleased()
 	self:OnMouseLeave()
+	self.Glow:Hide()
 	self.dockID = nil
 	MapCanvasPinMixin.OnReleased(self)
 end
@@ -146,56 +145,35 @@ local ProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
 
 function ProviderMixin:RemoveAllData()
 	self:GetMap():RemoveAllPinsByTemplate(PIN_TEMPLATE)
-	self:HideRoutes()
 	self.pins = {}
 end
 
--- The hovered dock's routes, drawn like the flight map's paths: each leg on this map between its frames.
-function ProviderMixin:ShowRoutes(dockID)
-	self:HideRoutes()
-	local map = self:GetMap()
-	local canvas, mapID = map:GetCanvas(), map:GetMapID()
-	local width, height = canvas:GetWidth(), canvas:GetHeight()
-	self.lines = self.lines or CreateFramePool("FRAME", canvas, "FerryForeverRouteLineTemplate")
-	local thickness = Lerp(1, 2, Saturate(1 - map:GetCanvasZoomPercent())) * LINE_THICKNESS
-	for _, route in pairs(ns.Routes) do
-		if StopsAt(route, dockID) then
-			local previous
-			for _, frame in ipairs(route.frames) do
-				local uiMap, position = C_Map.GetMapPosFromWorldPos(frame[3], CreateVector2D(frame[4], frame[5]), mapID)
-				local point = uiMap == mapID and position and { position:GetXY() }
-				if previous and point then
-					local line = self.lines:Acquire()
-					line.Fill:SetThickness(thickness)
-					line.Fill:SetStartPoint("TOPLEFT", canvas, previous[1] * width, -previous[2] * height)
-					line.Fill:SetEndPoint("TOPLEFT", canvas, point[1] * width, -point[2] * height)
-					line:Show()
-				end
-				previous = not frame[6] and point or nil
+-- Where the hovered dock's boats go, glowing like the map legend's related pins.
+function ProviderMixin:ShowDestinations(dockID)
+	for _, departure in ipairs(ns.DockDepartures(dockID)) do
+		for _, destination in ipairs(departure.to) do
+			local pin = self.pins[destination]
+			if pin then
+				pin.Glow:Show()
 			end
 		end
 	end
 end
 
-function ProviderMixin:HideRoutes()
-	if self.lines then
-		self.lines:ReleaseAll()
+function ProviderMixin:HideDestinations()
+	for _, pin in pairs(self.pins or {}) do
+		pin.Glow:Hide()
 	end
 end
 
+-- A dock shows on its zone and every map above it (continent, Azeroth), where both ends of a crossing fit.
 local function IsDockMap(location, mapID)
-	if location.uiMap == mapID then
-		return true
-	end
 	local info = C_Map.GetMapInfo(location.uiMap)
 	while info do
-		if info.mapType == Enum.UIMapType.Continent then
-			return info.mapID == mapID
+		if info.mapID == mapID then
+			return true
 		end
-		if info.parentMapID == 0 then
-			break
-		end
-		info = C_Map.GetMapInfo(info.parentMapID)
+		info = info.parentMapID ~= 0 and C_Map.GetMapInfo(info.parentMapID) or nil
 	end
 	return false
 end

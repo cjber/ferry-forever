@@ -1,11 +1,15 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
 	<Frame name="FerryForeverDockPinTemplate" inherits="BaseHighlightableMapPoiPinTemplate"
-		mixin="FerryForeverDockPinMixin" enableMouse="true" virtual="true"/>
-	<!-- The flight map's path line (Blizzard_FlightMap FlightMap_BackgroundFlightLineTemplate). -->
-	<Frame name="FerryForeverRouteLineTemplate" virtual="true">
+		mixin="FerryForeverDockPinMixin" enableMouse="true" virtual="true">
 		<Layers>
-			<Layer level="BACKGROUND" textureSubLevel="-2">
-				<Line parentKey="Fill" atlas="_UI-Taxi-Line-horizontal" alpha="0.85"/>
+			<!-- The map legend's glow for a related pin (LegendHighlightablePoiPinMixin:ShowMapLegendGlow). -->
+			<Layer level="BACKGROUND">
+				<Texture parentKey="Glow" atlas="UI-QuestPoi-OuterGlow" hidden="true">
+					<Anchors>
+						<Anchor point="TOPLEFT" x="-18" y="18"/>
+						<Anchor point="BOTTOMRIGHT" x="18" y="-18"/>
+					</Anchors>
+				</Texture>
 			</Layer>
 		</Layers>
 	</Frame>
