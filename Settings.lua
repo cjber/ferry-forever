@@ -1,5 +1,12 @@
 local _, ns = ...
 
+local settings = {}
+
+-- Change an option from anywhere (the map's filter menu) with the settings panel kept in step.
+function ns.SetOption(key, value)
+	settings[key]:SetValue(value)
+end
+
 ns.Init(function()
 	local category = Settings.RegisterVerticalLayoutCategory("Ferry Forever")
 	local function Checkbox(key, name, tooltip, onChanged)
@@ -16,9 +23,19 @@ ns.Init(function()
 			setting:SetValueChangedCallback(onChanged)
 		end
 		Settings.CreateCheckbox(category, setting, tooltip)
+		settings[key] = setting
 	end
 
 	Checkbox("pins", "Show docks on the world map", nil, ns.RefreshMap)
+	Checkbox(
+		"otherFaction",
+		"Show the other faction's routes",
+		"Either faction can ride any boat or zeppelin.",
+		function()
+			ns.RefreshMap()
+			ns.RefreshTracker()
+		end
+	)
 	Checkbox("tracker", "Show the next boats in the objective tracker near a dock", nil, ns.RefreshTracker)
 	Checkbox(
 		"share",

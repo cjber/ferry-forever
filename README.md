@@ -2,9 +2,12 @@
 
 Every boat and zeppelin in WoW: Forever on the world map, with when the next one arrives and leaves.
 
-- **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower an airship, on
-  its zone and continent map. Hover one to see its routes drawn across the map, where each boat goes next,
-  when it arrives and when it leaves.
+- **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower a matching
+  zeppelin, on its zone and continent map. Hover one to see where each boat goes next, when it arrives and
+  when it leaves; the docks it sails to light up. Docks too close to tell apart at the current zoom share
+  one icon, and its tooltip names each pier by where it lies.
+- **In the map's filter menu.** *Boats & Zeppelins* turns the icons off; *Other Faction's Routes* hides the
+  boats and zeppelins run by the other faction (anyone can ride them, so they show by default).
 - **The next boats in the objective tracker.** Walk up to a dock and a *Boats* section appears above your
   quests, counting down to the next arrival and departure of every boat that calls there.
 - **Times from real rides.** Each route's loop time comes from the game's own path data, so one ride tells
@@ -24,5 +27,6 @@ that is what a ride (yours or another player's) supplies.
 
 ```sh
 python3 tools/gen_routes.py          # regenerate Data/Routes.lua for the pinned build
+tools/draw_zeppelin.py               # redraw Media/zeppelin.tga (the game has no zeppelin map icon)
 luajit tests/model_spec.lua          # timetable, ride fitting and wire format
 ```

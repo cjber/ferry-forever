@@ -12,9 +12,11 @@ verbatim rather than rewritten as the addon moves.
 ## [Unreleased]
 
 The first release. Every boat and zeppelin, including the new Forever crossings to Southshore,
-Riverglades and Zephras Isle, has its dock marked on the world map, a ferry for boats and an airship for
-zeppelins. Hovering a dock draws its routes across the map, lists where each boat goes next and counts
-down to its arrival and departure. Near a dock, a Boats section above your quests shows the same countdowns.
+Riverglades and Zephras Isle, has its dock marked on the world map, a ferry for boats and a zeppelin drawn
+to match it for zeppelins. Hovering a dock lists where each boat goes next, counts down to its arrival and
+departure, and lights up the docks it sails to. Docks that would overlap on a zoomed-out map share one
+icon, with each pier named in the tooltip. The map's filter menu can hide the icons, or just the other
+faction's routes. Near a dock, a Boats section above your quests shows the same countdowns.
 
 Each route's loop time comes from the game's own path data, so a single ride fixes a boat's schedule for
 hours. Ride once and it syncs, and the sighting is shared quietly with your guild, party and anyone at the

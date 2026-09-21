@@ -1,7 +1,7 @@
 local addonName, ns = ...
 
 local Model = ns.Model
-local DEFAULTS = { pins = true, tracker = true, share = true }
+local DEFAULTS = { pins = true, otherFaction = true, tracker = true, share = true }
 
 function ns.Print(message)
 	print(NORMAL_FONT_COLOR:WrapTextInColorCode("Ferry Forever:") .. " " .. message)
@@ -124,10 +124,15 @@ local function SoonestFirst(a, b)
 	return (a.departIn or 0) < (b.departIn or 0) or (a.departIn == b.departIn and a.route < b.route)
 end
 
+-- Anyone can ride either faction's boats, so the other faction's show unless turned off.
+function ns.RouteShown(route)
+	return ns.db.otherFaction or not route.faction or route.faction == UnitFactionGroup("player")
+end
+
 function ns.DockDepartures(dockID)
 	local departures, fresh, now = {}, ns.FreshAnchors(), ns.NowMs()
 	for routeID, route in pairs(ns.Routes) do
-		for index, stop in ipairs(route.stops) do
+		for index, stop in ipairs(ns.RouteShown(route) and route.stops or {}) do
 			if stop.dock == dockID then
 				local anchor = fresh[routeID]
 				local departure = { route = routeID, kind = route.kind, to = Model.Onward(route, index), known = false }
