@@ -1,0 +1,20 @@
+## Interface: 16001
+## Title: Ferry Forever
+## Notes: Every boat and zeppelin on the world map, with when the next one arrives and leaves.
+## Author: cjber
+## Version: @project-version@
+## Category: Map
+## X-License: GPL-3.0-or-later
+## X-Website: https://github.com/cjber/ferry-forever
+## SavedVariables: FerryForeverDB
+## OptionalDeps: TomTom
+
+Data\Routes.lua
+Model.lua
+Core.lua
+Observer.lua
+Sync.lua
+Map.xml
+Map.lua
+Tracker.lua
+Settings.lua

@@ -1,0 +1,12 @@
+package-as: FerryForever
+
+manual-changelog:
+  filename: .release-notes.md
+  markup-type: markdown
+
+ignore:
+  - .release-notes.md
+  - tools
+  - tests
+  - .luacheckrc
+  - stylua.toml

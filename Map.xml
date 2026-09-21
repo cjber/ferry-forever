@@ -1,0 +1,5 @@
+<!-- local _, ns = ... -->
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<Frame name="FerryForeverDockPinTemplate" inherits="BaseHighlightableMapPoiPinTemplate"
+		mixin="FerryForeverDockPinMixin" enableMouse="true" virtual="true"/>
+</Ui>
