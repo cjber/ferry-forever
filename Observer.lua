@@ -1,63 +1,88 @@
 local _, ns = ...
 
 local Model = ns.Model
--- A ride ends once the player has been off every route this long (a continent crossing's loading screen
--- takes a few seconds, the other side of it is the same ride).
+-- A ride ends once the boat has not moved for this long: it docked (a minute), or the player got off. A
+-- continent crossing's loading screen takes a few seconds; the far side is the same ride.
 local RIDE_GAP = 30000
--- Samples older than any leg are dropped.
-local KEEP = 600000
+-- Only samples moving at least this fast count: boats cruise at 30 yd/s, a running player makes 7.
+local MIN_SPEED = 12
+-- Fitting is quadratic in samples, so it runs every few samples rather than every second.
+local FIT_EVERY = 10
 
--- [route] = { samples = {...}, last = ms of the latest on-route sample, announced = bool }
-local rides = {}
+-- { samples = { [route] = {...} }, count, last = ms of the latest moving sample, announced = route }
+local ride
+local previous
 local lastDebug = 0
 
-local function Record(routeID)
-	local ride = rides[routeID]
-	local epoch = Model.FitEpoch(ns.Routes[routeID], ride.samples)
-	if not epoch then
+local function Fits()
+	local fits = {}
+	for routeID, samples in pairs(ride.samples) do
+		local epoch, support = Model.FitEpoch(ns.Routes[routeID], samples)
+		if epoch then
+			fits[routeID] = { epoch = epoch, support = support }
+		end
+	end
+	return fits
+end
+
+-- Record the route the ride was on, once it is clear which one.
+local function Record()
+	local fits = Fits()
+	local routeID = Model.RideRoute(fits)
+	if not routeID then
 		return
 	end
-	if ns.Sighted(routeID, { epoch = epoch, seen = GetServerTime() }, "you") and not ride.announced then
+	local sighting = { epoch = fits[routeID].epoch, seen = GetServerTime(), source = "you" }
+	if ns.Sighted(routeID, sighting) and ride.announced ~= routeID then
 		ns.Print(string.format("synced the %s schedule from your ride.", ns.Routes[routeID].kind))
 	end
-	ride.announced = true
+	ride.announced = routeID
 	ns.Share(routeID)
+end
+
+local function Moving(now, x, y, map)
+	local moving = previous
+		and previous.map == map
+		and math.sqrt((x - previous.x) ^ 2 + (y - previous.y) ^ 2) >= MIN_SPEED * (now - previous.now) / 1000
+	previous = { now = now, x = x, y = y, map = map }
+	return moving
 end
 
 local function Sample()
 	local now = ns.NowMs()
 	local x, y, _, map = UnitPosition("player")
-	local onTaxi = UnitOnTaxi("player")
-	local matched = {}
-	for routeID, route in pairs(ns.Routes) do
-		local phases = x and not onTaxi and Model.Phases(route, map, x, y) or {}
-		local ride = rides[routeID]
-		if #phases > 0 then
-			ride = ride or { samples = {} }
-			rides[routeID] = ride
-			ride.samples[#ride.samples + 1] = { now = now, phases = phases }
-			ride.last = now
-			while now - ride.samples[1].now > KEEP do
-				table.remove(ride.samples, 1)
+	if x and not UnitOnTaxi("player") and Moving(now, x, y, map) then
+		for routeID, route in pairs(ns.Routes) do
+			local phases = Model.Phases(route, map, x, y)
+			if #phases > 0 then
+				ride = ride or { samples = {}, count = 0 }
+				ride.samples[routeID] = ride.samples[routeID] or {}
+				table.insert(ride.samples[routeID], { now = now, phases = phases })
+				ride.last = now
 			end
-			-- Sync as soon as the ride proves itself, then refine once it ends.
-			if not ride.announced and #ride.samples >= Model.MIN_SAMPLES then
-				Record(routeID)
-			end
-		elseif ride and now - ride.last > RIDE_GAP then
-			Record(routeID)
-			rides[routeID] = nil
 		end
-		if #phases > 0 then
-			matched[#matched + 1] = string.format("%d (%.0f s into its loop)", routeID, phases[1] / 1000)
+		if ride and ride.last == now then
+			ride.count = ride.count + 1
+			-- Sync as soon as the ride proves itself; the ride's end refines it.
+			if not ride.announced and ride.count % FIT_EVERY == 0 then
+				Record()
+			end
 		end
 	end
-	-- `/ferry debug`: whether the position reads on a transport, and which routes it matches.
+	if ride and now - ride.last > RIDE_GAP then
+		Record()
+		ride = nil
+	end
+	-- `/ferry debug`: whether the position reads on a transport, and what the ride has matched so far.
 	if ns.debug and GetTime() - lastDebug >= 5 then
 		lastDebug = GetTime()
+		local matched = {}
+		for routeID, samples in pairs(ride and ride.samples or {}) do
+			matched[#matched + 1] = routeID .. " x" .. #samples
+		end
 		ns.Print(
 			string.format(
-				"map %s at %s, %s; routes: %s",
+				"map %s at %s, %s; ride: %s",
 				tostring(map),
 				tostring(x),
 				tostring(y),

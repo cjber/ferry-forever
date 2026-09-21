@@ -57,7 +57,8 @@ local function position(route, phase)
 	end
 end
 
--- A rider sampled once a second across a leg yields the boat's epoch.
+-- A rider sampled once a second across a leg yields the boat's epoch, and the ride is told apart from every
+-- other route it passes over (boats share lanes out of Menethil and Auberdine).
 for routeID, route in pairs(Routes) do
 	local epoch = 1790000000000 + routeID * 7919
 	local samples = {}
@@ -65,15 +66,24 @@ for routeID, route in pairs(Routes) do
 	for phase = from, to, 1000 do
 		local map, x, y = position(route, phase % route.period)
 		if map then
-			local phases = Model.Phases(route, map, x + 5, y - 5)
-			if #phases > 0 then
-				samples[#samples + 1] = { now = epoch + phase, phases = phases }
+			for candidateID, candidate in pairs(Routes) do
+				local phases = Model.Phases(candidate, map, x + 5, y - 5)
+				if #phases > 0 then
+					samples[candidateID] = samples[candidateID] or {}
+					table.insert(samples[candidateID], { now = epoch + phase, phases = phases })
+				end
 			end
 		end
 	end
-	local fitted = Model.FitEpoch(route, samples)
-	assert(fitted, routeID)
-	local error = (fitted - epoch + route.period / 2) % route.period - route.period / 2
+	local fits = {}
+	for candidateID, candidateSamples in pairs(samples) do
+		local fitted, support = Model.FitEpoch(Routes[candidateID], candidateSamples)
+		if fitted then
+			fits[candidateID] = { epoch = fitted, support = support }
+		end
+	end
+	assert(Model.RideRoute(fits) == routeID, "ride on " .. routeID .. " read as " .. tostring(Model.RideRoute(fits)))
+	local error = (fits[routeID].epoch - epoch + route.period / 2) % route.period - route.period / 2
 	near(error, 0, 1500, "route " .. routeID .. " epoch")
 end
 
@@ -102,7 +112,12 @@ local rejected = Model.Decode(
 )
 assert(next(rejected) == nil)
 
-assert(Model.Newer({ seen = 2 }, { seen = 1 }) and not Model.Newer({ seen = 1 }, { seen = 1 }))
-assert(Model.Newer({ seen = 1 }, nil))
+assert(Model.Newer({ seen = 2 }, { seen = 1 }, 2) and not Model.Newer({ seen = 1 }, { seen = 1 }, 2))
+assert(Model.Newer({ seen = 1 }, nil, 1))
+-- Your own ride outranks a newer report from someone else for an hour.
+local own = { seen = now, source = "you" }
+assert(not Model.Newer({ seen = now + 60, source = "player" }, own, now + 60))
+assert(Model.Newer({ seen = now + 3700, source = "player" }, own, now + 3700))
+assert(Model.Newer({ seen = now + 60, source = "you" }, own, now + 60))
 
 print("model_spec: ok")

@@ -42,13 +42,14 @@ local function Anchors()
 	return ns.db.anchors[GetRealmName()]
 end
 
--- Record a sighting ({ epoch = server ms at phase 0, seen = server s }) unless a newer one is held.
-function ns.Sighted(routeID, anchor, source)
+-- Record a sighting ({ epoch = server ms at phase 0, seen = server s, source = "you"|"player" }) unless the
+-- one held should stand.
+function ns.Sighted(routeID, anchor)
 	local anchors = Anchors()
-	if not Model.Newer(anchor, anchors[routeID]) then
+	if not Model.Newer(anchor, anchors[routeID], GetServerTime()) then
 		return false
 	end
-	anchors[routeID] = { epoch = anchor.epoch, seen = anchor.seen, source = source }
+	anchors[routeID] = { epoch = anchor.epoch, seen = anchor.seen, source = anchor.source }
 	Changed()
 	return true
 end
@@ -77,8 +78,10 @@ local function Resolve(dock)
 	if info and info.mapType ~= Enum.UIMapType.Zone then
 		local zone = C_Map.GetMapInfoAtPosition(uiMap, position:GetXY())
 		if zone and zone.mapType == Enum.UIMapType.Zone then
-			uiMap, position = C_Map.GetMapPosFromWorldPos(dock.map, world, zone.mapID)
-			info = zone
+			local zoneMap, zonePosition = C_Map.GetMapPosFromWorldPos(dock.map, world, zone.mapID)
+			if zoneMap then
+				uiMap, position, info = zoneMap, zonePosition, zone
+			end
 		end
 	end
 	local x, y = position:GetXY()
@@ -161,6 +164,11 @@ frame:SetScript("OnEvent", function(self, _, name)
 	end
 	ns.db.anchors = ns.db.anchors or {}
 	ns.db.anchors[GetRealmName()] = ns.db.anchors[GetRealmName()] or {}
+	for routeID, anchor in pairs(ns.db.anchors[GetRealmName()]) do
+		if GetServerTime() - anchor.seen > Model.MAX_AGE then
+			ns.db.anchors[GetRealmName()][routeID] = nil
+		end
+	end
 	ready = true
 	for _, fn in ipairs(pending) do
 		fn()

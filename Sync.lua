@@ -8,9 +8,18 @@ local SPACING = 1.5
 local ASK_EVERY = 120
 local ASK_RANGE = 150
 local REPLY_EVERY = 30
+-- Sightings are only taken from these; a whisper is anyone's.
+local ACCEPTED = { GUILD = true, PARTY = true, RAID = true, INSTANCE_CHAT = true, YELL = true }
+local UNSUPPORTED = {
+	[Enum.SendAddonMessageResult.InvalidPrefix] = true,
+	[Enum.SendAddonMessageResult.InvalidChatType] = true,
+	[Enum.SendAddonMessageResult.InvalidChannel] = true,
+}
 
 local queue, sending = {}, false
 local disabled, lastReply, lastAsk = {}, {}, 0
+-- [route] = GetTime() a sighting of it last arrived, so a reply already given by someone else is skipped.
+local heard = {}
 
 local function Flush()
 	local item = table.remove(queue, 1)
@@ -18,14 +27,11 @@ local function Flush()
 		sending = false
 		return
 	end
-	if not disabled[item.chatType] then
+	if ns.db.share and not disabled[item.chatType] then
 		local result = C_ChatInfo.SendAddonMessage(PREFIX, item.message, item.chatType)
-		-- A distribution this client refuses (not merely throttled) stays off for the session.
-		if
-			result ~= Enum.SendAddonMessageResult.Success
-			and result ~= Enum.SendAddonMessageResult.AddonMessageThrottle
-			and result ~= Enum.SendAddonMessageResult.ChannelThrottle
-		then
+		-- A distribution this client does not support stays off for the session; anything else (throttled, not
+		-- in a group any more, lockdown) only loses this message.
+		if UNSUPPORTED[result] then
 			disabled[item.chatType] = true
 		end
 	end
@@ -84,10 +90,26 @@ function ns.Share(routeID)
 	end
 end
 
-local function Ask(chatTypes)
-	for _, chatType in ipairs(chatTypes) do
-		Send("Q", chatType)
+-- Ask for the given routes (a list of IDs), naming them so only holders of those answer.
+local function Ask(routeIDs, chatTypes)
+	if #routeIDs == 0 then
+		return
 	end
+	table.sort(routeIDs)
+	local message = "Q" .. table.concat(routeIDs, ",")
+	for _, chatType in ipairs(chatTypes) do
+		Send(message, chatType)
+	end
+end
+
+local function Untimed()
+	local fresh, routeIDs = ns.FreshAnchors(), {}
+	for routeID in pairs(ns.Routes) do
+		if not fresh[routeID] then
+			routeIDs[#routeIDs + 1] = routeID
+		end
+	end
+	return routeIDs
 end
 
 -- Only this realm's boats: a cross-realm sender runs another server's schedule.
@@ -97,25 +119,37 @@ local function SameRealm(sender)
 end
 
 local function OnMessage(prefix, message, chatType, sender)
-	if prefix ~= PREFIX or not ns.db.share or not SameRealm(sender) then
+	if prefix ~= PREFIX or not ns.db.share or not ACCEPTED[chatType] or not SameRealm(sender) then
 		return
 	end
 	if Ambiguate(sender, "none") == UnitName("player") then
 		return
 	end
-	if message == "Q" then
+	if message:sub(1, 1) == "Q" then
 		local now = GetTime()
-		local fresh = ns.FreshAnchors()
-		if next(fresh) and now - (lastReply[chatType] or -math.huge) >= REPLY_EVERY then
-			lastReply[chatType] = now
-			-- Spread replies so everyone at a dock does not answer at once.
-			C_Timer.After(1 + math.random() * 4, function()
-				SendSightings(fresh, { chatType })
-			end)
+		if now - (lastReply[chatType] or -math.huge) < REPLY_EVERY then
+			return
 		end
+		lastReply[chatType] = now
+		local wanted = {}
+		for routeID in message:gmatch("%d+") do
+			wanted[tonumber(routeID)] = true
+		end
+		-- Spread replies so everyone at a dock does not answer at once, and skip what someone else answered.
+		C_Timer.After(1 + math.random() * 4, function()
+			local reply = {}
+			for routeID, anchor in pairs(ns.FreshAnchors()) do
+				if wanted[routeID] and (heard[routeID] or -math.huge) < now then
+					reply[routeID] = anchor
+				end
+			end
+			SendSightings(reply, { chatType })
+		end)
 	elseif message:sub(1, 1) == "S" then
 		for routeID, anchor in pairs(Model.Decode(message:sub(2), ns.Routes, GetServerTime())) do
-			ns.Sighted(routeID, anchor, "player")
+			heard[routeID] = GetTime()
+			anchor.source = "player"
+			ns.Sighted(routeID, anchor)
 		end
 	end
 end
@@ -129,12 +163,15 @@ local function AskAtDock()
 	if not dockID or yards > ASK_RANGE then
 		return
 	end
+	local routeIDs = {}
 	for _, departure in ipairs(ns.DockDepartures(dockID)) do
 		if not departure.known then
-			lastAsk = GetTime()
-			Ask({ "YELL" })
-			return
+			routeIDs[#routeIDs + 1] = departure.route
 		end
+	end
+	if #routeIDs > 0 then
+		lastAsk = GetTime()
+		Ask(routeIDs, { "YELL" })
 	end
 end
 
@@ -147,7 +184,7 @@ ns.Init(function()
 	end)
 	C_Timer.After(15, function()
 		if ns.db.share then
-			Ask(Distributions(false))
+			Ask(Untimed(), Distributions(false))
 		end
 	end)
 	C_Timer.NewTicker(5, AskAtDock)

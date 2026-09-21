@@ -11,6 +11,11 @@ local AGREE = 8000
 local NEAR = 40
 Model.MIN_SAMPLES = 10
 Model.MIN_SPAN = 30000
+local CLEAR_LEAD = 1.25
+-- How far ahead of this client's clock a sighting may be dated (both read the server's time).
+local CLOCK_SLACK = 5
+-- A sighting of your own this recent is not replaced by another player's.
+local OWN_TRUST = 3600
 -- Sightings older than this are too stale to share or to count down from.
 Model.MAX_AGE = 6 * 3600
 
@@ -62,9 +67,10 @@ function Model.Phases(route, map, x, y)
 	return phases
 end
 
--- The epoch most samples of one ride agree on, and how many agree. Each sample is { now = ms, phases = {...} }
--- from Model.Phases. The agreeing samples must span MIN_SPAN: offsets of someone standing near a leg drift
--- one second per second, so they agree only briefly, while a rider's hold for the whole leg.
+-- The epoch most samples of one ride agree on, and how many agree (nil, support when too few do). Each
+-- sample is { now = ms, phases = {...} } from Model.Phases. The agreeing samples must span MIN_SPAN: offsets
+-- of someone standing near a leg drift one second per second, so they agree only briefly, while a rider's
+-- hold for the whole leg.
 function Model.FitEpoch(route, samples)
 	local period, offsets = route.period, {}
 	for _, sample in ipairs(samples) do
@@ -87,9 +93,25 @@ function Model.FitEpoch(route, samples)
 		end
 	end
 	if support < Model.MIN_SAMPLES then
-		return nil
+		return nil, support
 	end
-	return best
+	return best, support
+end
+
+-- The route a ride was on. Routes sharing a lane (Menethil's two Auberdine boats) both fit the shared part,
+-- so only a clear winner counts: the most supported fit, well ahead of every other.
+function Model.RideRoute(fits)
+	local best, runnerUp
+	for routeID, fit in pairs(fits) do
+		if not best or fit.support > fits[best].support then
+			best, runnerUp = routeID, best and fits[best].support or runnerUp
+		elseif not runnerUp or fit.support > runnerUp then
+			runnerUp = fit.support
+		end
+	end
+	if best and (not runnerUp or fits[best].support >= CLEAR_LEAD * runnerUp) then
+		return best
+	end
 end
 
 -- Wire format: "<route>:<seen s>:<phase ms at seen>" entries joined by ";". Phase-at-seen keeps every number
@@ -113,14 +135,21 @@ function Model.Decode(message, routes, now)
 	for routeID, seen, phase in message:gmatch("(%d+):(%d+):(%d+)") do
 		routeID, seen, phase = tonumber(routeID), tonumber(seen), tonumber(phase)
 		local route = routes[routeID]
-		if route and phase < route.period and seen <= now + 60 and now - seen <= Model.MAX_AGE then
+		if route and phase < route.period and seen <= now + CLOCK_SLACK and now - seen <= Model.MAX_AGE then
 			anchors[routeID] = { epoch = seen * 1000 - phase, seen = seen }
 		end
 	end
 	return anchors
 end
 
--- Whether an incoming sighting replaces the one held: only a newer one does.
-function Model.Newer(incoming, held)
-	return held == nil or incoming.seen > held.seen
+-- Whether an incoming sighting replaces the one held: only a newer one, and another player's never
+-- replaces a recent ride of your own.
+function Model.Newer(incoming, held, now)
+	if held == nil then
+		return true
+	end
+	if held.source == "you" and incoming.source ~= "you" and now - held.seen < OWN_TRUST then
+		return false
+	end
+	return incoming.seen > held.seen
 end
