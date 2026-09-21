@@ -1,6 +1,7 @@
 local _, ns = ...
 
 local PIN_TEMPLATE = "FerryForeverDockPinTemplate"
+local PIN_SIZE = 20
 local provider
 
 function ns.DepartureDestination(departure)
@@ -51,9 +52,12 @@ FerryForeverDockPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function FerryForeverDockPinMixin:OnLoad()
 	self:SetScalingLimits(1, 1, 1.2)
-	self.Texture:SetAtlas("flightmasterferry", true)
-	self.HighlightTexture:SetAtlas("flightmasterferry", true)
-	self:SetSize(self.Texture:GetSize())
+	-- The atlas is 32x32; Blizzard's own flight point pins on these maps draw at about 20.
+	self.Texture:SetAtlas("flightmasterferry")
+	self.HighlightTexture:SetAtlas("flightmasterferry")
+	self.Texture:SetSize(PIN_SIZE, PIN_SIZE)
+	self.HighlightTexture:SetSize(PIN_SIZE, PIN_SIZE)
+	self:SetSize(PIN_SIZE, PIN_SIZE)
 	self:SetScript("OnHide", self.OnMouseLeave)
 end
 
