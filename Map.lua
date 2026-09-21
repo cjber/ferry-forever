@@ -66,18 +66,36 @@ function FerryForeverDockPinMixin:OnAcquired(dockID, x, y)
 	self:SetPosition(x, y)
 end
 
+local KIND = { boat = "Boat", zeppelin = "Zeppelin" }
+local KINDS = { boat = "Boats", zeppelin = "Zeppelins" }
+
+local function StatusColor(departure)
+	return departure.known and HIGHLIGHT_FONT_COLOR or GRAY_FONT_COLOR
+end
+
+-- Titled by what the pin is, not where: the map already names the zone.
 function FerryForeverDockPinMixin:RefreshTooltip()
-	GameTooltip_SetTitle(GameTooltip, ns.DockZone(self.dockID))
+	local departures = ns.DockDepartures(self.dockID)
+	if #departures == 1 then
+		local departure = departures[1]
+		GameTooltip_SetTitle(GameTooltip, KIND[departure.kind] .. " to " .. ns.DepartureDestination(departure))
+		local status = ns.DepartureStatus(departure):gsub("^%l", string.upper)
+		GameTooltip_AddColoredLine(GameTooltip, status, StatusColor(departure))
+	else
+		GameTooltip_SetTitle(GameTooltip, KINDS[departures[1].kind])
+		for _, departure in ipairs(departures) do
+			GameTooltip_AddColoredDoubleLine(
+				GameTooltip,
+				"to " .. ns.DepartureDestination(departure),
+				ns.DepartureStatus(departure),
+				NORMAL_FONT_COLOR,
+				StatusColor(departure)
+			)
+		end
+	end
 	local freshest
-	for _, departure in ipairs(ns.DockDepartures(self.dockID)) do
-		GameTooltip_AddColoredDoubleLine(
-			GameTooltip,
-			"to " .. ns.DepartureDestination(departure),
-			ns.DepartureStatus(departure),
-			NORMAL_FONT_COLOR,
-			departure.known and HIGHLIGHT_FONT_COLOR or GRAY_FONT_COLOR
-		)
-		if departure.known and departure.seen and (not freshest or departure.seen < freshest.seen) then
+	for _, departure in ipairs(departures) do
+		if departure.known and (not freshest or departure.seen < freshest.seen) then
 			freshest = departure
 		end
 	end

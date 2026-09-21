@@ -15,6 +15,7 @@ read_globals = {
 	"Enum",
 	"GameTooltip",
 	"GameTooltip_AddColoredDoubleLine",
+	"GameTooltip_AddColoredLine",
 	"GameTooltip_AddInstructionLine",
 	"GameTooltip_AddNormalLine",
 	"GameTooltip_SetTitle",
