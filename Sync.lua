@@ -17,9 +17,19 @@ local UNSUPPORTED = {
 }
 
 local queue, sending = {}, false
-local disabled, lastReply, lastAsk = {}, {}, 0
--- [route] = GetTime() a sighting of it last arrived, so a reply already given by someone else is skipped.
-local heard = {}
+local disabled, lastAsk = {}, 0
+-- [chatType][route] = GetTime() a sighting of it last went out or arrived there, so a route answered on that
+-- distribution recently (by us or by someone else) is not answered again.
+local answered = {}
+
+local function Answered(chatType, routeID)
+	return (answered[chatType] or {})[routeID] or -math.huge
+end
+
+local function MarkAnswered(chatType, routeID)
+	answered[chatType] = answered[chatType] or {}
+	answered[chatType][routeID] = GetTime()
+end
 
 local function Flush()
 	local item = table.remove(queue, 1)
@@ -126,28 +136,25 @@ local function OnMessage(prefix, message, chatType, sender)
 		return
 	end
 	if message:sub(1, 1) == "Q" then
-		local now = GetTime()
-		if now - (lastReply[chatType] or -math.huge) < REPLY_EVERY then
-			return
-		end
-		lastReply[chatType] = now
 		local wanted = {}
 		for routeID in message:gmatch("%d+") do
 			wanted[tonumber(routeID)] = true
 		end
-		-- Spread replies so everyone at a dock does not answer at once, and skip what someone else answered.
+		-- Spread replies so everyone at a dock does not answer at once, and skip routes answered on this
+		-- distribution (by anyone) within the last REPLY_EVERY seconds.
 		C_Timer.After(1 + math.random() * 4, function()
 			local reply = {}
 			for routeID, anchor in pairs(ns.FreshAnchors()) do
-				if wanted[routeID] and (heard[routeID] or -math.huge) < now then
+				if wanted[routeID] and GetTime() - Answered(chatType, routeID) >= REPLY_EVERY then
 					reply[routeID] = anchor
+					MarkAnswered(chatType, routeID)
 				end
 			end
 			SendSightings(reply, { chatType })
 		end)
 	elseif message:sub(1, 1) == "S" then
 		for routeID, anchor in pairs(Model.Decode(message:sub(2), ns.Routes, GetServerTime())) do
-			heard[routeID] = GetTime()
+			MarkAnswered(chatType, routeID)
 			anchor.source = "player"
 			ns.Sighted(routeID, anchor)
 		end
