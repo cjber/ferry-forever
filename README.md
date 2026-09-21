@@ -2,9 +2,9 @@
 
 Every boat and zeppelin in WoW: Forever on the world map, with when the next one arrives and leaves.
 
-- **Docks on the world map.** Each pier and zeppelin tower gets the stock ferry icon on its zone and
-  continent map. Hover it for where each boat goes next, when it arrives and when it leaves. Click it for a
-  waypoint (TomTom's if installed, otherwise Blizzard's).
+- **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower an airship, on
+  its zone and continent map. Hover one to see its routes drawn across the map, where each boat goes next,
+  when it arrives and when it leaves.
 - **The next boats in the objective tracker.** Walk up to a dock and a *Boats* section appears above your
   quests, counting down to the next arrival and departure of every boat that calls there.
 - **Times from real rides.** Each route's loop time comes from the game's own path data, so one ride tells

@@ -1,5 +1,12 @@
-<!-- local _, ns = ... -->
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
 	<Frame name="FerryForeverDockPinTemplate" inherits="BaseHighlightableMapPoiPinTemplate"
 		mixin="FerryForeverDockPinMixin" enableMouse="true" virtual="true"/>
+	<!-- The flight map's path line (Blizzard_FlightMap FlightMap_BackgroundFlightLineTemplate). -->
+	<Frame name="FerryForeverRouteLineTemplate" virtual="true">
+		<Layers>
+			<Layer level="BACKGROUND" textureSubLevel="-2">
+				<Line parentKey="Fill" atlas="_UI-Taxi-Line-horizontal" alpha="0.85"/>
+			</Layer>
+		</Layers>
+	</Frame>
 </Ui>

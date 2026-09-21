@@ -7,7 +7,6 @@
 ## X-License: GPL-3.0-or-later
 ## X-Website: https://github.com/cjber/ferry-forever
 ## SavedVariables: FerryForeverDB
-## OptionalDeps: TomTom
 
 Data\Routes.lua
 Model.lua

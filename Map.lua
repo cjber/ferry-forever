@@ -4,6 +4,8 @@ local PIN_TEMPLATE = "FerryForeverDockPinTemplate"
 local PIN_SIZE = 20
 -- Half a pin, as a fraction of a zoomed-out map.
 local EDGE = 0.015
+-- The flight map's path thickness (FM_FlightPathDataProvider), zoomed out.
+local LINE_THICKNESS = 45
 local provider
 
 function ns.DepartureDestination(departure)
@@ -25,46 +27,42 @@ function ns.DepartureStatus(departure)
 	return "arrives " .. ns.FormatCountdown(departure.arriveIn) .. " · " .. leaves
 end
 
-function ns.SetWaypoint(dockID)
-	local location = ns.DockLocation(dockID)
-	if not location then
-		ns.Print("Location unavailable for dock " .. dockID .. ".")
-		return
-	end
-	local title = location.zone .. " dock"
-	if TomTom then
-		TomTom:AddWaypoint(location.uiMap, location.x, location.y, {
-			title = title,
-			from = "Ferry Forever",
-			persistent = false,
-		})
-		return
-	end
-	if C_Map.CanSetUserWaypointOnMap(location.uiMap) then
-		local point = UiMapPoint.CreateFromCoordinates(location.uiMap, location.x, location.y)
-		if C_Map.SetUserWaypoint(point) then
-			C_SuperTrack.SetSuperTrackedUserWaypoint(true)
-			return
+-- Zeppelins are all Horde, so the Horde airship; boats the stock ferry.
+local ICONS = { boat = "flightmasterferry", zeppelin = "vehicle-air-horde" }
+
+local function StopsAt(route, dockID)
+	for _, stop in ipairs(route.stops) do
+		if stop.dock == dockID then
+			return true
 		end
 	end
-	ns.Print(string.format("%s: %.1f, %.1f", title, location.x * 100, location.y * 100))
+	return false
+end
+
+local function DockKind(dockID)
+	for _, route in pairs(ns.Routes) do
+		if StopsAt(route, dockID) then
+			return route.kind
+		end
+	end
 end
 
 FerryForeverDockPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function FerryForeverDockPinMixin:OnLoad()
 	self:SetScalingLimits(1, 1, 1.2)
-	-- The atlas is 32x32; Blizzard's own flight point pins on these maps draw at about 20.
-	self.Texture:SetAtlas("flightmasterferry")
-	self.HighlightTexture:SetAtlas("flightmasterferry")
-	self.Texture:SetSize(PIN_SIZE, PIN_SIZE)
-	self.HighlightTexture:SetSize(PIN_SIZE, PIN_SIZE)
 	self:SetSize(PIN_SIZE, PIN_SIZE)
 	self:SetScript("OnHide", self.OnMouseLeave)
 end
 
 function FerryForeverDockPinMixin:OnAcquired(dockID, x, y)
 	self.dockID = dockID
+	-- The atlases are 32 and 64 square; Blizzard's own flight point pins on these maps draw at about 20.
+	local atlas = ICONS[DockKind(dockID)]
+	for _, texture in ipairs({ self.Texture, self.HighlightTexture }) do
+		texture:SetAtlas(atlas)
+		texture:SetSize(PIN_SIZE, PIN_SIZE)
+	end
 	self:SetPosition(x, y)
 end
 
@@ -109,11 +107,11 @@ function FerryForeverDockPinMixin:RefreshTooltip()
 		)
 		GameTooltip_AddNormalLine(GameTooltip, GRAY_FONT_COLOR:WrapTextInColorCode(text))
 	end
-	GameTooltip_AddInstructionLine(GameTooltip, "Click for a waypoint.")
 	GameTooltip:Show()
 end
 
 function FerryForeverDockPinMixin:OnMouseEnter()
+	provider:ShowRoutes(self.dockID)
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 	self:RefreshTooltip()
 	self.tooltipElapsed = 0
@@ -131,6 +129,7 @@ function FerryForeverDockPinMixin:OnMouseEnter()
 end
 
 function FerryForeverDockPinMixin:OnMouseLeave()
+	provider:HideRoutes()
 	self:SetScript("OnUpdate", nil)
 	if GameTooltip:IsOwned(self) then
 		GameTooltip:Hide()
@@ -143,17 +142,45 @@ function FerryForeverDockPinMixin:OnReleased()
 	MapCanvasPinMixin.OnReleased(self)
 end
 
-function FerryForeverDockPinMixin:OnMouseClickAction(button)
-	if button == "LeftButton" then
-		ns.SetWaypoint(self.dockID)
-	end
-end
-
 local ProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
 
 function ProviderMixin:RemoveAllData()
 	self:GetMap():RemoveAllPinsByTemplate(PIN_TEMPLATE)
+	self:HideRoutes()
 	self.pins = {}
+end
+
+-- The hovered dock's routes, drawn like the flight map's paths: each leg on this map between its frames.
+function ProviderMixin:ShowRoutes(dockID)
+	self:HideRoutes()
+	local map = self:GetMap()
+	local canvas, mapID = map:GetCanvas(), map:GetMapID()
+	local width, height = canvas:GetWidth(), canvas:GetHeight()
+	self.lines = self.lines or CreateFramePool("FRAME", canvas, "FerryForeverRouteLineTemplate")
+	local thickness = Lerp(1, 2, Saturate(1 - map:GetCanvasZoomPercent())) * LINE_THICKNESS
+	for _, route in pairs(ns.Routes) do
+		if StopsAt(route, dockID) then
+			local previous
+			for _, frame in ipairs(route.frames) do
+				local uiMap, position = C_Map.GetMapPosFromWorldPos(frame[3], CreateVector2D(frame[4], frame[5]), mapID)
+				local point = uiMap == mapID and position and { position:GetXY() }
+				if previous and point then
+					local line = self.lines:Acquire()
+					line.Fill:SetThickness(thickness)
+					line.Fill:SetStartPoint("TOPLEFT", canvas, previous[1] * width, -previous[2] * height)
+					line.Fill:SetEndPoint("TOPLEFT", canvas, point[1] * width, -point[2] * height)
+					line:Show()
+				end
+				previous = not frame[6] and point or nil
+			end
+		end
+	end
+end
+
+function ProviderMixin:HideRoutes()
+	if self.lines then
+		self.lines:ReleaseAll()
+	end
 end
 
 local function IsDockMap(location, mapID)
