@@ -36,6 +36,19 @@ REFERENCE_PERIODS = {
 }
 TOLERANCE = 0.005
 ZEPPELINS = {285, 301, 302}
+# Routes between one faction's towns, whose docks stand among that faction's guards. The rest (Ratchet-Booty
+# Bay, and the Forever crossings until their towns are known to belong to a side) are neutral.
+FACTIONS = {
+    285: "Horde",
+    301: "Horde",
+    302: "Horde",
+    292: "Alliance",
+    293: "Alliance",
+    295: "Alliance",
+    303: "Alliance",
+    11167: "Alliance",
+    11616: "Alliance",
+}
 EXCLUDED = {436}  # Naxxramas, a raid's floating citadel rather than a passenger route
 STOP = 2
 TELEPORT = 1
@@ -248,14 +261,17 @@ def render(routes, docks):
     lines += [
         "}",
         "",
-        "-- [taxi path] = { kind, period (ms), stops = { { dock, arrive, depart } } (ms into the loop; a stop",
-        "--   whose depart is below its arrive spans the loop's start), frames = { { arrive, depart, continent,",
-        "--   x, y, jump (1 when the next frame is reached by teleport) } } }",
+        "-- [taxi path] = { kind, faction (absent when neutral), period (ms), stops = { { dock, arrive, depart } }",
+        "--   (ms into the loop; a stop whose depart is below its arrive spans the loop's start), frames = { { arrive,",
+        "--   depart, continent, x, y, jump (1 when the next frame is reached by teleport) } } }",
         "-- stylua: ignore",
         "ns.Routes = {",
     ]
     for path, route in routes.items():
-        lines += [f"\t[{path}] = {{", f'\t\tkind = "{route["kind"]}",', f"\t\tperiod = {ms(route['period'])},"]
+        lines += [f"\t[{path}] = {{", f'\t\tkind = "{route["kind"]}",']
+        if path in FACTIONS:
+            lines.append(f'\t\tfaction = "{FACTIONS[path]}",')
+        lines.append(f"\t\tperiod = {ms(route['period'])},")
         lines += ["\t\tstops = {"]
         lines += [
             f"\t\t\t{{ dock = {s['dock'] + 1}, arrive = {ms(s['arrive'])}, depart = {ms(s['depart'])} }},"

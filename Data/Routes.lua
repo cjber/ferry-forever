@@ -34,9 +34,9 @@ ns.Docks = {
 	{ map = 0, x = -8654.5, y = 1344.4 },
 }
 
--- [taxi path] = { kind, period (ms), stops = { { dock, arrive, depart } } (ms into the loop; a stop
---   whose depart is below its arrive spans the loop's start), frames = { { arrive, depart, continent,
---   x, y, jump (1 when the next frame is reached by teleport) } } }
+-- [taxi path] = { kind, faction (absent when neutral), period (ms), stops = { { dock, arrive, depart } }
+--   (ms into the loop; a stop whose depart is below its arrive spans the loop's start), frames = { { arrive,
+--   depart, continent, x, y, jump (1 when the next frame is reached by teleport) } } }
 -- stylua: ignore
 ns.Routes = {
 	[241] = {
@@ -84,6 +84,7 @@ ns.Routes = {
 	},
 	[285] = {
 		kind = "zeppelin",
+		faction = "Horde",
 		period = 303463,
 		stops = {
 			{ dock = 3, arrive = 38573, depart = 98603 },
@@ -117,6 +118,7 @@ ns.Routes = {
 	},
 	[292] = {
 		kind = "boat",
+		faction = "Alliance",
 		period = 329313,
 		stops = {
 			{ dock = 5, arrive = 54297, depart = 114325 },
@@ -153,6 +155,7 @@ ns.Routes = {
 	},
 	[293] = {
 		kind = "boat",
+		faction = "Alliance",
 		period = 316251,
 		stops = {
 			{ dock = 7, arrive = 42039, depart = 102080 },
@@ -186,6 +189,7 @@ ns.Routes = {
 	},
 	[295] = {
 		kind = "boat",
+		faction = "Alliance",
 		period = 295579,
 		stops = {
 			{ dock = 9, arrive = 43526, depart = 103544 },
@@ -224,6 +228,7 @@ ns.Routes = {
 	},
 	[301] = {
 		kind = "zeppelin",
+		faction = "Horde",
 		period = 333044,
 		stops = {
 			{ dock = 11, arrive = 53810, depart = 113840 },
@@ -259,6 +264,7 @@ ns.Routes = {
 	},
 	[302] = {
 		kind = "zeppelin",
+		faction = "Horde",
 		period = 356284,
 		stops = {
 			{ dock = 13, arrive = 49775, depart = 109793 },
@@ -301,6 +307,7 @@ ns.Routes = {
 	},
 	[303] = {
 		kind = "boat",
+		faction = "Alliance",
 		period = 317038,
 		stops = {
 			{ dock = 15, arrive = 287026, depart = 30012 },
@@ -331,6 +338,7 @@ ns.Routes = {
 	},
 	[11167] = {
 		kind = "boat",
+		faction = "Alliance",
 		period = 486183,
 		stops = {
 			{ dock = 9, arrive = 43533, depart = 103560 },
@@ -497,6 +505,7 @@ ns.Routes = {
 	},
 	[11616] = {
 		kind = "boat",
+		faction = "Alliance",
 		period = 247096,
 		stops = {
 			{ dock = 24, arrive = 34804, depart = 94831 },
