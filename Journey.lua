@@ -15,7 +15,8 @@ local VERB = {
 	passage = "Go through to",
 }
 
-local panel, goal
+local panel, goal, guide
+local ARRIVAL = 15
 
 local function NodeLabel(node)
 	if node.kind == "start" then
@@ -24,6 +25,8 @@ local function NodeLabel(node)
 		return ns.DockTitle(node.id)
 	elseif node.kind == "taxi" then
 		return ns.TaxiNodes[node.id].name
+	elseif node.label then
+		return node.label
 	end
 	local location = ns.Locate(node)
 	return location and location.zone or UNKNOWN
@@ -37,21 +40,98 @@ local function LegTime(leg)
 	return text
 end
 
--- Where to head first: the end of the opening walk, or the start of the first ride when already there.
-local function FirstStop(result)
-	local leg = result.legs[1]
-	local node = leg.mode == "walk" and leg.to or leg.from
-	return node.kind == "dock" and ns.DockPoint(node.id) or node
+local function Near(node)
+	local x, y, _, map = UnitPosition("player")
+	return x and map == node.map and (x - node.x) ^ 2 + (y - node.y) ^ 2 <= ARRIVAL ^ 2
 end
 
-local function SetWaypoint(result)
-	local location = ns.Locate(FirstStop(result))
-	if not (location and C_Map.CanSetUserWaypointOnMap(location.uiMap)) then
-		ns.Print("that spot cannot hold a map waypoint.")
+local function SameWaypoint(a, b)
+	if not (a and b and a.uiMapID == b.uiMapID) then
+		return false
+	end
+	local ax, ay = a.position:GetXY()
+	local bx, by = b.position:GetXY()
+	return math.abs(ax - bx) < 0.000001 and math.abs(ay - by) < 0.000001
+end
+
+local function StopGuide()
+	if guide and SameWaypoint(C_Map.GetUserWaypoint(), guide.waypoint) then
+		C_Map.ClearUserWaypoint()
+		C_SuperTrack.SetSuperTrackedUserWaypoint(false)
+	end
+	guide = nil
+	panel.Guide:SetText("Guide")
+end
+
+local function OwnsWaypoint()
+	if guide.waypoint and not SameWaypoint(C_Map.GetUserWaypoint(), guide.waypoint) then
+		-- A manual replacement or removal ends guidance; never reclaim the player's waypoint.
+		StopGuide()
+		return false
+	end
+	return true
+end
+
+local function GuideTo(node)
+	if guide.target == node then
 		return
 	end
-	C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(location.uiMap, location.x, location.y))
-	C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+	local point = node.kind == "dock" and ns.DockPoint(node.id) or node
+	local location = ns.Locate(point)
+	if not (location and C_Map.CanSetUserWaypointOnMap(location.uiMap)) then
+		ns.Print("that stop cannot hold a map waypoint.")
+		StopGuide()
+		return
+	end
+	local waypoint = UiMapPoint.CreateFromCoordinates(location.uiMap, location.x, location.y)
+	if not SameWaypoint(waypoint, guide.waypoint) then
+		-- WaypointLocationDataProvider.lua:100; SuperTrackedFrame.lua:219,289 supplies native navigation.
+		if not C_Map.SetUserWaypoint(waypoint) then
+			StopGuide()
+			return
+		end
+		guide.waypoint = C_Map.GetUserWaypoint()
+		C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+	end
+	guide.target = node
+end
+
+local function UpdateGuide()
+	if not guide or not OwnsWaypoint() then
+		return
+	end
+	if Near(goal) then
+		panel:Hide()
+		return
+	end
+	local riding, flying = ns.CurrentRide(), UnitOnTaxi("player")
+	while guide.index <= #guide.result.legs do
+		local leg = guide.result.legs[guide.index]
+		local nextLeg = guide.result.legs[guide.index + 1]
+		if
+			leg.mode == "walk"
+			and nextLeg
+			and ((nextLeg.route and riding == nextLeg.route) or (nextLeg.mode == "flight" and flying))
+		then
+			guide.index = guide.index + 1
+			leg = nextLeg
+		end
+		local aboard = leg.aboard or (leg.route and riding == leg.route) or (leg.mode == "flight" and flying)
+		if leg.mode ~= "walk" and not guide.departed then
+			if aboard or Near(leg.from) then
+				guide.departed = true
+			else
+				GuideTo(leg.from)
+				return
+			end
+		end
+		if not Near(leg.to) then
+			GuideTo(leg.to)
+			return
+		end
+		guide.index, guide.departed = guide.index + 1, false
+	end
+	panel:Hide()
 end
 
 local function Line(index)
@@ -77,7 +157,17 @@ local function Render(result)
 		line.right:Hide()
 	end
 	panel.result = result
-	panel.Waypoint:SetEnabled(result ~= nil)
+	panel.Guide:SetEnabled(result ~= nil)
+	if guide and OwnsWaypoint() then
+		if result then
+			if result ~= guide.result then
+				guide.result, guide.index, guide.departed = result, 1, false
+			end
+			UpdateGuide()
+		else
+			StopGuide()
+		end
+	end
 	if not result then
 		panel.Title:SetText("Journey")
 		local line = Line(1)
@@ -117,10 +207,23 @@ local function Plan()
 	end
 	local _, runSpeed = GetUnitSpeed("player")
 	local now = ns.NowMs()
+	-- Taxi paths cannot be interrupted; retain their chosen destination until landing.
+	if guide and UnitOnTaxi("player") then
+		guide.result.now = now
+		return guide.result
+	end
+	local ride, routeID = nil, ns.CurrentRide()
+	if routeID then
+		local dock, arriveIn = ns.NextStop(routeID)
+		if dock then
+			ride = { route = routeID, dock = dock, arrive = now + arriveIn }
+		end
+	end
 	local result = ns.Planner.Plan({
 		from = { map = map, x = x, y = y },
 		to = goal,
 		now = now,
+		ride = ride,
 		walkSpeed = math.max(runSpeed, 7),
 		faction = UnitFactionGroup("player"),
 		taxiKnown = ns.KnownTaxiNodes(),
@@ -153,6 +256,7 @@ local function CreatePanel()
 		panel:Hide()
 	end)
 	panel:SetScript("OnHide", function()
+		StopGuide()
 		goal = nil
 		ns.SetJourneyRoute(nil)
 	end)
@@ -161,15 +265,20 @@ local function CreatePanel()
 			self:Hide()
 		end
 	end)
-	panel.Waypoint = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-	panel.Waypoint:SetSize(140, 22)
-	panel.Waypoint:SetPoint("BOTTOMLEFT", 10, 10)
-	panel.Waypoint:SetText("Waypoint first stop")
-	panel.Waypoint:SetScript("OnClick", function()
-		if panel.result then
-			SetWaypoint(panel.result)
+	panel.Guide = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+	panel.Guide:SetSize(100, 22)
+	panel.Guide:SetPoint("BOTTOMLEFT", 10, 10)
+	panel.Guide:SetText("Guide")
+	panel.Guide:SetScript("OnClick", function()
+		if guide then
+			StopGuide()
+		elseif panel.result then
+			guide = { result = panel.result, index = 1 }
+			panel.Guide:SetText("Stop guiding")
+			UpdateGuide()
 		end
 	end)
+	panel.guideElapsed = 0
 	panel.elapsed = 0
 	panel:SetScript("OnUpdate", function(self, elapsed)
 		if not ns.db.journey then
@@ -177,7 +286,19 @@ local function CreatePanel()
 			return
 		end
 		self.elapsed = self.elapsed + elapsed
-		if self.elapsed >= REPLAN_EVERY then
+		self.guideElapsed = self.guideElapsed + elapsed
+		if self.guideElapsed < 0.1 then
+			return
+		end
+		self.guideElapsed = 0
+		UpdateGuide()
+		if not goal then
+			return
+		end
+		local riding, flying = ns.CurrentRide(), UnitOnTaxi("player")
+		local changedRide = riding ~= self.riding or flying ~= self.flying
+		self.riding, self.flying = riding, flying
+		if self.elapsed >= REPLAN_EVERY or changedRide then
 			self.elapsed = 0
 			Render(Plan())
 		end
@@ -195,6 +316,9 @@ local function OnCanvasClick(map, button)
 		return true
 	end
 	local x, y = world:GetXY()
+	if guide then
+		StopGuide()
+	end
 	goal = { map = continent, x = x, y = y }
 	if not panel then
 		CreatePanel()

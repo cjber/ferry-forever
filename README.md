@@ -12,7 +12,9 @@ leaves, and a planner for the fastest way anywhere.
   tram shows at its Stormwind and Ironforge entrances. Portals are marked with where they go.
 - **Journey planner.** Shift-click anywhere on the world map for the fastest way there from where you
   stand: walking, the flight points you know, boats and zeppelins with their live waits, the tram and
-  portals. It replans as you move, and one button puts a map waypoint on your first stop.
+  portals. The route is drawn on the map and minimap, walking legs dashed. It replans as you move, and
+  stays aboard if you are already riding. **Guide** hands each stop to the game's own navigation marker,
+  moving on to the next one as you arrive.
 - **In the map's filter menu.** *Boats & Zeppelins*, *Lifts & Tram* and *Portals* turn each set of icons off; *Other Faction's Routes* hides the
   boats and zeppelins run by the other faction (anyone can ride them, so they show by default).
 - **The next departures in the objective tracker.** Walk up to a dock, lift or tram station and a section

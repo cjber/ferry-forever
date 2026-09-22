@@ -26,7 +26,9 @@ The lifts at the Great Lift, Freewind Post, Thunder Bluff and Undercity, and bot
 timed the same way: countdowns on the map and in the tracker, synced from a ride and shared. The tram is
 marked at its city entrances, and portals are marked with where they lead. Shift-click the world map to
 plan the fastest way to that spot, combining walking, the flight points you know, boats and zeppelins with
-their live waits, the tram and portals, with a button to set a waypoint on the first stop.
+their live waits, the tram and portals. The route is drawn on the world map and minimap in the flight map's
+own line, walking legs dashed and the destination ringed. **Guide** hands each stop to the game's yellow
+navigation marker and moves it on as you arrive, and replanning on board keeps you on the boat.
 
 On board, once the ride has synced, the tracker shows where the boat calls next and when it gets there. Half
 a minute before a timed boat reaches the dock you are waiting at, and shortly before your own boat docks, a
