@@ -20,7 +20,7 @@ local queue, sending = {}, false
 local disabled, lastAsk = {}, 0
 -- [chatType][route] = GetTime() a sighting of it last went out or arrived there, so a route answered on that
 -- distribution recently (by us or by someone else) is not answered again.
-local answered = {}
+local answered, requests = {}, {}
 
 local function Answered(chatType, routeID)
 	return (answered[chatType] or {})[routeID] or -math.huge
@@ -37,8 +37,20 @@ local function Flush()
 		sending = false
 		return
 	end
+	local entries, length = {}, 1
+	for routeID, entry in pairs(item.entries) do
+		if length + #entry + (#entries > 0 and 1 or 0) <= MAX_MESSAGE then
+			entries[#entries + 1] = entry
+			length = length + #entry + (#entries > 1 and 1 or 0)
+			item.entries[routeID] = nil
+		end
+	end
+	if next(item.entries) then
+		queue[#queue + 1] = item
+	end
 	if ns.db.share and not disabled[item.chatType] then
-		local result = C_ChatInfo.SendAddonMessage(PREFIX, item.message, item.chatType)
+		local message = item.kind .. table.concat(entries, item.kind == "S" and ";" or ",")
+		local result = C_ChatInfo.SendAddonMessage(PREFIX, message, item.chatType)
 		-- A distribution this client does not support stays off for the session; anything else (throttled, not
 		-- in a group any more, lockdown) only loses this message.
 		if UNSUPPORTED[result] then
@@ -48,8 +60,25 @@ local function Flush()
 	C_Timer.After(SPACING, Flush)
 end
 
-local function Send(message, chatType)
-	queue[#queue + 1] = { message = message, chatType = chatType }
+-- At most two batches per distribution (questions and sightings), each with one entry per known route.
+local function Send(kind, entries, chatType)
+	if disabled[chatType] or not next(entries) then
+		return
+	end
+	local pending
+	for _, item in ipairs(queue) do
+		if item.chatType == chatType and item.kind == kind then
+			pending = item
+			break
+		end
+	end
+	if not pending then
+		pending = { kind = kind, entries = {}, chatType = chatType }
+		queue[#queue + 1] = pending
+	end
+	for routeID, entry in pairs(entries) do
+		pending.entries[routeID] = entry
+	end
 	if not sending then
 		sending = true
 		Flush()
@@ -75,21 +104,13 @@ local function Distributions(yell)
 	return chatTypes
 end
 
--- Sightings packed into as few messages as fit, sent to each distribution given.
 local function SendSightings(anchors, chatTypes)
-	local messages = {}
+	local entries = {}
 	for _, entry in ipairs(Model.Encode(anchors, ns.Routes)) do
-		local last = messages[#messages]
-		if last and #last + 1 + #entry <= MAX_MESSAGE then
-			messages[#messages] = last .. ";" .. entry
-		else
-			messages[#messages + 1] = "S" .. entry
-		end
+		entries[tonumber(entry:match("^%d+"))] = entry
 	end
 	for _, chatType in ipairs(chatTypes) do
-		for _, message in ipairs(messages) do
-			Send(message, chatType)
-		end
+		Send("S", entries, chatType)
 	end
 end
 
@@ -102,13 +123,12 @@ end
 
 -- Ask for the given routes (a list of IDs), naming them so only holders of those answer.
 local function Ask(routeIDs, chatTypes)
-	if #routeIDs == 0 then
-		return
+	local entries = {}
+	for _, routeID in ipairs(routeIDs) do
+		entries[routeID] = tostring(routeID)
 	end
-	table.sort(routeIDs)
-	local message = "Q" .. table.concat(routeIDs, ",")
 	for _, chatType in ipairs(chatTypes) do
-		Send(message, chatType)
+		Send("Q", entries, chatType)
 	end
 end
 
@@ -136,13 +156,20 @@ local function OnMessage(prefix, message, chatType, sender)
 		return
 	end
 	if message:sub(1, 1) == "Q" then
-		local wanted = {}
+		local wanted = requests[chatType] or {}
 		for routeID in message:gmatch("%d+") do
-			wanted[tonumber(routeID)] = true
+			local id = tonumber(routeID)
+			if ns.Routes[id] then
+				wanted[id] = true
+			end
 		end
-		-- Spread replies so everyone at a dock does not answer at once, and skip routes answered on this
-		-- distribution (by anyone) within the last REPLY_EVERY seconds.
+		if requests[chatType] or not next(wanted) then
+			return
+		end
+		requests[chatType] = wanted
+		-- One delayed reply per distribution merges a burst of requests and skips recently answered routes.
 		C_Timer.After(1 + math.random() * 4, function()
+			requests[chatType] = nil
 			local reply = {}
 			for routeID, anchor in pairs(ns.FreshAnchors()) do
 				if wanted[routeID] and GetTime() - Answered(chatType, routeID) >= REPLY_EVERY then
