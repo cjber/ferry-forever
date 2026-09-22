@@ -10,7 +10,7 @@ local RADIUS = 36
 -- A bend this close counts as passed, and the arrow turns to the next one.
 local PASSED = 10
 
-local frame, path, index, target, placeTarget
+local frame, path, index, target, placeTarget, native
 
 -- Counter-clockwise from north, like GetPlayerFacing: UnitPosition's first value grows north, its second west.
 local function Bearing(x, y)
@@ -24,7 +24,7 @@ local function Update()
 		index = index + 1
 		target = path[index]
 	end
-	local native = placeTarget and placeTarget(target)
+	native = placeTarget and placeTarget(target)
 	-- A manual waypoint replacement can stop Guide inside placeTarget.
 	if not path then
 		return
@@ -67,6 +67,11 @@ local function Create()
 	end)
 end
 
+-- The walk still ahead for Trail.lua, and whether the native marker sits on path[index].
+function ns.GuideProgress()
+	return path, index, native
+end
+
 -- placeBend owns waypoint placement and returns whether native tracking is ours. Progress lives only here.
 function ns.PointGuideArrow(points, placeBend)
 	if points and #points == 0 then
@@ -77,6 +82,7 @@ function ns.PointGuideArrow(points, placeBend)
 	end
 	path, placeTarget = points, placeBend
 	if not points then
+		native = nil
 		if frame then
 			frame:Hide()
 		end

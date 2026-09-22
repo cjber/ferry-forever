@@ -33,7 +33,7 @@ ns.Init(function()
 	Checkbox(
 		"mapRoutes",
 		"Show boat and zeppelin routes on the world map",
-		"Faint lines that brighten when you point at a route or its dock.",
+		"Drawn while you point at a dock.",
 		ns.RefreshMap
 	)
 	Checkbox(
@@ -58,6 +58,11 @@ ns.Init(function()
 	)
 	Checkbox("alertSound", "Play a sound with arrival alerts", "Plays even with the game in the background.")
 	Checkbox("journey", "Plan journeys with Shift-click on the world map")
+	Checkbox(
+		"trail",
+		"Draw Guide's route on the ground ahead of you (experimental)",
+		"Dots along the next 40 yards of the walk, placed using the game's navigation marker."
+	)
 	Checkbox(
 		"share",
 		"Share departure times with other players",
