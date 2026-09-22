@@ -14,7 +14,7 @@ end
 -- World points in travel order; jump marks a teleport to the next point. Keep this free of map APIs.
 function Planner.LegPoints(leg, routes)
 	if leg.mode == "walk" then
-		return Planner.WalkPoints(leg.from, leg.to)
+		return leg.walkPoints or Planner.WalkPoints(leg.from, leg.to)
 	end
 	local points = { { map = leg.from.map, x = leg.from.x, y = leg.from.y } }
 	if leg.mode == "flight" then

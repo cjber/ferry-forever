@@ -3,17 +3,18 @@ local _, ns = ...
 local LINE_TEMPLATE = "FerryForeverRoutePinTemplate"
 local TRANSPORT_TEMPLATE = "FerryForeverTransportPinTemplate"
 local GOAL_TEMPLATE = "FerryForeverGoalPinTemplate"
--- Blizzard_FlightMap/FM_FlightPathDataProvider.xml:48, the native background flight line.
+-- FM_FlightPathDataProvider.xml:28,45 layers its taxi strokes; keep a dark border below our colour.
 local LINE_ATLAS = "_UI-Taxi-Line-horizontal"
-local THICKNESS, DASH, GAP = 6, 7, 7
+local THICKNESS, DASH, GAP = 6, 14, 8
+local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS * 2, 0.6
 local COLORS = {
-	walk = HIGHLIGHT_FONT_COLOR,
-	flight = NORMAL_FONT_COLOR,
-	boat = LIGHTBLUE_FONT_COLOR,
-	zeppelin = LIGHTBLUE_FONT_COLOR,
+	walk = NORMAL_FONT_COLOR,
+	flight = CreateColor(0.2, 1, 0.35),
+	boat = CreateColor(0, 0.75, 1),
+	zeppelin = CreateColor(1, 0.35, 0.1),
 	tram = ORANGE_FONT_COLOR,
-	portal = EPIC_PURPLE_COLOR,
-	passage = EPIC_PURPLE_COLOR,
+	portal = CreateColor(0.85, 0.35, 1),
+	passage = CreateColor(0.85, 0.35, 1),
 }
 local provider, goal, result, paths, minimap
 local transportProvider, transportPin, dockHover, highlightedRoutes
@@ -43,11 +44,20 @@ end
 local function Stroke(owner, x1, y1, x2, y2, color, scale)
 	owner.used = owner.used + 1
 	local line = owner.lines[owner.used]
+	local underline = owner.underlines[owner.used]
 	if not line then
+		underline = owner:CreateLine(nil, "ARTWORK", nil, -1)
+		underline:SetColorTexture(0.04, 0.04, 0.04, 1)
 		line = owner:CreateLine(nil, "ARTWORK")
 		line:SetAtlas(LINE_ATLAS)
 		owner.lines[owner.used] = line
+		owner.underlines[owner.used] = underline
 	end
+	underline:SetAlpha((owner.strokeAlpha or 1) * UNDER_ALPHA)
+	underline:SetThickness(UNDER_THICKNESS / scale)
+	underline:SetStartPoint("TOPLEFT", owner, x1, y1)
+	underline:SetEndPoint("TOPLEFT", owner, x2, y2)
+	underline:Show()
 	line:SetVertexColor(color:GetRGBA())
 	line:SetAlpha(owner.strokeAlpha or 1)
 	line:SetThickness(THICKNESS / scale)
@@ -55,8 +65,7 @@ local function Stroke(owner, x1, y1, x2, y2, color, scale)
 	line:SetEndPoint("TOPLEFT", owner, x2, y2)
 	line:Show()
 	if owner.hits then
-		owner.hits[owner.used] =
-			{ x1 = x1, y1 = y1, x2 = x2, y2 = y2, route = owner.drawingRoute, fade = owner.strokeAlpha or 1 }
+		owner.hits[owner.used] = { route = owner.drawingRoute, fade = owner.strokeAlpha or 1 }
 	end
 end
 
@@ -83,6 +92,7 @@ end
 local function HideUnused(owner)
 	for index = owner.used + 1, #owner.lines do
 		owner.lines[index]:Hide()
+		owner.underlines[index]:Hide()
 	end
 end
 
@@ -92,7 +102,7 @@ function FerryForeverRoutePinMixin:OnLoad()
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_QUEST_BLOB")
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScaleStyle(AM_PIN_SCALE_STYLE_WITH_TERRAIN)
-	self.lines = {}
+	self.lines, self.underlines = {}, {}
 end
 
 function FerryForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
@@ -110,13 +120,13 @@ function FerryForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
 		high,
 		color,
 		dashed,
-		self:GetMap():GetCanvasScale()
+		self:GetEffectiveScale()
 	)
 end
 
 function FerryForeverRoutePinMixin:Mark(x, y, color)
 	if x and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
-		local size = 4 / self:GetMap():GetCanvasScale()
+		local size = 4 / self:GetEffectiveScale()
 		local dx, dy = size / self:GetWidth(), size / self:GetHeight()
 		self:Line(x - dx, y, x + dx, y, color)
 		self:Line(x, y - dy, x, y + dy, color)
@@ -303,8 +313,7 @@ function FerryForeverGoalPinMixin:OnReleased()
 	MapCanvasPinMixin.OnReleased(self)
 end
 
--- One mouse-transparent canvas pin holds the background routes. Hit-test the clipped strokes so dragging,
--- zooming and shift-click planning work even directly over a line.
+-- One mouse-transparent canvas pin holds every boat and zeppelin route, each hidden until its dock is hovered.
 FerryForeverTransportPinMixin = CreateFromMixins(FerryForeverRoutePinMixin)
 
 function FerryForeverTransportPinMixin:OnLoad()
@@ -317,8 +326,9 @@ end
 
 function FerryForeverTransportPinMixin:UpdateAlpha()
 	for index, hit in ipairs(self.hits) do
-		local alpha = highlightedRoutes and (highlightedRoutes[hit.route] and 1 or 0.1) or 0.35
+		local alpha = highlightedRoutes and highlightedRoutes[hit.route] and 1 or 0
 		self.lines[index]:SetAlpha(alpha * hit.fade)
+		self.underlines[index]:SetAlpha(alpha * hit.fade * UNDER_ALPHA)
 	end
 end
 
@@ -332,65 +342,13 @@ function ns.HoverTransportRoutes(owner, routes)
 	end
 end
 
-local function HitDistance(hit, x, y)
-	local dx, dy = hit.x2 - hit.x1, hit.y2 - hit.y1
-	local length = dx * dx + dy * dy
-	local t = length > 0 and Clamp(((x - hit.x1) * dx + (y - hit.y1) * dy) / length, 0, 1) or 0
-	return (x - hit.x1 - t * dx) ^ 2 + (y - hit.y1 - t * dy) ^ 2
-end
-
-function FerryForeverTransportPinMixin:UpdateHover(elapsed)
-	self.elapsed = self.elapsed + elapsed
-	if self.elapsed < 0.05 then
-		return
-	end
-	self.elapsed = 0
-	local map, route = self:GetMap()
-	if
-		not dockHover
-		and map.ScrollContainer:IsMouseOver()
-		and (not GameTooltip:IsShown() or GameTooltip:IsOwned(self))
-	then
-		local x, y = map:GetNormalizedCursorPosition()
-		local best = (7 / map:GetCanvasScale()) ^ 2
-		if x >= 0 and x <= 1 and y >= 0 and y <= 1 then
-			for _, hit in ipairs(self.hits) do
-				local distance = HitDistance(hit, x * self:GetWidth(), -y * self:GetHeight())
-				if distance < best then
-					best, route = distance, hit.route
-				end
-			end
-		end
-	end
-	if route ~= self.hoverRoute then
-		self.hoverRoute = route
-		if not dockHover then
-			highlightedRoutes = route and { [route] = true } or nil
-			self:UpdateAlpha()
-		end
-		if GameTooltip:IsOwned(self) then
-			GameTooltip:Hide()
-		end
-	end
-	if route then
-		GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
-		ns.TransportTooltip(route)
-	end
-end
-
 function FerryForeverTransportPinMixin:OnAcquired(_, geometry)
-	self.paths, self.elapsed = geometry, 0
+	self.paths = geometry
 	transportPin = self
 	self:Draw()
-	self:SetScript("OnUpdate", self.UpdateHover)
 end
 
 function FerryForeverTransportPinMixin:OnReleased()
-	if GameTooltip:IsOwned(self) then
-		GameTooltip:Hide()
-	end
-	self:SetScript("OnUpdate", nil)
-	self.hoverRoute = nil
 	if not dockHover then
 		highlightedRoutes = nil
 	end
@@ -528,11 +486,13 @@ local function DrawMinimap(self)
 	-- Blizzard_APIDocumentationGenerated/MinimapDocumentation.lua:127 (yards).
 	local radius = C_Minimap and C_Minimap.GetViewRadius and C_Minimap.GetViewRadius() or diameter and diameter / 2
 	local width, height = self:GetWidth(), self:GetHeight()
-	if x and facing and radius and radius > 0 and width > THICKNESS and height > THICKNESS then
+	local scale = self:GetEffectiveScale()
+	local border = UNDER_THICKNESS / scale
+	if x and facing and radius and radius > 0 and width > border and height > border then
 		local cosine, sine = math.cos(facing), math.sin(facing)
 		-- GetMinimapShape is an optional addon convention (HBD-Pins:215), not a Blizzard global.
 		local square = GetMinimapShape and GetMinimapShape() == "SQUARE"
-		local inset = 1 - THICKNESS / math.min(width, height)
+		local inset = 1 - border / math.min(width, height)
 		for _, path in ipairs(paths) do
 			if path.mode ~= "portal" and path.mode ~= "passage" then
 				for index = 2, #path.points do
@@ -551,7 +511,7 @@ local function DrawMinimap(self)
 							high,
 							COLORS[path.mode],
 							path.mode == "walk",
-							1
+							scale
 						)
 					end
 				end
@@ -604,7 +564,7 @@ ns.Init(function()
 	minimap = CreateFrame("Frame", "FerryForeverMinimapRoute", Minimap)
 	minimap:SetAllPoints(Minimap)
 	minimap:EnableMouse(false)
-	minimap.lines, minimap.used = {}, 0
+	minimap.lines, minimap.underlines, minimap.used = {}, {}, 0
 	minimap:RegisterEvent("MINIMAP_UPDATE_ZOOM")
 	minimap:SetScript("OnEvent", UpdateMinimapZoom)
 	minimap:Hide()

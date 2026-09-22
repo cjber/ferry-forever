@@ -213,6 +213,9 @@ end
 assert(LegPoints(walk, {}) == detour)
 ns.Planner.WalkPoints = straight
 assert(#LegPoints(walk, {}) == 2)
+walk.walkPoints = detour
+assert(LegPoints(walk, {}) == detour, "drawing reuses the prepared Guide path")
+walk.walkPoints = nil
 
 -- A slightly later in-flight arrival beats an earlier ground arrival that must pay boarding again.
 local competing = options()
