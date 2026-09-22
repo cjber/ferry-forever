@@ -15,12 +15,37 @@ local function ZoneMaps()
 	return maps
 end
 
+-- `/ferry debug`: what the game's taxi queries return, to check how this client reports known flight points.
+local function Log(key, uiMap, nodes)
+	if not ns.db.debug then
+		return
+	end
+	local rows = {}
+	for _, node in ipairs(nodes) do
+		rows[#rows + 1] = string.format(
+			"%d %s undiscovered=%s state=%s",
+			node.nodeID,
+			node.name,
+			tostring(node.isUndiscovered),
+			tostring(node.state)
+		)
+	end
+	ns.db.taxiLog = ns.db.taxiLog or {}
+	ns.db.taxiLog[key .. uiMap] = {
+		seen = GetServerTime(),
+		showsNodes = C_TaxiMap.ShouldMapShowTaxiNodes(uiMap),
+		nodes = rows,
+	}
+end
+
 local zoneMaps
 local function Scan()
 	zoneMaps = zoneMaps or ZoneMaps()
 	local known, answered = ns.charDB.taxi, false
 	for _, uiMap in ipairs(zoneMaps) do
-		for _, node in ipairs(C_TaxiMap.GetTaxiNodesForMap(uiMap) or {}) do
+		local nodes = C_TaxiMap.GetTaxiNodesForMap(uiMap) or {}
+		Log("zone", uiMap, nodes)
+		for _, node in ipairs(nodes) do
 			answered = true
 			if not node.isUndiscovered and ns.TaxiNodes[node.nodeID] then
 				known[node.nodeID] = true
@@ -33,7 +58,11 @@ end
 -- At a flight master, every node it can fly to is known (absence never unlearns one).
 local function ScanFlightMaster()
 	local uiMap = GetTaxiMapID and GetTaxiMapID()
-	for _, node in ipairs(uiMap and C_TaxiMap.GetAllTaxiNodes(uiMap) or {}) do
+	local nodes = uiMap and C_TaxiMap.GetAllTaxiNodes(uiMap) or {}
+	if uiMap then
+		Log("master", uiMap, nodes)
+	end
+	for _, node in ipairs(nodes) do
 		if node.state ~= Enum.FlightPathState.Unreachable and ns.TaxiNodes[node.nodeID] then
 			ns.charDB.taxi[node.nodeID] = true
 		end
