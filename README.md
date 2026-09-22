@@ -3,6 +3,8 @@
 The fastest way anywhere in WoW: Forever. Shift-click the world map or pick a quest, and it plans the route:
 walking paths round walls and hills, the flight points you know, boats and zeppelins with their live
 departure times, lifts, the tram and portals. Then it walks you there with the game's own navigation marker.
+Walking routes cover Eastern Kingdoms, Kalimdor and Zephras Isle; their maps come in the same download and
+load only when a route needs them.
 
 - **Journey planner.** Shift-click anywhere on the world map for the fastest way there from where you
   stand: walking, the flight points you know, boats and zeppelins with their live waits, the tram and

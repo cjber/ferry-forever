@@ -1,12 +1,5 @@
--- The collision map is not in this repository (it ships as the ShortestPathForever_Nav0 data addon), so point
--- NAV_DATA at its Nav0.lua to run this spec.
-local data = os.getenv("NAV_DATA")
-if not data then
-	print("path_spec: skipped, NAV_DATA is not set")
-	return
-end
 local ns = {}
-assert(loadfile(data))()
+assert(loadfile("ShortestPathForever_Nav0/Nav0.lua"))()
 assert(loadfile("Path.lua"))("ShortestPathForever", ns)
 local Path = ns.Path
 
@@ -58,7 +51,7 @@ assert(pts and len > 580 and len < 700, len)
 -- A rooftop endpoint moves to the street below instead of failing.
 assert(Path.FindSync(0, -9010, 870, STORMWIND_FM[1], STORMWIND_FM[2]))
 
-local none, why = Path.FindSync(0, -3000, 0, GOLDSHIRE[1], GOLDSHIRE[2])
+local none, why = Path.FindSync(0, 0, 6000, GOLDSHIRE[1], GOLDSHIRE[2])
 assert(none == nil and why == "outside", why)
 none, why = Path.FindSync(1, 0, 0, 1, 1)
 assert(none == nil and why == "nodata", why)

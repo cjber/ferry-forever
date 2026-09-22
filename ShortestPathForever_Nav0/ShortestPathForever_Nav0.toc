@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: Shortest Path Forever - Walking map (Eastern Kingdoms)
+## Notes: Walkable ground for Shortest Path Forever's walking routes on Eastern Kingdoms. Loaded when a route needs it.
+## LoadOnDemand: 1
+## Dependencies: ShortestPathForever
+## X-License: GPL-3.0-or-later
+
+Nav0.lua

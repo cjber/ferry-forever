@@ -1,5 +1,11 @@
 package-as: ShortestPathForever
 
+# The walking maps are separate load-on-demand addons in the same download, so nobody installs them by hand.
+move-folders:
+  ShortestPathForever/ShortestPathForever_Nav0: ShortestPathForever_Nav0
+  ShortestPathForever/ShortestPathForever_Nav1: ShortestPathForever_Nav1
+  ShortestPathForever/ShortestPathForever_Nav2991: ShortestPathForever_Nav2991
+
 manual-changelog:
   filename: .release-notes.md
   markup-type: markdown

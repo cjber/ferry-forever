@@ -33,7 +33,8 @@ for its objective, or its turn-in once it is complete. The route is drawn on the
 slim outlined line that reads on any map, walking legs dotted and the destination marked with the
 navigation diamond, and its steps sit in the objective tracker like a tracked quest. **Guide**, on from the start of every journey and toggled from the tracker header,
 moves the game's own navigation marker, wearing the quest diamond, along the route bend by bend and gives your tracked quest back when you finish, while faint arrows on the ground (experimental) mark the next
-40 yards of the walk. Replanning on board
+40 yards of the walk. Walking legs follow the ground round walls, cliffs and water on Eastern Kingdoms, Kalimdor
+and Zephras Isle, from walking maps that come in the same download. Replanning on board
 keeps you on the boat. Flight masters are marked on the world map, known and undiscovered, and hovering a
 dock draws its boat and zeppelin routes, curving across the loading-screen gap between continents.
 
