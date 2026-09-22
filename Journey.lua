@@ -94,25 +94,6 @@ local function SameTracking(state)
 		and state.expectedTrackingType == C_SuperTrack.GetHighestPrioritySuperTrackingType()
 end
 
--- Blizzard gives user waypoints a plain ring (SuperTrackedFrame.lua:219); Guide's bends wear the quest diamond.
-local function GuideMarkerIcon(frame)
-	if
-		guide
-		and C_SuperTrack.GetHighestPrioritySuperTrackingType() == Enum.SuperTrackingType.UserWaypoint
-		and SameWaypoint(C_Map.GetUserWaypoint(), guide.expectedWaypoint)
-	then
-		frame.Icon:SetAtlas("Navigation-Tracked-Icon", true)
-		frame:UpdateIconSize()
-	end
-end
-
--- Moving an already super-tracked waypoint fires no SUPER_TRACKING_CHANGED, so refresh the icon ourselves.
-local function RefreshMarkerIcon()
-	if SuperTrackedFrame then
-		SuperTrackedFrame:UpdateIcon()
-	end
-end
-
 local function StopGuide()
 	local previous = guide
 	guide = nil
@@ -136,7 +117,6 @@ local function StopGuide()
 			C_SuperTrack.SetSuperTrackedQuestID(previous.previousQuest or 0)
 		end
 	end
-	RefreshMarkerIcon()
 end
 
 local function OwnsWaypoint()
@@ -175,7 +155,7 @@ local function GuideWaypoint(point)
 		end
 		-- These APIs may dispatch events synchronously. Only our own writes bypass ownership checks.
 		guide.writing = true
-		-- The native map pin marks the next bend; our destination diamond still marks the final goal.
+		-- The native map pin marks the next bend; our destination pin still marks the final goal.
 		if waypoint and C_Map.SetUserWaypoint(waypoint) then
 			guide.waypoint = C_Map.GetUserWaypoint()
 			guide.expectedWaypoint = guide.waypoint
@@ -190,7 +170,6 @@ local function GuideWaypoint(point)
 		-- Deferred events from our own writes must also agree with the expected tracking state.
 		RememberTracking(guide)
 		guide.writing = nil
-		RefreshMarkerIcon()
 	end
 	return guide.waypoint ~= nil and C_SuperTrack.IsSuperTrackingUserWaypoint()
 end
@@ -322,12 +301,50 @@ function ns.JourneyInfo()
 	return title, rows
 end
 
+-- Where here falls on a walk: the segment ending at points[index], how far along it (t), and the yards still to walk
+-- from there, or nil when here is off the walk.
+local function OnWalk(points, here)
+	local lengths, total = {}, 0
+	for index = 2, #points do
+		local a, b = points[index - 1], points[index]
+		lengths[index] = math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2)
+		total = total + lengths[index]
+	end
+	local walked, best, found, along, after = 0, nil, nil, nil, nil
+	for index = 2, #points do
+		local a, b = points[index - 1], points[index]
+		local dx, dy, length = b.x - a.x, b.y - a.y, lengths[index]
+		local t = length > 0 and math.max(0, math.min(1, ((here.x - a.x) * dx + (here.y - a.y) * dy) / length ^ 2)) or 0
+		local off = math.sqrt((a.x + t * dx - here.x) ^ 2 + (a.y + t * dy - here.y) ^ 2)
+		local z = a.z and b.z and a.z + t * (b.z - a.z)
+		local level = not (z and here.z and math.abs(z - here.z) > ARRIVAL_HEIGHT)
+		if here.map == a.map and off <= ON_PATH and level and (not best or off < best) then
+			best, found, along, after = off, index, t, total - walked - t * length
+		end
+		walked = walked + length
+	end
+	return found, along, after, total
+end
+
 local function Refresh()
 	local remaining
 	if result then
 		remaining = { now = result.now, arrive = result.arrive, legs = {} }
 		for index = progress.index, #result.legs do
 			remaining.legs[#remaining.legs + 1] = result.legs[index]
+		end
+		-- Draw the walk you are on from where you stand, not from where it was planned.
+		local leg, x, y, z, map = remaining.legs[1], UnitPosition("player")
+		if leg and leg.mode == "walk" and leg.walkPoints and x then
+			local here = { map = map, x = x, y = y, z = z }
+			local found = OnWalk(leg.walkPoints, here)
+			if found then
+				local ahead = { here }
+				for index = found, #leg.walkPoints do
+					ahead[#ahead + 1] = leg.walkPoints[index]
+				end
+				remaining.legs[1] = setmetatable({ walkPoints = ahead }, { __index = leg })
+			end
 		end
 	end
 	ns.SetJourneyRoute(goal, remaining)
@@ -359,27 +376,8 @@ end
 
 -- The rest of a measured walk from a point on it, in the walk's own yards (so swimming keeps its weight).
 local function Remaining(walk, here)
-	local points, total, best, after = walk.points, 0, nil, nil
-	local lengths = {}
-	for index = 2, #points do
-		local a, b = points[index - 1], points[index]
-		lengths[index] = math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2)
-		total = total + lengths[index]
-	end
-	local walked = 0
-	for index = 2, #points do
-		local a, b = points[index - 1], points[index]
-		local dx, dy, length = b.x - a.x, b.y - a.y, lengths[index]
-		local t = length > 0 and math.max(0, math.min(1, ((here.x - a.x) * dx + (here.y - a.y) * dy) / length ^ 2)) or 0
-		local off = math.sqrt((a.x + t * dx - here.x) ^ 2 + (a.y + t * dy - here.y) ^ 2)
-		local z = a.z and b.z and a.z + t * (b.z - a.z)
-		local level = not (z and here.z and math.abs(z - here.z) > ARRIVAL_HEIGHT)
-		if off <= ON_PATH and level and (not best or off < best) then
-			best, after = off, total - walked - t * length
-		end
-		walked = walked + length
-	end
-	return after and total > 0 and walk.cost * after / total
+	local found, _, after, total = OnWalk(walk.points, here)
+	return found and total > 0 and walk.cost * after / total
 end
 
 -- Measurements for the planner, with the walks from where you stood carried along to where you are now.
@@ -412,7 +410,7 @@ local function PrepareWalks(planned)
 				local entry = found or { from = leg.from, to = leg.to }
 				cache[#cache + 1] = entry
 				if found then
-					leg.walkPoints = entry.points or leg.walkPoints
+					leg.walkPoints, leg.measured = entry.points or leg.walkPoints, entry.points ~= nil
 				else
 					searches[#searches + 1] = { leg = leg, entry = entry }
 				end
@@ -440,14 +438,17 @@ local function FindWalks(planned, searches)
 				-- The planner guessed a straight line; a walk that turns out blocked or longer may change the plan.
 				worse = worse or not points or cost > leg.yards * REPLAN_SLACK
 			end
+			if points then
+				leg.walkPoints, leg.measured = points, true
+				if guide and result.legs[progress.index] == leg then
+					guide.target = nil
+				end
+			end
+			-- A replan that keeps these legs only retimes them, so the points above still draw.
 			if pending == 0 and worse then
 				Replan()
 			elseif points then
-				leg.walkPoints = points
-				if guide and result.legs[progress.index] == leg then
-					guide.target = nil
-					UpdateProgress()
-				end
+				UpdateProgress()
 				Refresh()
 			end
 		end)
@@ -455,7 +456,49 @@ local function FindWalks(planned, searches)
 	end
 end
 
+-- The same journey replanned from a few yards on: every leg goes the same way to the same place.
+local function SamePlace(a, b)
+	return a.map == b.map and a.x == b.x and a.y == b.y and a.z == b.z
+end
+
+local function SameJourney(a, b)
+	if not (a and b) or #a.legs ~= #b.legs then
+		return false
+	end
+	for index, leg in ipairs(a.legs) do
+		local other = b.legs[index]
+		if
+			leg.mode ~= other.mode
+			or leg.route ~= other.route
+			or not SamePlace(leg.to, other.to)
+			or (index > 1 and not SamePlace(leg.from, other.from))
+		then
+			return false
+		end
+	end
+	-- A walk you have strayed from is searched again from where you are.
+	local walk, x, y, z, map = b.legs[progress.index], UnitPosition("player")
+	return not (walk and walk.mode == "walk" and walk.measured)
+		or OnWalk(walk.walkPoints, { map = map, x = x, y = y, z = z }) ~= nil
+end
+
+-- Only the timings move, so the drawn route, Guide and any walk still being searched carry on undisturbed.
+local function Retime(planned)
+	result.now, result.arrive = planned.now, planned.arrive
+	for index, leg in ipairs(planned.legs) do
+		local kept = result.legs[index]
+		kept.depart, kept.arrive, kept.wait, kept.estimated = leg.depart, leg.arrive, leg.wait, leg.estimated
+		kept.aboard, kept.yards = leg.aboard, leg.yards
+	end
+end
+
 local function Render(planned)
+	if SameJourney(planned, result) then
+		Retime(planned)
+		UpdateProgress()
+		Refresh()
+		return
+	end
 	local searches
 	if planned ~= result then
 		CancelPaths()
@@ -688,9 +731,6 @@ ns.Init(function()
 		if provider.RefreshAllData == WaypointLocationDataProviderMixin.RefreshAllData then
 			hooksecurefunc(provider, "RefreshAllData", HideGuideWaypointPin)
 		end
-	end
-	if SuperTrackedFrame then
-		hooksecurefunc(SuperTrackedFrame, "UpdateIcon", GuideMarkerIcon)
 	end
 	WorldMapFrame:AddGlobalPinMouseActionHandler(OnPinClick)
 	Menu.ModifyMenu("MENU_QUEST_OBJECTIVE_TRACKER", function(owner, root)

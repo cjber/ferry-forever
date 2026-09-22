@@ -31,8 +31,8 @@ their live waits, the lifts, the tram and portals, and a flight master you haven
 off. **Plan journey** in a quest's right-click menu, or Shift-clicking its marker on the map, does the same
 for its objective, or its turn-in once it is complete. The route is drawn on the world map and minimap as a
 slim outlined line that reads on any map, walking legs dotted and the destination marked with the
-navigation diamond, and its steps sit in the objective tracker like a tracked quest. **Guide**, on from the start of every journey and toggled from the tracker header,
-moves the game's own navigation marker, wearing the quest diamond, along the route bend by bend and gives your tracked quest back when you finish. Walking legs follow the ground round walls, cliffs and water on Eastern Kingdoms, Kalimdor
+waypoint pin, and its steps sit in the objective tracker like a tracked quest. **Guide**, on from the start of every journey and toggled from the tracker header,
+moves the game's own waypoint marker along the route turn by turn and gives your tracked quest back when you finish. Walking legs follow the ground round walls, cliffs and water on Eastern Kingdoms, Kalimdor
 and Zephras Isle, from walking maps that come in the same download. They take tunnels such as Dun Algaz and
 the Undercity's lower levels, ride a lift when the way round on foot is longer, and take the boat rather than
 a long swim. Replanning on board

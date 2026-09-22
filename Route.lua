@@ -7,7 +7,7 @@ local GOAL_TEMPLATE = "ShortestPathForeverGoalPinTemplate"
 -- atlas is mostly transparent and turned into a thin core inside a heavy border. Walks are short breadcrumbs.
 local THICKNESS, DASH, GAP = 2, 6, 5
 local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
-local GOAL_ATLAS, GOAL_SCALE = "Navigation-Tracked-Icon", 0.8
+local GOAL_ATLAS, GOAL_SCALE = "Waypoint-MapPin-Tracked", 0.8
 local COLORS = {
 	walk = NORMAL_FONT_COLOR,
 	flight = CreateColor(0.2, 1, 0.35),
@@ -299,7 +299,7 @@ function ShortestPathForeverGoalPinMixin:OnLoad()
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_SUPER_TRACKED_CONTENT")
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScalingLimits(1, 1, 1)
-	-- The Guide arrow's diamond (Blizzard_QuestNavigation/SuperTrackedFrame.xml), so map and arrow agree.
+	-- The native waypoint pin (SuperTrackedFrame.lua:219) that Guide's marker wears, so map and marker agree.
 	local atlas = C_Texture.GetAtlasInfo(GOAL_ATLAS)
 	self:SetSize(atlas.width * GOAL_SCALE, atlas.height * GOAL_SCALE)
 	self.Texture:SetAtlas(GOAL_ATLAS)
