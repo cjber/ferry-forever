@@ -5,8 +5,9 @@ local TRANSPORT_TEMPLATE = "FerryForeverTransportPinTemplate"
 local GOAL_TEMPLATE = "FerryForeverGoalPinTemplate"
 -- A solid colour line with a slim dark border, so it reads on parchment and minimap alike; the taxi line
 -- atlas is mostly transparent and turned into a thin core inside a heavy border. Walks are short breadcrumbs.
-local THICKNESS, DASH, GAP = 3, 8, 6
+local THICKNESS, DASH, GAP = 2, 6, 5
 local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
+local GOAL_ATLAS, GOAL_SCALE = "Navigation-Tracked-Icon", 0.8
 local COLORS = {
 	walk = NORMAL_FONT_COLOR,
 	flight = CreateColor(0.2, 1, 0.35),
@@ -271,9 +272,10 @@ function FerryForeverGoalPinMixin:OnLoad()
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_SUPER_TRACKED_CONTENT")
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScalingLimits(1, 1, 1)
-	self:SetSize(28, 28)
 	-- The Guide arrow's diamond (Blizzard_QuestNavigation/SuperTrackedFrame.xml), so map and arrow agree.
-	self.Texture:SetAtlas("Navigation-Tracked-Icon")
+	local atlas = C_Texture.GetAtlasInfo(GOAL_ATLAS)
+	self:SetSize(atlas.width * GOAL_SCALE, atlas.height * GOAL_SCALE)
+	self.Texture:SetAtlas(GOAL_ATLAS)
 	self:SetScript("OnHide", self.OnMouseLeave)
 end
 

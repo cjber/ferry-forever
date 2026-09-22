@@ -21,6 +21,7 @@ read_globals = {
 	"Menu",
 	"Saturate",
 	"C_Map",
+	"C_Texture",
 	"C_Timer",
 	"CreateFrame",
 	"CreateFromMixins",
