@@ -328,8 +328,8 @@ function ns.JourneyInfo()
 end
 
 -- Where here falls on a walk: the segment ending at points[index], how far along it (t), and the yards still to walk
--- from there, or nil when here is off the walk.
-local function OnWalk(points, here)
+-- from there, or nil when here is more than reach (ON_PATH by default) off the walk.
+local function OnWalk(points, here, reach)
 	local lengths, total = {}, 0
 	for index = 2, #points do
 		local a, b = points[index - 1], points[index]
@@ -344,7 +344,7 @@ local function OnWalk(points, here)
 		local off = math.sqrt((a.x + t * dx - here.x) ^ 2 + (a.y + t * dy - here.y) ^ 2)
 		local z = a.z and b.z and a.z + t * (b.z - a.z)
 		local level = not (z and here.z and math.abs(z - here.z) > ARRIVAL_HEIGHT)
-		if here.map == a.map and off <= ON_PATH and level and (not best or off < best) then
+		if here.map == a.map and off <= (reach or ON_PATH) and level and (not best or off < best) then
 			best, found, along, after = off, index, t, total - walked - t * length
 		end
 		walked = walked + length
@@ -363,7 +363,9 @@ local function Refresh()
 		local leg, x, y, z, map = remaining.legs[1], UnitPosition("player")
 		if leg and leg.mode == "walk" and leg.walkPoints and x then
 			local here = { map = map, x = x, y = y, z = z }
-			local found = OnWalk(leg.walkPoints, here)
+			-- A walk still being searched may be the one it replaces, which you have strayed from: join it where it is
+			-- nearest.
+			local found = OnWalk(leg.walkPoints, here, not leg.measured and math.huge or nil)
 			if found then
 				local ahead = { here }
 				for index = found, #leg.walkPoints do
@@ -419,6 +421,10 @@ local function Walks(here)
 	return walks
 end
 
+local function SamePlace(a, b)
+	return a.map == b.map and a.x == b.x and a.y == b.y and a.z == b.z
+end
+
 local function PrepareWalks(planned)
 	local cache, searches = {}, {}
 	for _, leg in ipairs(planned and planned.legs or {}) do
@@ -440,6 +446,13 @@ local function PrepareWalks(planned)
 					leg.wet = entry.points and entry.points.wet
 				else
 					searches[#searches + 1] = { leg = leg, entry = entry }
+					-- Until the search is in, keep drawing the walk it replaces rather than a straight line.
+					for _, previous in ipairs(result and result.legs or {}) do
+						if previous.mode == "walk" and previous.measured and SamePlace(previous.to, leg.to) then
+							leg.walkPoints = previous.walkPoints
+							break
+						end
+					end
 				end
 			end
 		end
@@ -484,10 +497,6 @@ local function FindWalks(planned, searches)
 end
 
 -- The same journey replanned from a few yards on: every leg goes the same way to the same place.
-local function SamePlace(a, b)
-	return a.map == b.map and a.x == b.x and a.y == b.y and a.z == b.z
-end
-
 local function SameJourney(a, b)
 	if not (a and b) or #a.legs ~= #b.legs then
 		return false
