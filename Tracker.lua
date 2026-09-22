@@ -9,8 +9,18 @@ local function OpenDockMap(dockID)
 	OpenWorldMap(location and location.uiMap)
 end
 
-function ModuleMixin:OnBlockHeaderClick(_block, button)
-	if button == "LeftButton" then
+function ModuleMixin:OnBlockHeaderClick(block, button)
+	if block.id == "journey" then
+		if button == "LeftButton" then
+			ns.ToggleJourneyGuide()
+		elseif button == "RightButton" then
+			MenuUtil.CreateContextMenu(block, function(_, root)
+				root:CreateCheckbox("Guide me", ns.IsJourneyGuided, ns.ToggleJourneyGuide)
+				root:CreateButton("Show on map", ns.ShowJourneyMap)
+				root:CreateButton("Clear journey", ns.ClearJourney)
+			end)
+		end
+	elseif button == "LeftButton" then
 		OpenDockMap(self.mapDock)
 	end
 end
@@ -20,16 +30,22 @@ local function DepartureText(departure)
 	return departure.known and text or GRAY_FONT_COLOR:WrapTextInColorCode(text)
 end
 
+local function RowColor(row)
+	return row.current and OBJECTIVE_TRACKER_COLOR.NormalHighlight or OBJECTIVE_TRACKER_COLOR.Normal
+end
+
 function ModuleMixin:LayoutContents()
-	if not self.blockKey then
-		return
+	for _, entry in ipairs(self.blocks) do
+		local block = self:GetBlock(entry.key)
+		block:SetHeader(entry.title)
+		block.headerHeight = block.HeaderText:GetHeight()
+		for _, row in ipairs(entry.rows) do
+			block:AddObjective(row.key, row.text, nil, true, nil, RowColor(row))
+		end
+		if not self:LayoutBlock(block) then
+			return
+		end
 	end
-	local block = self:GetBlock(self.blockKey)
-	block:SetHeader(self.title)
-	for _, row in ipairs(self.rows) do
-		block:AddObjective(row.key, row.text, nil, true)
-	end
-	self:LayoutBlock(block)
 end
 
 -- Waiting at a dock: its departures, one line per destination.
@@ -74,39 +90,64 @@ function ns.RefreshTracker()
 			title, blockKey = "On board to " .. ns.DockTitle(mapDock), "ride" .. mapDock
 		end
 	end
-	rows = rows or {}
-	local changed = blockKey ~= module.blockKey or title ~= module.title or #rows ~= #module.rows
-	for index, row in ipairs(rows) do
-		local previous = module.rows[index]
-		if not previous or row.key ~= previous.key then
+	local blocks = {}
+	local journeyTitle, journeyRows = ns.JourneyInfo()
+	if journeyTitle then
+		blocks[#blocks + 1] = { key = "journey", title = journeyTitle, rows = journeyRows }
+	end
+	if blockKey then
+		blocks[#blocks + 1] = { key = blockKey, title = title, rows = rows }
+	end
+	module.dockID, module.mapDock = dockID, mapDock
+	module.hasDisplayPriority = journeyTitle ~= nil
+	local header = journeyTitle and "Journey" or kind and HEADER[kind] or ModuleMixin.headerText
+	local changed = #blocks ~= #module.blocks or header ~= module.headerText
+	for index, entry in ipairs(blocks) do
+		local previous = module.blocks[index]
+		if not previous or entry.key ~= previous.key or #entry.rows ~= #previous.rows then
 			changed = true
+		else
+			for rowIndex, row in ipairs(entry.rows) do
+				local old = previous.rows[rowIndex]
+				changed = changed or row.key ~= old.key or row.current ~= old.current
+			end
 		end
 	end
-	module.dockID, module.mapDock, module.blockKey, module.title, module.rows = dockID, mapDock, blockKey, title, rows
-	local header = kind and HEADER[kind] or ModuleMixin.headerText
+	module.blocks = blocks
 	if header ~= module.headerText then
 		module.headerText = header
 		module:SetHeader(header)
-		changed = true
 	end
 	if changed then
 		module:MarkDirty()
 		return
 	end
-	if not blockKey or module:IsDirty() then
-		return
-	end
-	local block = module:GetExistingBlock(blockKey)
-	if not (block and block.used) then
+	if module:IsDirty() then
 		return
 	end
 	-- Countdown ticks reuse Blizzard's lines; only changed wrapping needs a new layout.
 	local resized = false
-	for _, row in ipairs(rows) do
-		local line = block:GetExistingLine(row.key)
-		if line and line.used and line.Text:GetText() ~= row.text then
-			local height = block:SetStringText(line.Text, row.text, true, nil, block.isHighlighted)
-			resized = resized or height ~= line:GetHeight()
+	for _, entry in ipairs(blocks) do
+		local block = module:GetExistingBlock(entry.key)
+		if block and block.used then
+			if block.HeaderText:GetText() ~= entry.title then
+				local height = block:SetStringText(
+					block.HeaderText,
+					entry.title,
+					nil,
+					OBJECTIVE_TRACKER_COLOR.Header,
+					block.isHighlighted
+				)
+				resized = resized or height ~= block.headerHeight
+				block.headerHeight = height
+			end
+			for _, row in ipairs(entry.rows) do
+				local line = block:GetExistingLine(row.key)
+				if line and line.used and line.Text:GetText() ~= row.text then
+					local height = block:SetStringText(line.Text, row.text, true, RowColor(row), block.isHighlighted)
+					resized = resized or height ~= line:GetHeight()
+				end
+			end
 		end
 	end
 	if resized then
@@ -127,13 +168,17 @@ ns.Init(function()
 	end
 	module = CreateFrame("Frame", "FerryForeverObjectiveTracker", UIParent, "ObjectiveTrackerModuleTemplate")
 	Mixin(module, ModuleMixin)
-	module.rows = {}
+	module.blocks = {}
 	module:SetHeader(ModuleMixin.headerText)
 	module.uiOrder = -2
 	module.Header:EnableMouse(true)
 	module.Header:SetScript("OnMouseUp", function(_, button)
 		if button == "LeftButton" then
-			OpenDockMap(module.mapDock)
+			if ns.JourneyInfo() then
+				ns.ToggleJourneyGuide()
+			else
+				OpenDockMap(module.mapDock)
+			end
 		end
 	end)
 	-- The manager's Init is deferred through a closure; AddContainer remains hookable.

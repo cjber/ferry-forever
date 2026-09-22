@@ -1,8 +1,7 @@
 local _, ns = ...
 
 -- Shift-click the world map: the fastest way there from here, by foot, flight, boat, zeppelin, tram and portal,
--- with the boats' live waits. Replanned every few seconds from where you stand until closed.
-local WIDTH = 320
+-- with the boats' live waits. The tracker owns the list; closing the map leaves the journey running.
 local REPLAN_EVERY = 5
 local SCHEDULED = { boat = true, zeppelin = true, tram = true }
 local VERB = {
@@ -15,7 +14,9 @@ local VERB = {
 	passage = "Go through to",
 }
 
-local panel, goal, guide
+local goal, guide, result
+local progress = { index = 1 }
+local driver
 local ARRIVAL = 15
 
 local function NodeLabel(node)
@@ -60,7 +61,6 @@ local function StopGuide()
 		C_SuperTrack.SetSuperTrackedUserWaypoint(false)
 	end
 	guide = nil
-	panel.Guide:SetText("Guide")
 end
 
 local function OwnsWaypoint()
@@ -73,7 +73,7 @@ local function OwnsWaypoint()
 end
 
 local function GuideTo(node)
-	if guide.target == node then
+	if not guide or guide.target == node then
 		return
 	end
 	local point = node.kind == "dock" and ns.DockPoint(node.id) or node
@@ -96,108 +96,123 @@ local function GuideTo(node)
 	guide.target = node
 end
 
-local function UpdateGuide()
-	if not guide or not OwnsWaypoint() then
+function ns.ClearJourney()
+	StopGuide()
+	goal, result = nil, nil
+	progress.index, progress.departed = 1, false
+	driver:Hide()
+	ns.SetJourneyRoute(nil)
+	ns.RefreshTracker()
+end
+
+local function UpdateProgress()
+	if guide then
+		OwnsWaypoint()
+	end
+	if not (goal and result) then
 		return
 	end
 	if Near(goal) then
-		panel:Hide()
+		ns.ClearJourney()
 		return
 	end
 	local riding, flying = ns.CurrentRide(), UnitOnTaxi("player")
-	while guide.index <= #guide.result.legs do
-		local leg = guide.result.legs[guide.index]
-		local nextLeg = guide.result.legs[guide.index + 1]
+	while progress.index <= #result.legs do
+		local leg = result.legs[progress.index]
+		local nextLeg = result.legs[progress.index + 1]
 		if
 			leg.mode == "walk"
 			and nextLeg
 			and ((nextLeg.route and riding == nextLeg.route) or (nextLeg.mode == "flight" and flying))
 		then
-			guide.index = guide.index + 1
+			progress.index = progress.index + 1
 			leg = nextLeg
 		end
 		local aboard = leg.aboard or (leg.route and riding == leg.route) or (leg.mode == "flight" and flying)
-		if leg.mode ~= "walk" and not guide.departed then
+		if leg.mode ~= "walk" and not progress.departed then
 			if aboard or Near(leg.from) then
-				guide.departed = true
+				progress.departed = true
 			else
 				GuideTo(leg.from)
 				return
 			end
 		end
-		if not Near(leg.to) then
+		if not Near(leg.to) or (leg.mode == "flight" and flying) then
 			GuideTo(leg.to)
 			return
 		end
-		guide.index, guide.departed = guide.index + 1, false
+		progress.index, progress.departed = progress.index + 1, false
 	end
-	panel:Hide()
+	ns.ClearJourney()
 end
 
-local function Line(index)
-	local line = panel.lines[index]
-	if not line then
-		line = {
-			left = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall"),
-			right = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall"),
-		}
-		line.left:SetJustifyH("LEFT")
-		line.right:SetJustifyH("RIGHT")
-		line.left:SetWidth(WIDTH - 110)
-		line.left:SetWordWrap(true)
-		panel.lines[index] = line
-	end
-	return line
+function ns.IsJourneyGuided()
+	return guide ~= nil
 end
 
-local function Render(result)
-	ns.SetJourneyRoute(goal, result)
-	for _, line in ipairs(panel.lines) do
-		line.left:Hide()
-		line.right:Hide()
+function ns.ToggleJourneyGuide()
+	if guide then
+		StopGuide()
+	elseif result then
+		guide = {}
+		UpdateProgress()
 	end
-	panel.result = result
-	panel.Guide:SetEnabled(result ~= nil)
-	if guide and OwnsWaypoint() then
-		if result then
-			if result ~= guide.result then
-				guide.result, guide.index, guide.departed = result, 1, false
+	ns.RefreshTracker()
+end
+
+function ns.ShowJourneyMap()
+	local location = goal and ns.Locate(goal)
+	OpenWorldMap(location and location.uiMap)
+end
+
+-- Shared by the tracker and the goal pin, including on a fullscreen map.
+function ns.JourneyInfo()
+	if not goal then
+		return nil
+	end
+	local title = "Journey to " .. NodeLabel(goal)
+	local rows = {}
+	if result then
+		title = title .. " · " .. ns.FormatCountdown(math.max(0, result.arrive - ns.NowMs()))
+		for index = progress.index, #result.legs do
+			local leg = result.legs[index]
+			local text = string.format("%d. %s %s", index, VERB[leg.mode], NodeLabel(leg.to))
+			if leg.mode == "walk" and leg.to.undiscovered then
+				text = text .. " (new flight path)"
 			end
-			UpdateGuide()
-		else
-			StopGuide()
+			if leg.estimated and SCHEDULED[leg.mode] then
+				text = text .. " (no sighting yet)"
+			end
+			rows[#rows + 1] = { key = index, text = text .. "   " .. LegTime(leg), current = index == progress.index }
+		end
+	else
+		rows[1] = { key = "unreachable", text = "No way there from here." }
+	end
+	return title, rows
+end
+
+local function Refresh()
+	local remaining
+	if result then
+		remaining = { now = result.now, arrive = result.arrive, legs = {} }
+		for index = progress.index, #result.legs do
+			remaining.legs[#remaining.legs + 1] = result.legs[index]
 		end
 	end
+	ns.SetJourneyRoute(goal, remaining)
+	ns.RefreshTracker()
+end
+
+local function Render(planned)
+	if planned ~= result then
+		progress.index, progress.departed = 1, false
+	end
+	result = planned
 	if not result then
-		panel.Title:SetText("Journey")
-		local line = Line(1)
-		line.left:SetText("No way there from here.")
-		line.left:SetPoint("TOPLEFT", panel.Title, "BOTTOMLEFT", 0, -10)
-		line.left:Show()
-		panel:SetHeight(90)
-		return
+		StopGuide()
 	end
-	panel.Title:SetText("Journey · " .. ns.FormatCountdown(result.arrive - result.now))
-	local previous, height = panel.Title, 0
-	for index, leg in ipairs(result.legs) do
-		local line = Line(index)
-		local label = string.format("%d. %s %s", index, VERB[leg.mode], NodeLabel(leg.to))
-		-- Walks and some flights are always estimates; only an untimed boat is worth calling out.
-		local untimed = leg.estimated and SCHEDULED[leg.mode]
-		if untimed then
-			label = label .. " (no sighting yet)"
-		end
-		local color = untimed and GRAY_FONT_COLOR or HIGHLIGHT_FONT_COLOR
-		line.left:SetText(color:WrapTextInColorCode(label))
-		line.right:SetText(color:WrapTextInColorCode(LegTime(leg)))
-		line.left:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, index == 1 and -10 or -4)
-		line.right:SetPoint("TOPRIGHT", line.left, "TOPLEFT", WIDTH - 24, 0)
-		line.left:Show()
-		line.right:Show()
-		previous = line.left
-		height = height + line.left:GetStringHeight() + 4
-	end
-	panel:SetHeight(height + 80)
+	UpdateProgress()
+	Refresh()
 end
 
 local function Plan()
@@ -208,9 +223,9 @@ local function Plan()
 	local _, runSpeed = GetUnitSpeed("player")
 	local now = ns.NowMs()
 	-- Taxi paths cannot be interrupted; retain their chosen destination until landing.
-	if guide and UnitOnTaxi("player") then
-		guide.result.now = now
-		return guide.result
+	if result and UnitOnTaxi("player") then
+		result.now = now
+		return result
 	end
 	local ride, routeID = nil, ns.CurrentRide()
 	if routeID then
@@ -219,7 +234,7 @@ local function Plan()
 			ride = { route = routeID, dock = dock, arrive = now + arriveIn }
 		end
 	end
-	local result = ns.Planner.Plan({
+	local planned = ns.Planner.Plan({
 		from = { map = map, x = x, y = y },
 		to = goal,
 		now = now,
@@ -235,74 +250,37 @@ local function Plan()
 		portals = ns.Portals,
 		landmasses = ns.Landmasses,
 	})
-	if result then
-		result.now = now
+	if planned then
+		planned.now = now
 	end
-	return result
+	return planned
 end
 
-local function CreatePanel()
-	panel = CreateFrame("Frame", "FerryForeverJourney", WorldMapFrame:GetCanvasContainer(), "TooltipBackdropTemplate")
-	panel:SetPoint("TOPLEFT", 12, -12)
-	panel:SetWidth(WIDTH)
-	panel:SetFrameStrata("HIGH")
-	panel:EnableMouse(true)
-	panel.lines = {}
-	panel.Title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-	panel.Title:SetPoint("TOPLEFT", 12, -12)
-	local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", 2, 2)
-	close:SetScript("OnClick", function()
-		panel:Hide()
-	end)
-	panel:SetScript("OnHide", function()
-		StopGuide()
-		goal = nil
-		ns.SetJourneyRoute(nil)
-	end)
-	panel:SetScript("OnShow", function(self)
-		if not goal then
-			self:Hide()
-		end
-	end)
-	panel.Guide = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-	panel.Guide:SetSize(100, 22)
-	panel.Guide:SetPoint("BOTTOMLEFT", 10, 10)
-	panel.Guide:SetText("Guide")
-	panel.Guide:SetScript("OnClick", function()
-		if guide then
-			StopGuide()
-		elseif panel.result then
-			guide = { result = panel.result, index = 1 }
-			panel.Guide:SetText("Stop guiding")
-			UpdateGuide()
-		end
-	end)
-	panel.guideElapsed = 0
-	panel.elapsed = 0
-	panel:SetScript("OnUpdate", function(self, elapsed)
-		if not ns.db.journey then
-			self:Hide()
-			return
-		end
-		self.elapsed = self.elapsed + elapsed
-		self.guideElapsed = self.guideElapsed + elapsed
-		if self.guideElapsed < 0.1 then
-			return
-		end
-		self.guideElapsed = 0
-		UpdateGuide()
-		if not goal then
-			return
-		end
-		local riding, flying = ns.CurrentRide(), UnitOnTaxi("player")
-		local changedRide = riding ~= self.riding or flying ~= self.flying
-		self.riding, self.flying = riding, flying
-		if self.elapsed >= REPLAN_EVERY or changedRide then
-			self.elapsed = 0
-			Render(Plan())
-		end
-	end)
+local function Update(self, elapsed)
+	if not ns.db.journey then
+		ns.ClearJourney()
+		return
+	end
+	self.elapsed = self.elapsed + elapsed
+	self.progressElapsed = self.progressElapsed + elapsed
+	if self.progressElapsed < 0.1 then
+		return
+	end
+	self.progressElapsed = 0
+	local index = progress.index
+	UpdateProgress()
+	if not goal then
+		return
+	end
+	local riding, flying = ns.CurrentRide(), UnitOnTaxi("player")
+	local changedRide = riding ~= self.riding or flying ~= self.flying
+	self.riding, self.flying = riding, flying
+	if self.elapsed >= REPLAN_EVERY or changedRide then
+		self.elapsed = 0
+		Render(Plan())
+	elseif index ~= progress.index then
+		Refresh()
+	end
 end
 
 local function OnCanvasClick(map, button)
@@ -320,15 +298,17 @@ local function OnCanvasClick(map, button)
 		StopGuide()
 	end
 	goal = { map = continent, x = x, y = y }
-	if not panel then
-		CreatePanel()
-	end
-	panel.elapsed = 0
-	panel:Show()
+	result = nil
+	progress.index, progress.departed = 1, false
+	driver.elapsed, driver.progressElapsed = 0, 0
+	driver:Show()
 	Render(Plan())
 	return true
 end
 
 ns.Init(function()
+	driver = CreateFrame("Frame", "FerryForeverJourneyDriver", UIParent)
+	driver:SetScript("OnUpdate", Update)
+	driver:Hide()
 	WorldMapFrame:AddCanvasClickHandler(OnCanvasClick)
 end)
