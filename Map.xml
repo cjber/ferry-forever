@@ -23,11 +23,6 @@
 		<Layers>
 			<Layer level="ARTWORK">
 				<Texture parentKey="Texture" setAllPoints="true"/>
-				<FontString parentKey="Label" inherits="GameFontNormal">
-					<Anchors>
-						<Anchor point="CENTER"/>
-					</Anchors>
-				</FontString>
 			</Layer>
 		</Layers>
 	</Frame>

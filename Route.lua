@@ -3,10 +3,10 @@ local _, ns = ...
 local LINE_TEMPLATE = "FerryForeverRoutePinTemplate"
 local TRANSPORT_TEMPLATE = "FerryForeverTransportPinTemplate"
 local GOAL_TEMPLATE = "FerryForeverGoalPinTemplate"
--- FM_FlightPathDataProvider.xml:28,45 layers its taxi strokes; keep a dark border below our colour.
-local LINE_ATLAS = "_UI-Taxi-Line-horizontal"
-local THICKNESS, DASH, GAP = 6, 14, 8
-local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS * 2, 0.6
+-- A solid colour line with a slim dark border, so it reads on parchment and minimap alike; the taxi line
+-- atlas is mostly transparent and turned into a thin core inside a heavy border. Walks are short breadcrumbs.
+local THICKNESS, DASH, GAP = 4, 8, 6
+local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 3, 0.5
 local COLORS = {
 	walk = NORMAL_FONT_COLOR,
 	flight = CreateColor(0.2, 1, 0.35),
@@ -49,7 +49,7 @@ local function Stroke(owner, x1, y1, x2, y2, color, scale)
 		underline = owner:CreateLine(nil, "ARTWORK", nil, -1)
 		underline:SetColorTexture(0.04, 0.04, 0.04, 1)
 		line = owner:CreateLine(nil, "ARTWORK")
-		line:SetAtlas(LINE_ATLAS)
+		line:SetColorTexture(1, 1, 1, 1)
 		owner.lines[owner.used] = line
 		owner.underlines[owner.used] = underline
 	end
@@ -271,10 +271,9 @@ function FerryForeverGoalPinMixin:OnLoad()
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_SUPER_TRACKED_CONTENT")
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScalingLimits(1, 1, 1)
-	self:SetSize(32, 32)
-	-- Blizzard_POIButton/POIButton.lua:79. The quest ring, distinct from the user-waypoint diamond.
-	self.Texture:SetAtlas("UI-QuestPoi-QuestNumber")
-	self.Label:SetText("X")
+	self:SetSize(28, 28)
+	-- The Guide arrow's diamond (Blizzard_QuestNavigation/SuperTrackedFrame.xml), so map and arrow agree.
+	self.Texture:SetAtlas("Navigation-Tracked-Icon")
 	self:SetScript("OnHide", self.OnMouseLeave)
 end
 
