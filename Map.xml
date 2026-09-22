@@ -13,4 +13,14 @@
 			</Layer>
 		</Layers>
 	</Frame>
+	<Frame name="FerryForeverPortalPinTemplate" inherits="BaseHighlightableMapPoiPinTemplate"
+		mixin="FerryForeverPortalPinMixin" enableMouse="true" virtual="true"/>
+	<Frame name="FerryForeverRoutePinTemplate" mixin="FerryForeverRoutePinMixin" virtual="true"/>
+	<Frame name="FerryForeverGoalPinTemplate" mixin="FerryForeverGoalPinMixin" virtual="true">
+		<Layers>
+			<Layer level="ARTWORK">
+				<Texture parentKey="Texture" setAllPoints="true"/>
+			</Layer>
+		</Layers>
+	</Frame>
 </Ui>

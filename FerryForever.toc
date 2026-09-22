@@ -1,19 +1,28 @@
 ## Interface: 16001
 ## Title: Ferry Forever
-## Notes: Every boat and zeppelin on the world map, with when the next one arrives and leaves.
+## Notes: Boats, zeppelins, lifts, the tram and portals on the world map, with live departure times and a journey planner.
 ## Author: cjber
 ## Version: @project-version@
 ## Category: Map
 ## X-License: GPL-3.0-or-later
 ## X-Website: https://github.com/cjber/ferry-forever
 ## SavedVariables: FerryForeverDB
+## SavedVariablesPerCharacter: FerryForeverCharDB
 
 Data\Routes.lua
+Data\Transports.lua
+Data\Taxi.lua
+Data\Portals.lua
 Model.lua
+Planner.lua
 Core.lua
 Observer.lua
 Sync.lua
 Map.xml
 Map.lua
 Tracker.lua
+Taxi.lua
+Journey.lua
+Route.lua
+Alert.lua
 Settings.lua

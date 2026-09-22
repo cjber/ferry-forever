@@ -21,3 +21,15 @@ faction's routes. Near a dock, a Boats section above your quests shows the same 
 Each route's loop time comes from the game's own path data, so a single ride fixes a boat's schedule for
 hours. Ride once and it syncs, and the sighting is shared quietly with your guild, party and anyone at the
 dock, so other players' rides time your boats too. Sharing can be turned off in the settings (`/ferry`).
+
+The lifts at the Great Lift, Freewind Post, Thunder Bluff and Undercity, and both Deeprun Tram trains, are
+timed the same way: countdowns on the map and in the tracker, synced from a ride and shared. The tram is
+marked at its city entrances, and portals are marked with where they lead. Shift-click the world map to
+plan the fastest way to that spot, combining walking, the flight points you know, boats and zeppelins with
+their live waits, the tram and portals, with a button to set a waypoint on the first stop.
+
+On board, once the ride has synced, the tracker shows where the boat calls next and when it gets there. Half
+a minute before a timed boat reaches the dock you are waiting at, and shortly before your own boat docks, a
+raid-warning banner, a sound and a flashing taskbar icon let you know, even with the game in the
+background. A `/reload` or logout mid-ride keeps the ride so far. Every map layer, the tracker, the alerts
+and their sound, the planner and sharing can each be switched off in the settings.
