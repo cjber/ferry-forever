@@ -425,7 +425,8 @@ ns.Routes = {
 		},
 	},
 	[11398] = {
-		kind = "boat",
+		kind = "zeppelin",
+		faction = "Alliance",
 		period = 353569,
 		stops = {
 			{ dock = 20, arrive = 85107, depart = 145134 },
@@ -471,7 +472,8 @@ ns.Routes = {
 		},
 	},
 	[11457] = {
-		kind = "boat",
+		kind = "zeppelin",
+		faction = "Horde",
 		period = 320671,
 		stops = {
 			{ dock = 22, arrive = 78417, depart = 138444 },

@@ -35,7 +35,8 @@ REFERENCE_PERIODS = {
     303: 317038,
 }
 TOLERANCE = 0.005
-ZEPPELINS = {285, 301, 302}
+# 11398 is the Dalaran-Valanaar skyship and 11457 the Thunder Bluff-Zephras Isle zeppelin (Forever, Skyborne only).
+ZEPPELINS = {285, 301, 302, 11398, 11457}
 # Routes between one faction's towns, whose docks stand among that faction's guards. The rest (Ratchet-Booty
 # Bay, and the Forever crossings until their towns are known to belong to a side) are neutral.
 FACTIONS = {
@@ -48,6 +49,8 @@ FACTIONS = {
     303: "Alliance",
     11167: "Alliance",
     11616: "Alliance",
+    11398: "Alliance",
+    11457: "Horde",
 }
 EXCLUDED = {436}  # Naxxramas, a raid's floating citadel rather than a passenger route
 STOP = 2
