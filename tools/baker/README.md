@@ -36,7 +36,8 @@ Steps, each reusable on its own:
    files into the addon's HPA* graph and 8-yard grids. The output is deterministic. Each cell keeps one base surface
    and its height (2-yard steps); where walkable surfaces overlap (a tunnel under a pass, a city under a city), the
    others are kept as floors, each linked to the neighbouring surfaces it actually joins. Floors under water in the
-   same cell (lake and sea beds) are dropped.
+   same cell (lake and sea beds) are dropped. Every graph edge carries two costs: one where a swum yard counts as
+   `SWIM` (3) running yards, so walks keep out of water, and one for a player walking on water, where it counts as 1.
 
 `NAV_DBD` points NavBaker at a directory holding `Map.dbd` and `LiquidType.dbd`. bake.sh fetches them from a pinned
 WoWDBDefs commit and checks their sha256.

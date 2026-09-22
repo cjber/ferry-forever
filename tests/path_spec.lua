@@ -103,4 +103,12 @@ assert(type(far) == "number" and far > 1000, far)
 -- From the top, the surface road leads on to Tarren Mill.
 assert(Path.FindSync(0, { x = WEST_LIFT.x, y = WEST_LIFT.y, z = 55.718 }, { x = -0.06, y = -859.91, z = 58.83 }))
 
+-- Across Loch Modan: on foot the walk goes round by the shore, walking on water it goes straight over.
+local THELSAMAR_SHORE, WEST_SHORE = { x = -5293, y = -3157 }, { x = -5773, y = -3287 }
+local round, roundCost = Path.FindSync(0, THELSAMAR_SHORE, WEST_SHORE)
+local over, overCost = Path.FindSync(0, THELSAMAR_SHORE, WEST_SHORE, true)
+assert(round and over)
+assert(round.wet < 50 and over.wet > 300, round.wet .. " " .. over.wet)
+assert(overCost < 550 and roundCost > overCost * 1.4, roundCost .. " " .. overCost)
+
 print("path_spec ok")

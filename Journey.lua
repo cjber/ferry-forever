@@ -32,6 +32,13 @@ local ON_PATH = 15
 local SAME_WALK = 30
 local measured = {}
 local Replan
+-- Water Walking, Levitate and the Elixir of Water Walking make water ground. A spell you know counts too: the step
+-- asks you to cast it. waterMode is the mode this journey's walks were searched in.
+local WATER_AURAS = { 546, 1706, 11319 }
+local WATER_SPELLS = { 546, 1706 }
+-- Yards over water worth casting for.
+local WATER_HINT = 20
+local waterMode
 
 local function CancelPaths()
 	pathVersion = pathVersion + 1
@@ -53,6 +60,21 @@ local function NodeLabel(node)
 	end
 	local location = ns.Locate(node)
 	return location and location.zone or UNKNOWN
+end
+
+-- Whether walks may cross water, and the spell to cast first when none is up.
+local function WaterWalking()
+	for _, id in ipairs(WATER_AURAS) do
+		if C_UnitAuras.GetPlayerAuraBySpellID(id) then
+			return true
+		end
+	end
+	for _, id in ipairs(WATER_SPELLS) do
+		if IsPlayerSpell(id) then
+			return true, id
+		end
+	end
+	return false
 end
 
 local function LegTime(leg)
@@ -293,6 +315,10 @@ function ns.JourneyInfo()
 			if leg.estimated and SCHEDULED[leg.mode] then
 				text = text .. " (no sighting yet)"
 			end
+			local _, spell = WaterWalking()
+			if spell and leg.wet and leg.wet >= WATER_HINT then
+				text = text .. " (cast " .. C_Spell.GetSpellName(spell) .. ")"
+			end
 			rows[#rows + 1] = { key = index, text = text .. "   " .. LegTime(leg), current = index == progress.index }
 		end
 	else
@@ -411,6 +437,7 @@ local function PrepareWalks(planned)
 				cache[#cache + 1] = entry
 				if found then
 					leg.walkPoints, leg.measured = entry.points or leg.walkPoints, entry.points ~= nil
+					leg.wet = entry.points and entry.points.wet
 				else
 					searches[#searches + 1] = { leg = leg, entry = entry }
 				end
@@ -439,7 +466,7 @@ local function FindWalks(planned, searches)
 				worse = worse or not points or cost > leg.yards * REPLAN_SLACK
 			end
 			if points then
-				leg.walkPoints, leg.measured = points, true
+				leg.walkPoints, leg.measured, leg.wet = points, true, points.wet
 				if guide and result.legs[progress.index] == leg then
 					guide.target = nil
 				end
@@ -451,7 +478,7 @@ local function FindWalks(planned, searches)
 				UpdateProgress()
 				Refresh()
 			end
-		end)
+		end, waterMode)
 		pathJobs[job] = true
 	end
 end
@@ -534,6 +561,12 @@ local function Plan()
 	if result and UnitOnTaxi("player") then
 		result.now = now
 		return result
+	end
+	-- Gaining or losing water walking changes every walk: search them all again.
+	local waterWalking = WaterWalking()
+	if waterWalking ~= waterMode then
+		CancelPaths()
+		waterMode, walkCache, measured, result = waterWalking, {}, {}, nil
 	end
 	local ride, routeID = nil, ns.CurrentRide()
 	if routeID then

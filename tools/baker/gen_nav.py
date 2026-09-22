@@ -32,7 +32,11 @@ MM = os.environ.get("NAV_MM", "mm")
 T = 1600 / 3
 CELLS = 67
 CS = T / CELLS
-SWIM = 7 / 4.7  # running 7 yd/s, swimming 4.7 yd/s
+# A swum yard counts as three running ones: beyond the slower pace (4.7 against 7 yd/s), swimming means climbing
+# out at a bank that may be a cliff, aggro from things that cannot be outrun, and fatigue far from shore.
+SWIM = 3.0
+WATER_WALK = 1.0  # walking on water is running
+WEIGHTS = (SWIM, WATER_WALK)  # every edge carries one cost per weight, in this order
 ENTRANCE_RUN = 20  # longest border run (cells) served by one entrance
 PRUNE = 1.02  # drop an intra edge when a two-hop path is within 2%
 MIN_COMPONENT = 500
@@ -462,9 +466,9 @@ def value_of(grid, n):
     return grid[n] if n < GW * GH else FLOOR_VAL[n - GW * GH]
 
 
-def moves(g, grid, cuts, u, box):
+def moves(g, grid, cuts, u, box, swim=SWIM):
     """(v, cost in yards) for the moves out of node u that stay in box: the base grid's 8-neighbour steps, then its
-    links to and from floors; entering water costs SWIM. Path.lua implements the same rule."""
+    links to and from floors; entering water costs swim. Path.lua implements the same rule."""
     gx0, gx1, gy0, gy1 = box
     ux, uy = divmod(cell_of(u), GH)
     if u < GW * GH:
@@ -478,12 +482,12 @@ def moves(g, grid, cuts, u, box):
                 ok = step_ok(g, cuts, ux, uy, vx, vy)
             if ok:
                 v = vx * GH + vy
-                yield v, length * CS * (SWIM if grid[v] == 2 else 1)
+                yield v, length * CS * (swim if grid[v] == 2 else 1)
     for v in sorted(LINKS.get(u, ())):
         vx, vy = divmod(cell_of(v), GH)
         if gx0 <= vx <= gx1 and gy0 <= vy <= gy1:
             length = math.sqrt(2) if vx != ux and vy != uy else 1.0
-            yield v, length * CS * (SWIM if value_of(grid, v) == 2 else 1)
+            yield v, length * CS * (swim if value_of(grid, v) == 2 else 1)
 
 
 def cluster_box(k):
@@ -498,8 +502,8 @@ def cluster_of_cell(c):
 
 def grid_hpa(grid, cuts):
     """HPA* over the grid. Every border crossing (orthogonal or diagonal) is grouped by the in-cluster regions it
-    joins; each group gets an entrance every ENTRANCE_RUN cells. Intra-cluster edges come from Dijkstra, pruned when a
-    two-hop path is within PRUNE."""
+    joins; each group gets an entrance every ENTRANCE_RUN cells. Intra-cluster edges come from Dijkstra under each of
+    WEIGHTS, dropped when a two-hop path is within PRUNE under every weight. An edge carries a cost per weight."""
     g = lambda gx, gy: grid[gx * GH + gy]  # noqa: E731
     region = array("i", [-1]) * (GW * GH + len(FLOOR_CELL))
     for k in range(NX * NY):
@@ -516,7 +520,7 @@ def grid_hpa(grid, cuts):
                     if region[v] < 0:
                         region[v] = c
                         stack.append(v)
-    edges = {}  # (a, b) cells -> cost
+    edges = {}  # (a, b) cells -> cost per weight
     nodes = defaultdict(set)  # cluster -> cells
     for k in range(NX * NY):
         kx, ky = divmod(k, NY)
@@ -555,37 +559,44 @@ def grid_hpa(grid, cuts):
                     chunk = crossings[i : i + ENTRANCE_RUN]
                     mid = chunk[len(chunk) // 2][0]
                     _, diagonal, u, v = min(chunk, key=lambda c: (c[1], abs(c[0] - mid)))  # prefer orthogonal
-                    edges[(u, v)] = CS * (math.sqrt(2) if diagonal else 1) * (
-                        1 + (SWIM - 1) * ((value_of(grid, u) == 2) + (value_of(grid, v) == 2)) / 2)
+                    wet = ((value_of(grid, u) == 2) + (value_of(grid, v) == 2)) / 2
+                    edges[(u, v)] = tuple(CS * (math.sqrt(2) if diagonal else 1) * (1 + (w - 1) * wet) for w in WEIGHTS)
                     nodes[cluster_of_cell(u)].add(u)
                     nodes[cluster_of_cell(v)].add(v)
     inter = len(edges)
     for k in sorted(nodes):
         cells = nodes[k]
         box = cluster_box(k)
-        dist = {}
-        for s in cells:
-            gd, pq, left = {s: 0.0}, [(0.0, s)], len(cells) - 1
-            while pq and left:
-                du, u = heapq.heappop(pq)
-                if du > gd[u]:
-                    continue
-                if u != s and u in cells:
-                    left -= 1
-                    dist[(s, u)] = du
-                for v, c in moves(g, grid, cuts, u, box):
-                    if du + c < gd.get(v, 1e18):
-                        gd[v] = du + c
-                        heapq.heappush(pq, (du + c, v))
+        dists = []
+        for w in WEIGHTS:
+            dist = {}
+            for s in cells:
+                gd, pq, left = {s: 0.0}, [(0.0, s)], len(cells) - 1
+                while pq and left:
+                    du, u = heapq.heappop(pq)
+                    if du > gd[u]:
+                        continue
+                    if u != s and u in cells:
+                        left -= 1
+                        dist[(s, u)] = du
+                    for v, c in moves(g, grid, cuts, u, box, w):
+                        if du + c < gd.get(v, 1e18):
+                            gd[v] = du + c
+                            heapq.heappush(pq, (du + c, v))
+            dists.append(dist)
         el = sorted(cells)
         for i, a in enumerate(el):
             for b in el[i + 1 :]:
-                d = dist.get((a, b))
-                if d is None:
+                # Weights change costs, never reachability, so a pair is reached under all of them or none.
+                ds = [dist.get((a, b)) for dist in dists]
+                if ds[0] is None:
                     continue
-                if any(dist.get((a, x), 1e18) + dist.get((x, b), 1e18) <= d * PRUNE for x in el if x not in (a, b)):
+                if all(
+                    any(dist.get((a, x), 1e18) + dist.get((x, b), 1e18) <= d * PRUNE for x in el if x not in (a, b))
+                    for dist, d in zip(dists, ds)
+                ):
                     continue
-                edges[(a, b)] = d
+                edges[(a, b)] = tuple(ds)
     print(f"grid HPA: nodes {sum(map(len, nodes.values()))}, edges {len(edges)} (inter {inter})", flush=True)
     return nodes, edges
 
@@ -647,7 +658,8 @@ def emit(nodes, edges, grid, cuts, out, name):
                     km = cluster_of_cell(m)
                     dx, dy = km // NY - kx, km % NY - ky
                     assert abs(dx) <= 1 and abs(dy) <= 1
-                    erec.append(enc((dx + 1) * 3 + dy + 1, 1) + enc(local[m], 2) + enc(round(d), 2))
+                    costs = "".join(enc(round(w), 2) for w in d)  # 4095 is ample: the longest baked is 2357
+                    erec.append(enc((dx + 1) * 3 + dy + 1, 1) + enc(local[m], 2) + costs)
             graph[k] = "".join(rec) + "".join(erec)
         vals = [grid[(kx * CELLS + i) * GH + ky * CELLS + j] * 16 + flags.get((kx * CELLS + i) * GH + ky * CELLS + j, 0)
                 for i in range(CELLS) for j in range(CELLS)]
@@ -675,8 +687,9 @@ def emit(nodes, edges, grid, cuts, out, name):
         "-- UnitPosition's frame (x north, y west). Cluster k (0-based) is the ADT tile x in [(cx0 + k // ny) T, +T),",
         "-- y in [(cy0 + k % ny) T, +T), T = 1600 / 3, cut into cells x cells cells, x-major. Base64 (A-Za-z0-9+/).",
         "-- graph[k + 1]: n(2) | n x [cell(3) layer(1) component(2) degree(1)] | edges in node order [cluster offset(1):",
-        "--   (dx + 1) * 3 + dy + 1, node(2), cost(2) yards]. grid[k + 1]: per cell value * 16 + flags, where value",
-        "--   0 blocked, 1 ground, 2 water; flags 1/2 close the step to the +x/+y neighbour, 4/8 open the +x+y/+x-y",
+        "--   (dx + 1) * 3 + dy + 1, node(2), cost(2) swimming with water at swim, cost(2) walking on water, both in",
+        "--   running yards]. grid[k + 1]: per cell value * 16 + flags, where value 0 blocked, 1 ground, 2 water;",
+        "--   flags 1/2 close the step to the +x/+y neighbour, 4/8 open the +x+y/+x-y",
         "--   diagonal (otherwise a diagonal is open when either L-shaped detour is). A symbol >= 48 repeats the",
         "--   previous cell (symbol - 47) more times. Nodes are local cells, then floors from cells * cells on.",
         "-- height[k + 1]: base heights of the walkable cells in cell order, in zstep yards, each against its -y",

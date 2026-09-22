@@ -142,7 +142,7 @@ local function State(map)
 			ncell = {}, -- [id] = local cell
 			nlayer = {}, -- [id] = 0 for the base surface, i for the cell's ith floor
 			ncomp = {},
-			nadj = {},
+			nadj = {}, -- [id] = { target, cost swimming, cost walking on water, ... }
 		}
 		states[map] = st
 	end
@@ -391,9 +391,10 @@ local function decodeGraph(st, k)
 		for e = 1, degree[i] do
 			local offset = B64[byte(s, pos)]
 			local target = k + (floor(offset / 3) - 1) * ny + offset % 3 - 1
-			adj[e * 2 - 1] = target * 4096 + num(s, pos + 1, 2)
-			adj[e * 2] = num(s, pos + 3, 2)
-			pos = pos + 5
+			adj[e * 3 - 2] = target * 4096 + num(s, pos + 1, 2)
+			adj[e * 3 - 1] = num(s, pos + 3, 2)
+			adj[e * 3] = num(s, pos + 5, 2)
+			pos = pos + 7
 		end
 		st.nadj[ids[i]] = adj
 	end
@@ -467,16 +468,17 @@ local function snap(st, k, lc, x, y, h)
 	return best or any
 end
 
--- Grid search inside one cluster. tree holds g/parent keyed by node + 1. With goal set it is A*, otherwise
--- Dijkstra that stops once every node in targets (a set of nodes) is settled.
+-- Grid search inside one cluster, entering water costing swim times its length. tree holds g/parent keyed by
+-- node + 1. With goal set it is A*, otherwise Dijkstra that stops once every node in targets (a set of nodes) is
+-- settled.
 local function Tree()
 	return { g = {}, par = {}, stamp = {}, closed = {}, gen = 0 }
 end
 
-local function search(st, k, source, tree, goal, targets, left)
+local function search(st, k, swim, source, tree, goal, targets, left)
 	local val = grid(st, k)
 	local m, z, at, links = st.moves[k], st.z[k], st.at[k], st.links[k]
-	local C, cs, swim = st.C, st.cs, st.swim
+	local C, cs = st.C, st.cs
 	local N = C * C
 	local g, par, stamp, closed = tree.g, tree.par, tree.stamp, tree.closed
 	tree.gen = tree.gen + 1
@@ -751,10 +753,15 @@ local trees = { S = Tree(), G = Tree(), R = Tree() }
 -- Abstract A* state.
 local ag, apar, astamp, aclosed, agen = {}, {}, {}, {}, 0
 
-local function run(map, from, to)
+local function run(map, from, to, waterWalking)
 	local st = State(map)
 	if not st then
 		return nil, "nodata"
+	end
+	-- Walking on water is running, so the search weights water by 1 and reads each edge's second cost.
+	local swim, cost2 = st.swim, 1
+	if waterWalking then
+		swim, cost2 = 1, 2
 	end
 	local sk, sc = locate(st, from.x, from.y)
 	local gk, gc = locate(st, to.x, to.y)
@@ -779,7 +786,7 @@ local function run(map, from, to)
 		if other and not targets[other] then
 			targets[other], left = true, left + 1
 		end
-		search(st, k, node, tree, nil, targets, left)
+		search(st, k, swim, node, tree, nil, targets, left)
 	end
 	-- An endpoint on a rooftop or ledge the grid cannot leave moves to the nearest node that reaches an entrance,
 	-- down a ledge but never up one or onto another level.
@@ -892,11 +899,11 @@ local function run(map, from, to)
 				end
 			end
 			local adj = st.nadj[u]
-			for e = 1, #adj, 2 do
+			for e = 1, #adj, 3 do
 				local v = adj[e]
 				if aclosed[v] ~= gen then
 					nodesOf(st, floor(v / 4096))
-					relax(v, gu + adj[e + 1], u)
+					relax(v, gu + adj[e + cost2], u)
 				end
 			end
 		end
@@ -940,7 +947,7 @@ local function run(map, from, to)
 		else
 			local ka, kb = floor(a / 4096), floor(b / 4096)
 			local ea, eb = entrance(st, a), entrance(st, b)
-			if ka == kb and search(st, ka, ea, R, eb) then
+			if ka == kb and search(st, ka, swim, ea, R, eb) then
 				local nodes = trace(R, eb, {})
 				addAll(ka, nodes, #nodes, 1, -1)
 			else -- neighbouring entrances across a cluster border
@@ -950,7 +957,8 @@ local function run(map, from, to)
 		end
 	end
 
-	-- Points carry the height of the surface they stand on; the cost counts swimming at its slower pace.
+	-- Points carry the height of the surface they stand on; the cost weights water as the search did, and points.wet
+	-- is the yards over water, which call for Water Walking.
 	local keep = smooth(st, P)
 	if #keep == 1 then -- both ends on one node
 		keep[2] = keep[1]
@@ -967,25 +975,27 @@ local function run(map, from, to)
 		}
 	end
 	points[#points + 1] = { map = map, x = to.x, y = to.y, z = to.z }
-	local cost = 0
+	local cost, wetYards = 0, 0
 	for i = 2, #points do
 		local p, q = keep[i - 1], keep[i]
 		local wet = q > p and (P.w[q] - P.w[p]) / (q - p) or 0
 		local length = sqrt((points[i].x - points[i - 1].x) ^ 2 + (points[i].y - points[i - 1].y) ^ 2)
-		cost = cost + length * (1 + (st.swim - 1) * wet)
+		cost = cost + length * (1 + (swim - 1) * wet)
+		wetYards = wetYards + length * wet
 	end
+	points.wet = wetYards
 	return points, cost
 end
 
 local function start(job)
 	expansions = 0
-	return run(job.map, job.from, job.to)
+	return run(job.map, job.from, job.to, job.waterWalking)
 end
 
 -- Synchronous search, for tests and tools. Returns points, cost (or nil, reason) and the expansion count.
-function Path.FindSync(map, from, to)
+function Path.FindSync(map, from, to, waterWalking)
 	deadline, ops = huge, 0
-	local job = { map = map, from = from, to = to }
+	local job = { map = map, from = from, to = to, waterWalking = waterWalking }
 	local co = coroutine.create(start)
 	local ok, points, cost = coroutine.resume(co, job)
 	if not ok then
@@ -1038,13 +1048,15 @@ end
 
 -- Search coroutine-sliced over frames between two { x, y, z } points (z optional: it picks the floor to start or end
 -- on). callback(points, cost, job) or callback(nil, reason, job): points are { map, x, y, z } from the start to the
--- goal, and cost is the walk in running yards, with swimming counted at its slower pace. reason is "nodata",
+-- goal, with points.wet the yards over water, and cost is the walk in running yards, a swum yard counting as the
+-- data's swim (so routes keep out of water) unless waterWalking, when water is ground. reason is "nodata",
 -- "outside", "offmesh" or "unreachable". Returns a handle for Path.Cancel.
-function Path.Find(map, from, to, callback)
+function Path.Find(map, from, to, callback, waterWalking)
 	local job = {
 		map = map,
 		from = from,
 		to = to,
+		waterWalking = waterWalking,
 		callback = callback,
 		co = coroutine.create(start),
 		frames = 0,

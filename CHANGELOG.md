@@ -35,7 +35,8 @@ waypoint pin, and its steps sit in the objective tracker like a tracked quest. *
 moves the game's own waypoint marker along the route turn by turn and gives your tracked quest back when you finish. Walking legs follow the ground round walls, cliffs and water on Eastern Kingdoms, Kalimdor
 and Zephras Isle, from walking maps that come in the same download. They take tunnels such as Dun Algaz and
 the Undercity's lower levels, ride a lift when the way round on foot is longer, and take the boat rather than
-a long swim. Replanning on board
+a long swim. Walks keep out of water, unless you have Water Walking or Levitate, when the step asks you to
+cast it and the route crosses. Replanning on board
 keeps you on the boat. Flight masters are marked on the world map, known and undiscovered, and hovering a
 dock draws its boat and zeppelin routes, curving across the loading-screen gap between continents.
 
