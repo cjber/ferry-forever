@@ -280,8 +280,8 @@ function ShortestPathForeverRoutePinMixin:Draw()
 	end
 end
 
-function ShortestPathForeverRoutePinMixin:OnAcquired(route, geometry)
-	self.result, self.paths = route, geometry
+function ShortestPathForeverRoutePinMixin:OnAcquired(geometry)
+	self.paths = geometry
 	self:Draw()
 end
 
@@ -375,11 +375,6 @@ function ns.HoverTransportRoutes(owner, routes)
 	end
 end
 
-function ShortestPathForeverTransportPinMixin:OnAcquired(_, geometry)
-	self.paths = geometry
-	self:Draw()
-end
-
 function ShortestPathForeverTransportPinMixin:OnReleased()
 	if not dockHover then
 		highlightedRoutes = nil
@@ -418,7 +413,7 @@ function TransportProviderMixin:RefreshAllData()
 			geometry[#geometry + 1] = { mode = route.kind, route = id, points = points }
 		end
 	end
-	map:AcquirePin(TRANSPORT_TEMPLATE, nil, geometry)
+	map:AcquirePin(TRANSPORT_TEMPLATE, geometry)
 end
 
 function ns.RefreshTransportRoutes()
@@ -443,39 +438,12 @@ function ProviderMixin:RefreshAllData()
 		return
 	end
 	if result then
-		map:AcquirePin(LINE_TEMPLATE, result, paths)
+		map:AcquirePin(LINE_TEMPLATE, paths)
 	end
 	local x, y = MapPosition(goal, mapID)
 	if x and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
 		map:AcquirePin(GOAL_TEMPLATE, x, y)
 	end
-end
-
--- Diameters in yards, zoom 0..5; divide by two for radius. Preserve the upstream values.
--- https://github.com/Nevcairiel/HereBeDragons/blob/master/HereBeDragons-Pins-2.0.lua#L60-L77
-local DIAMETERS = {
-	indoor = { [0] = 300, 240, 180, 120, 80, 50 },
-	outdoor = { [0] = 466 + 2 / 3, 400, 333 + 1 / 3, 266 + 2 / 6, 200, 133 + 1 / 3 },
-}
-local indoors, probingZoom
-
-local function UpdateMinimapZoom()
-	if probingZoom or not result then
-		return
-	end
-	-- The client reports the exact radius; the table is for clients without that API.
-	if C_Minimap and C_Minimap.GetViewRadius then
-		return
-	end
-	local zoom = Minimap:GetZoom()
-	probingZoom = true
-	-- HBD-Pins:309-317: disambiguate identical indoor/outdoor settings, then restore the zoom.
-	if GetCVar("minimapZoom") == GetCVar("minimapInsideZoom") then
-		Minimap:SetZoom(zoom < 2 and zoom + 1 or zoom - 1)
-	end
-	indoors = tonumber(GetCVar("minimapZoom")) == Minimap:GetZoom() and "outdoor" or "indoor"
-	Minimap:SetZoom(zoom)
-	probingZoom = false
 end
 
 local function ClipMinimap(x, y, dx, dy, inset, square)
@@ -506,9 +474,8 @@ end
 
 -- The minimap's view radius in yards, and how far it is turned from north-up.
 local function MinimapView()
-	local diameter = DIAMETERS[indoors or "outdoor"][Minimap:GetZoom()]
 	-- Blizzard_APIDocumentationGenerated/MinimapDocumentation.lua:127 (yards).
-	local radius = C_Minimap and C_Minimap.GetViewRadius and C_Minimap.GetViewRadius() or diameter and diameter / 2
+	local radius = C_Minimap.GetViewRadius()
 	if GetCVar("rotateMinimap") == "1" then
 		return radius, GetPlayerFacing()
 	end
@@ -528,7 +495,7 @@ function ns.MinimapPoint()
 	end
 	local cosine, sine = math.cos(facing), math.sin(facing)
 	local east, north = radius * (u * cosine - v * sine), radius * (u * sine + v * cosine)
-	return { map = map, x = x + north, y = y + east }
+	return { map = map, x = x + north, y = y - east }
 end
 
 local function DrawMinimap(self)
@@ -595,7 +562,6 @@ function ns.SetJourneyRoute(destination, route)
 	end
 	if minimap then
 		if route then
-			UpdateMinimapZoom()
 			minimap.elapsed = 0
 			minimap:SetScript("OnUpdate", UpdateMinimap)
 			minimap:Show()
@@ -616,7 +582,5 @@ ns.Init(function()
 	minimap:SetAllPoints(Minimap)
 	minimap:EnableMouse(false)
 	minimap.lines, minimap.underlines, minimap.used = {}, {}, 0
-	minimap:RegisterEvent("MINIMAP_UPDATE_ZOOM")
-	minimap:SetScript("OnEvent", UpdateMinimapZoom)
 	minimap:Hide()
 end)

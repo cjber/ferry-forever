@@ -217,4 +217,38 @@ for _, reason in ipairs({ "nodata", "error" }) do
 	assert(#jobs == count and shown.legs[1].walkError == reason)
 end
 
+-- A recent ride remains observed after disembarking; a docked boat must not force a round trip.
+ns.ClearJourney()
+ns.Path = nil
+load("Data/Routes.lua")
+local ratchet = ns.Routes[241]
+local dock = ns.Docks[ratchet.stops[1].dock]
+ns.DockTitle = function()
+	return "Dock"
+end
+ns.DockPoint = function(id)
+	return ns.Docks[id]
+end
+ns.CurrentRide = function()
+	return 241
+end
+ns.FreshAnchors = function()
+	return { [241] = { epoch = 0 } }
+end
+ns.NextStop = function()
+	return ratchet.stops[2].dock, ratchet.stops[2].arrive - now
+end
+here = { map = dock.map, x = dock.x, y = dock.y, z = dock.z }
+now = ratchet.stops[1].arrive + 1000
+begin({ map = here.map, x = here.x + 100, y = here.y })
+assert(#shown.legs == 1 and shown.legs[1].mode == "walk", "a docked Ratchet ride must allow the 100-yard walk")
+here.x = here.x + 35
+update(5)
+assert(#shown.legs == 1 and shown.legs[1].mode == "walk", "walking away must not restore the stale ride")
+ns.ClearJourney()
+now = ratchet.stops[1].depart + 55000
+begin({ map = dock.map, x = dock.x + 100, y = dock.y })
+assert(shown.legs[1].mode == "boat" and shown.legs[1].aboard, "a ride in transit must still reach its next dock")
+ns.ClearJourney()
+
 print("journey_spec: ok")

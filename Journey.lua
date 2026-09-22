@@ -97,11 +97,11 @@ local function LegTime(leg)
 	return text
 end
 
-local function Near(node)
+local function Near(node, reach)
 	local x, y, z, map = UnitPosition("player")
 	return x
 		and map == node.map
-		and (x - node.x) ^ 2 + (y - node.y) ^ 2 <= ARRIVAL ^ 2
+		and (x - node.x) ^ 2 + (y - node.y) ^ 2 <= (reach or ARRIVAL) ^ 2
 		and not (z and node.z and math.abs(z - node.z) > ARRIVAL_HEIGHT)
 end
 
@@ -637,7 +637,19 @@ local function Plan()
 		CancelPaths()
 		waterMode, walkCache, measured, result = waterWalking, {}, {}, nil
 	end
+	local anchors = ns.FreshAnchors()
 	local ride, routeID = nil, ns.CurrentRide()
+	if routeID and anchors[routeID] then
+		local route = ns.Routes[routeID]
+		local phase = (now - anchors[routeID].epoch) % route.period
+		for _, stop in ipairs(route.stops) do
+			-- The observer retains a ride for 30 seconds after disembarking, enough to run 210 yards away.
+			if ns.Model.Visit(route, stop, phase) and Near(ns.Docks[stop.dock], 250) then
+				routeID = nil
+				break
+			end
+		end
+	end
 	if routeID then
 		local dock, arriveIn = ns.NextStop(routeID)
 		if dock then
@@ -652,7 +664,7 @@ local function Plan()
 		walkSpeed = math.max(lastRunSpeed, 7),
 		faction = UnitFactionGroup("player"),
 		taxiKnown = ns.KnownTaxiNodes(),
-		anchors = ns.FreshAnchors(),
+		anchors = anchors,
 		docks = ns.Docks,
 		routes = ns.Routes,
 		taxiNodes = ns.TaxiNodes,

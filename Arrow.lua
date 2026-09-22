@@ -9,43 +9,7 @@ local UPDATE_EVERY = 0.05
 local RADIUS = 36
 -- A bend this close counts as passed, and the arrow turns to the next one.
 local PASSED = 25
--- Bends that stray less than this from a straight line between their neighbours are merged, so the marker moves
--- only at real turns rather than at every wiggle of the walking path.
-local STRAIGHT = 12
-
 local frame, source, path, index, target, placeTarget, native
-
--- Douglas-Peucker over the walk's bends, keeping both ends.
-local function Simplify(points)
-	local keep = { [1] = true, [#points] = true }
-	local function Split(first, last)
-		local a, b = points[first], points[last]
-		local dx, dy = b.x - a.x, b.y - a.y
-		local length = math.sqrt(dx * dx + dy * dy)
-		local far, farthest = 0, nil
-		for i = first + 1, last - 1 do
-			local p = points[i]
-			local off = length > 0 and math.abs((p.x - a.x) * dy - (p.y - a.y) * dx) / length
-				or math.sqrt((p.x - a.x) ^ 2 + (p.y - a.y) ^ 2)
-			if off > far then
-				far, farthest = off, i
-			end
-		end
-		if farthest and far > STRAIGHT then
-			keep[farthest] = true
-			Split(first, farthest)
-			Split(farthest, last)
-		end
-	end
-	Split(1, #points)
-	local simple = {}
-	for i, point in ipairs(points) do
-		if keep[i] then
-			simple[#simple + 1] = point
-		end
-	end
-	return simple
-end
 
 -- Counter-clockwise from north, like GetPlayerFacing: UnitPosition's first value grows north, its second west.
 local function Bearing(x, y)
@@ -104,8 +68,25 @@ end
 
 -- Guide leads bend by bend, or straight to the walk's end when set to mark only where each step ends.
 function ns.RefreshGuideStops()
-	path = source and (ns.db.guideStops and { source[#source] } or Simplify(source))
-	index, target = 1, path and path[1]
+	path = source and (ns.db.guideStops and { source[#source] } or source)
+	index = 1
+	local x, y, z, map = UnitPosition("player")
+	local nearest
+	-- Guide may be restarted halfway along a walk, including one that crosses itself on another floor.
+	for i = 2, #(path or {}) do
+		local a, b = path[i - 1], path[i]
+		local dx, dy = b.x - a.x, b.y - a.y
+		local length = dx * dx + dy * dy
+		if x and map == a.map and map == b.map then
+			local t = length > 0 and math.max(0, math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length)) or 0
+			local height = a.z and b.z and a.z + t * (b.z - a.z)
+			local off = (a.x + t * dx - x) ^ 2 + (a.y + t * dy - y) ^ 2
+			if not (height and z and math.abs(height - z) > 30) and (not nearest or off < nearest) then
+				index, nearest = i, off
+			end
+		end
+	end
+	target = path and path[index]
 end
 
 -- placeBend owns waypoint placement and returns whether native tracking is ours. Progress lives only here.
