@@ -303,7 +303,12 @@ function FerryForeverGoalPinMixin:OnMouseLeave()
 	end
 end
 
-function FerryForeverGoalPinMixin.OnClick(_self, button)
+-- Pins pass right clicks to the canvas to zoom out (Blizzard_MapCanvas.lua:328); this one clears instead.
+function FerryForeverGoalPinMixin.ShouldMouseButtonBePassthrough()
+	return false
+end
+
+function FerryForeverGoalPinMixin.OnMouseClickAction(_self, button)
 	if button == "RightButton" then
 		ns.ClearJourney()
 	end
