@@ -90,3 +90,5 @@ read_globals[#read_globals + 1] = "OBJECTIVE_TRACKER_COLOR"
 read_globals[#read_globals + 1] = "MenuUtil"
 -- Shared-workspace arrow: Blizzard_QuestNavigation/SuperTrackedFrame.lua:291.
 read_globals[#read_globals + 1] = "C_Navigation"
+-- Blizzard_SharedXMLBase/Color.lua:3, saturated route colours.
+read_globals[#read_globals + 1] = "CreateColor"

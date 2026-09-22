@@ -61,6 +61,7 @@ local function StopGuide()
 		C_SuperTrack.SetSuperTrackedUserWaypoint(false)
 	end
 	guide = nil
+	ns.PointGuideArrow(nil)
 end
 
 local function OwnsWaypoint()
@@ -72,7 +73,7 @@ local function OwnsWaypoint()
 	return true
 end
 
-local function GuideTo(node)
+local function GuideTo(node, points)
 	if not guide or guide.target == node then
 		return
 	end
@@ -93,6 +94,7 @@ local function GuideTo(node)
 		guide.waypoint = C_Map.GetUserWaypoint()
 		C_SuperTrack.SetSuperTrackedUserWaypoint(true)
 	end
+	ns.PointGuideArrow(points or { point })
 	guide.target = node
 end
 
@@ -138,7 +140,7 @@ local function UpdateProgress()
 			end
 		end
 		if not Near(leg.to) or (leg.mode == "flight" and flying) then
-			GuideTo(leg.to)
+			GuideTo(leg.to, leg.walkPoints)
 			return
 		end
 		progress.index, progress.departed = progress.index + 1, false
@@ -206,6 +208,15 @@ end
 local function Render(planned)
 	if planned ~= result then
 		progress.index, progress.departed = 1, false
+		-- Resolve a walking path once per plan, shared by both maps and the bend-by-bend arrow.
+		for _, leg in ipairs(planned and planned.legs or {}) do
+			if leg.mode == "walk" then
+				leg.walkPoints = ns.Planner.WalkPoints(leg.from, leg.to)
+			end
+		end
+		if guide then
+			guide.target = nil
+		end
 	end
 	result = planned
 	if not result then

@@ -6,16 +6,20 @@ leaves, and a planner for the fastest way anywhere.
 - **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower a matching
   zeppelin, on its zone and continent map. Hover one to see where each boat goes next, when it arrives and
   when it leaves; the docks it sails to light up. Docks too close to tell apart at the current zoom share
-  one icon, and its tooltip names each pier by where it lies.
+  one icon, and its tooltip names each pier by where it lies, and draws its routes on the map.
 - **Lifts, the Deeprun Tram and portals.** The Great Lift, Freewind Post, Thunder Bluff and Undercity
   lifts, and both tram trains, count down like the boats (each landing or station is its own stop). The
   tram shows at its Stormwind and Ironforge entrances. Portals are marked with where they go.
 - **Journey planner.** Shift-click anywhere on the world map for the fastest way there from where you
   stand: walking, the flight points you know, boats and zeppelins with their live waits, the tram and
-  portals. The route is drawn on the map and minimap, walking legs dashed. It replans as you move, and
-  stays aboard if you are already riding. **Guide** hands each stop to the game's own navigation marker,
-  moving on to the next one as you arrive.
-- **In the map's filter menu.** *Boats & Zeppelins*, *Lifts & Tram* and *Portals* turn each set of icons off; *Other Faction's Routes* hides the
+  portals, including a flight master you haven't found yet if walking to it pays off. The route is drawn
+  on the map and minimap, walking legs dashed, and the steps sit in the objective tracker like a tracked
+  quest. It replans as you move, and stays aboard if you are already riding. **Guide** (click the tracker
+  header) shows a direction arrow in the style of the retail navigation marker, leading along the route
+  stop by stop.
+- **Flight masters on the world map**, known and undiscovered, with the game's own flight point icons.
+- **In the map's filter menu.** *Flight Masters*, *Boat and Zeppelin Routes*, *Boats & Zeppelins*, *Lifts &
+  Tram* and *Portals* turn each layer off; *Other Faction's Routes* hides the
   boats and zeppelins run by the other faction (anyone can ride them, so they show by default).
 - **The next departures in the objective tracker.** Walk up to a dock, lift or tram station and a section
   appears above your quests, counting down to the next arrival and departure of everything that calls there.
