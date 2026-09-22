@@ -63,9 +63,8 @@ local function SameWaypoint(a, b)
 	if not (a and b and a.uiMapID == b.uiMapID) then
 		return false
 	end
-	local ax, ay = a.position:GetXY()
-	local bx, by = b.position:GetXY()
-	return math.abs(ax - bx) < 0.000001 and math.abs(ay - by) < 0.000001
+	-- C_Map.GetUserWaypoint's position is a plain { x, y } table, not a Vector2D (WaypointLocationDataProvider.lua:183).
+	return math.abs(a.position.x - b.position.x) < 0.000001 and math.abs(a.position.y - b.position.y) < 0.000001
 end
 
 local function RememberTracking(state)
@@ -226,24 +225,25 @@ function ns.IsJourneyGuided()
 	return guide ~= nil
 end
 
+local function StartGuide()
+	local previous = C_Map.HasUserWaypoint() and C_Map.GetUserWaypoint()
+	local saved = previous
+		and UiMapPoint.CreateFromCoordinates(previous.uiMapID, previous.position.x, previous.position.y, previous.z)
+	guide = {
+		previousQuest = C_SuperTrack.GetSuperTrackedQuestID(),
+		previousWaypoint = saved,
+		expectedWaypoint = previous or nil,
+		previousTrackedWaypoint = saved ~= nil and C_SuperTrack.IsSuperTrackingUserWaypoint(),
+	}
+	RememberTracking(guide)
+	UpdateProgress()
+end
+
 function ns.ToggleJourneyGuide()
 	if guide then
 		StopGuide()
 	elseif result then
-		local previous = C_Map.HasUserWaypoint() and C_Map.GetUserWaypoint()
-		local saved
-		if previous then
-			local x, y = previous.position:GetXY()
-			saved = UiMapPoint.CreateFromCoordinates(previous.uiMapID, x, y, previous.z)
-		end
-		guide = {
-			previousQuest = C_SuperTrack.GetSuperTrackedQuestID(),
-			previousWaypoint = saved,
-			expectedWaypoint = previous or nil,
-			previousTrackedWaypoint = saved ~= nil and C_SuperTrack.IsSuperTrackingUserWaypoint(),
-		}
-		RememberTracking(guide)
-		UpdateProgress()
+		StartGuide()
 	end
 	ns.RefreshTracker()
 end
@@ -449,6 +449,11 @@ local function StartJourney(point)
 	driver.elapsed, driver.progressElapsed = 0, 0
 	driver:Show()
 	Render(Plan())
+	-- Every journey starts guided; the tracker header turns it off.
+	if result then
+		StartGuide()
+		ns.RefreshTracker()
+	end
 	return true
 end
 

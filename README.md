@@ -14,8 +14,8 @@ leaves, and a planner for the fastest way anywhere.
   stand: walking, the flight points you know, boats and zeppelins with their live waits, the tram and
   portals, including a flight master you haven't found yet if walking to it pays off. The route is drawn
   on the map and minimap, walking legs dashed, and the steps sit in the objective tracker like a tracked
-  quest. It replans as you move, and stays aboard if you are already riding. **Guide** (click the tracker
-  header) moves the game's own navigation marker along the route bend by bend, so it leads you round walls
+  quest. It replans as you move, and stays aboard if you are already riding. **Guide**, on from the start
+  of every journey (click the tracker header to turn it off), moves the game's own navigation marker along the route bend by bend, so it leads you round walls
   rather than straight at the stop, and hands your tracked quest back when you finish. To head for a quest, pick **Plan journey** from its right-click menu in the objective
   tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
 - **Flight masters on the world map**, known and undiscovered, with the game's own flight point icons.
