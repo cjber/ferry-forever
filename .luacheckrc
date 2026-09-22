@@ -99,3 +99,7 @@ read_globals[#read_globals + 1] = "GetQuestUiMapID"
 read_globals[#read_globals + 1] = "GetMouseFoci"
 read_globals[#read_globals + 1] = "MapCanvasMixin"
 read_globals[#read_globals + 1] = "POIButtonUtil"
+-- Path.lua: its per-frame CPU clock, and the per-continent walking-map addons it loads on demand.
+read_globals[#read_globals + 1] = "debugprofilestop"
+read_globals[#read_globals + 1] = "FerryForeverPathData"
+read_globals[#read_globals + 1] = "C_AddOns"
