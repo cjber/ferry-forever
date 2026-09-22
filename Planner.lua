@@ -6,6 +6,41 @@ ns.Planner = Planner
 
 local BOARDING = 3000
 
+local function QuestPointValid(point)
+	return point
+		and type(point.uiMapID) == "number"
+		and point.uiMapID > 0
+		and type(point.x) == "number"
+		and point.x >= 0
+		and point.x <= 1
+		and type(point.y) == "number"
+		and point.y >= 0
+		and point.y <= 1
+end
+
+-- Native POIs already describe the quest's current state. A completed quest prefers its
+-- destination POI (turn-in) over a next waypoint that may still describe the last objective.
+function Planner.QuestDestination(questID, title, complete, uiMapID, pois, waypoint)
+	local destination
+	for _, poi in ipairs(pois or {}) do
+		if poi.questID == questID and not poi.isQuestStart then
+			-- As in QuestDataProvider, x/y belong to the queried map, even for child-map POIs.
+			local point = { uiMapID = uiMapID, x = poi.x, y = poi.y }
+			if QuestPointValid(point) then
+				destination = point
+				break
+			end
+		end
+	end
+	if QuestPointValid(waypoint) and (not complete or not destination) then
+		destination = { uiMapID = waypoint.uiMapID, x = waypoint.x, y = waypoint.y }
+	end
+	if destination and title and title ~= "" then
+		destination.label = title .. (complete and " (turn in)" or "")
+		return destination
+	end
+end
+
 -- The drawing contract for future collision-map paths; for now walks remain straight.
 function Planner.WalkPoints(from, to)
 	return { { map = from.map, x = from.x, y = from.y }, { map = to.map, x = to.x, y = to.y } }
@@ -106,7 +141,8 @@ function Planner.Plan(options)
 
 	local function Add(kind, id, point)
 		local index = #nodes + 1
-		nodes[index] = { kind = kind, id = id, map = point.map, x = point.x, y = point.y, z = point.z }
+		nodes[index] =
+			{ kind = kind, id = id, map = point.map, x = point.x, y = point.y, z = point.z, label = point.label }
 		edges[index] = {}
 		masses[index] = Landmass(point, options.landmasses or {})
 		return index

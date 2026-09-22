@@ -21,6 +21,41 @@ local function options()
 	return { from = point(1), to = point(1, 70), now = 1000, walkSpeed = 7, faction = "Alliance" }
 end
 
+do
+	local QuestDestination = ns.Planner.QuestDestination
+	local objective = { questID = 7, mapID = 999, x = 0.25, y = 0.75, inProgress = true }
+	local turnIn = { questID = 7, x = 0.6, y = 0.4, inProgress = false }
+	local hop = { uiMapID = 1439, x = 0.1, y = 0.2 }
+	local destination = QuestDestination(7, "The Red Crystal", false, 1414, { objective })
+	assert(destination.uiMapID == 1414 and destination.x == objective.x and destination.y == objective.y)
+	assert(destination.label == "The Red Crystal", "objective label uses the quest title")
+	destination = QuestDestination(7, "The Red Crystal", false, 1414, { objective }, hop)
+	assert(destination.uiMapID == hop.uiMapID and destination.x == hop.x, "follow cross-zone waypoints")
+	destination = QuestDestination(7, "The Red Crystal", true, 1414, { turnIn }, hop)
+	assert(destination.x == turnIn.x and destination.y == turnIn.y, "turn-in POI wins over an old objective waypoint")
+	assert(destination.label == "The Red Crystal (turn in)")
+	destination = QuestDestination(7, "The Red Crystal", true, nil, nil, hop)
+	assert(destination.uiMapID == hop.uiMapID, "native waypoint is usable when no destination POI is reported")
+	assert(hop.label == nil and turnIn.label == nil, "do not mutate native data")
+	assert(not QuestDestination(8, "Another quest", false, 1414, { objective }))
+	assert(
+		not QuestDestination(
+			7,
+			"The Red Crystal",
+			false,
+			1414,
+			{ { questID = 7, isQuestStart = true, x = 0.5, y = 0.5 } }
+		)
+	)
+	assert(not QuestDestination(7, "The Red Crystal", false, 0, { objective }))
+	assert(not QuestDestination(7, "The Red Crystal", false, 1414, { { questID = 7, x = -1, y = 0.5 } }))
+	assert(not QuestDestination(7, "The Red Crystal", false, nil, nil, { uiMapID = 1414, x = 0.5 }))
+	assert(not QuestDestination(7, nil, false, 1414, { objective }))
+	local labeled = options()
+	labeled.to.label = "The Red Crystal (turn in)"
+	assert(only(Plan(labeled), "walk").to.label == labeled.to.label, "leg text keeps the quest goal label")
+end
+
 local walk = only(Plan(options()), "walk")
 near(walk.depart, 1000)
 near(walk.arrive, 11000)

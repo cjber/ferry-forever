@@ -16,7 +16,8 @@ leaves, and a planner for the fastest way anywhere.
   on the map and minimap, walking legs dashed, and the steps sit in the objective tracker like a tracked
   quest. It replans as you move, and stays aboard if you are already riding. **Guide** (click the tracker
   header) shows a direction arrow in the style of the retail navigation marker, leading along the route
-  stop by stop.
+  stop by stop. To head for a quest, pick **Plan journey** from its right-click menu in the objective
+  tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
 - **Flight masters on the world map**, known and undiscovered, with the game's own flight point icons.
 - **In the map's filter menu.** *Flight Masters*, *Boat and Zeppelin Routes*, *Boats & Zeppelins*, *Lifts &
   Tram* and *Portals* turn each layer off; *Other Faction's Routes* hides the

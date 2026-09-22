@@ -27,9 +27,10 @@ timed the same way: countdowns on the map and in the tracker, synced from a ride
 marked at its city entrances, and portals are marked with where they lead. Shift-click the world map to
 plan the fastest way to that spot, combining walking, the flight points you know, boats and zeppelins with
 their live waits, the tram and portals, and a flight master you haven't found yet when walking to it pays
-off. The route is drawn on the world map and minimap in the flight map's own line, outlined so it reads on
-any map, walking legs dashed and the destination ringed, and its steps sit in the objective tracker like a
-tracked quest. **Guide**, from the tracker header, shows a direction arrow in the style of the retail
+off. **Plan journey** in a quest's right-click menu, or Shift-clicking its marker on the map, does the same
+for its objective, or its turn-in once it is complete. The route is drawn on the world map and minimap as a
+slim outlined line that reads on any map, walking legs dotted and the destination marked with the
+navigation diamond, and its steps sit in the objective tracker like a tracked quest. **Guide**, from the tracker header, shows a direction arrow in the style of the retail
 navigation marker (which Forever turns off) and leads along the route stop by stop, and replanning on board
 keeps you on the boat. Flight masters are marked on the world map, known and undiscovered, and hovering a
 dock draws its boat and zeppelin routes, curving across the loading-screen gap between continents.

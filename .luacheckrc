@@ -93,3 +93,9 @@ read_globals[#read_globals + 1] = "MenuUtil"
 read_globals[#read_globals + 1] = "C_Navigation"
 -- Blizzard_SharedXMLBase/Color.lua:3, saturated route colours.
 read_globals[#read_globals + 1] = "CreateColor"
+-- Round 5: native quest menus, locations and MapCanvas's consuming pin-click handler.
+read_globals[#read_globals + 1] = "C_QuestLog"
+read_globals[#read_globals + 1] = "GetQuestUiMapID"
+read_globals[#read_globals + 1] = "GetMouseFoci"
+read_globals[#read_globals + 1] = "MapCanvasMixin"
+read_globals[#read_globals + 1] = "POIButtonUtil"
