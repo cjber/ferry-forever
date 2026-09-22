@@ -153,8 +153,8 @@ do
 	walk = only(Plan(lift), "walk")
 	near(walk.arrive - walk.depart, 100 / 7 * 1000)
 	assert(walk.estimated and walk.yards == 100)
-	-- Measured, the way up on foot is long, and the lift wins; measurements stand for nearby points too.
-	lift.walks = { { from = { map = 1, x = 10, y = 0, z = 0 }, to = { map = 1, x = 0, y = 5, z = 100 }, cost = 2000 } }
+	-- Measured, the way up on foot is long, and the lift wins; costs bind the exact endpoints.
+	lift.walks = { { from = lift.from, to = lift.to, cost = 2000 } }
 	local result = Plan(lift)
 	assert(#result.legs == 1 and result.legs[1].mode == "lift" and result.legs[1].to.id == 2)
 	-- Heights keep the landings apart: the bottom's measurement does not stand for the top.
@@ -475,6 +475,33 @@ baked = Plan({
 	landmasses = ns.Landmasses,
 })
 near(only(baked, "walk").yards, 4000)
+
+-- Exact endpoint batches are directed and never fall back to a straight estimate for a missing cost.
+do
+	local exact = options()
+	exact.exactMaps = { [1] = true }
+	assert(not Plan(exact))
+	exact.walks = { { from = exact.to, to = exact.from, cost = 100 } }
+	assert(not Plan(exact), "reverse costs do not stand for forward costs")
+	exact.walks[2] = { from = exact.from, to = exact.to, cost = 200 }
+	near(only(Plan(exact), "walk").yards, 200)
+	exact.from = point(1, 1)
+	assert(not Plan(exact), "a nearby point cannot inherit an exact measurement")
+end
+-- Same-cluster water steps can differ in reverse, even though the abstract graph is undirected.
+for _, water in ipairs({ false, true }) do
+	local a, b = ns.Docks[1010], ns.Docks[1009]
+	local reversed = Plan({
+		from = a,
+		to = b,
+		now = 0,
+		waterWalking = water,
+		walks = { { from = a, to = b, cost = false } },
+		docks = { [1009] = b, [1010] = a },
+		baked = { [0] = { ["dock1009 dock1010"] = { 5000, 4000, 3000, 2000 } } },
+	})
+	near(only(reversed, "walk").yards, water and 2000 or 3000)
+end
 
 print("planner_spec: ok")
 assert(loadfile("tests/journey_spec.lua"))()

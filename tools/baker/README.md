@@ -54,11 +54,15 @@ WoWDBDefs commit and checks their sha256.
 ## Walks between fixed places
 
 After rebaking a walking map, or when docks, flight masters or portals change, rebake the walking costs between
-them from the repo root (about eight minutes; `tests/planner_spec.lua` fails on a stale key):
+them from the repo root (`tests/planner_spec.lua` fails on a stale key):
 
 ```sh
 luajit tools/bake_walks.lua > Data/Walks.lua
 ```
+
+The walk baker uses `Path.FindManySync` once per source and water mode. Its costs match the abstract graph
+and local endpoint costs returned by `Path.Find`; smoothing the displayed line does not change them.
+Pairs with different local forward/reverse costs store both directions.
 
 ## Licences
 

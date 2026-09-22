@@ -5,8 +5,6 @@ local Planner = {}
 ns.Planner = Planner
 
 local BOARDING = 3000
--- A measured walk stands for any pair of points this close (3D where both heights are known) to its ends.
-local MATCH = 30
 
 local function QuestPointValid(point)
 	return point
@@ -43,7 +41,7 @@ function Planner.QuestDestination(questID, title, complete, uiMapID, pois, waypo
 	end
 end
 
--- The drawing contract for future collision-map paths; for now walks remain straight.
+-- Preview geometry while a walking leg is still pending.
 function Planner.WalkPoints(from, to)
 	return { { map = from.map, x = from.x, y = from.y }, { map = to.map, x = to.x, y = to.y } }
 end
@@ -103,7 +101,7 @@ function Planner.LegPoints(leg, routes)
 			end
 		end
 	end
-	-- Walks are straight: we have no collision map. Portal endpoints are drawn as separate marks.
+	-- Portal endpoints are drawn as separate marks.
 	points[#points + 1] = { map = leg.to.map, x = leg.to.x, y = leg.to.y }
 	return points
 end
@@ -140,31 +138,22 @@ local function Gap(a, b)
 	return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 + dz ^ 2)
 end
 
-local function Matches(walk, a, b)
-	-- Moving onto the mesh can fix an off-mesh endpoint immediately; it is not a blocked region.
-	if walk.exact then
-		return walk.from.map == a.map
-			and walk.to.map == b.map
-			and walk.from.x == a.x
-			and walk.from.y == a.y
-			and walk.from.z == a.z
-			and walk.to.x == b.x
-			and walk.to.y == b.y
-			and walk.to.z == b.z
-	end
-	return walk.from.map == a.map and Gap(walk.from, a) <= MATCH and Gap(walk.to, b) <= MATCH
+local function SamePoint(a, b)
+	return a.map == b.map and a.x == b.x and a.y == b.y and a.z == b.z
 end
 
--- options.walks are walks the pathfinder has measured: { from, to, cost } in running yards, or cost = false when
--- there is no way through; a later record of a walk supersedes an earlier one. Anything unmeasured is estimated
--- as a straight line, which never overstates a walk, so the caller can measure the walks a plan chooses and replan
--- until the choice holds.
-local function WalkCost(walks, a, b)
+-- Endpoint batches supply directed, exact running-yard costs (false for no path). Later entries override earlier
+-- ones for Remaining(). Straight lines are only previews or the fallback on maps without walking data.
+local function WalkCost(options, a, b)
+	local walks = options.walks or {}
 	for index = #walks, 1, -1 do
 		local walk = walks[index]
-		if Matches(walk, a, b) or Matches(walk, b, a) then
+		if SamePoint(walk.from, a) and SamePoint(walk.to, b) then
 			return walk.cost, false
 		end
+	end
+	if options.exactMaps and options.exactMaps[a.map] then
+		return false, false
 	end
 	return Gap(a, b), true
 end
@@ -183,9 +172,43 @@ local function BakedCost(options, a, b)
 	local baked = ka and kb and options.baked and options.baked[a.map]
 	local pair = baked and baked[ka < kb and ka .. " " .. kb or kb .. " " .. ka]
 	if pair then
-		return true, pair[options.waterWalking and 2 or 1]
+		local mode = options.waterWalking and 2 or 1
+		return true, pair[mode + (ka > kb and pair[3] ~= nil and 2 or 0)]
 	end
 	return false
+end
+
+-- The same fixed places feed the planner and endpoint batches. Keeping their identities here
+-- prevents a new dock or portal from silently retaining an estimated start/goal edge.
+function Planner.Places(options)
+	local places = {}
+	local function add(kind, id, point, label)
+		places[#places + 1] = {
+			kind = kind,
+			id = id,
+			map = point.map,
+			x = point.x,
+			y = point.y,
+			z = point.z,
+			label = label or point.label,
+		}
+	end
+	for _, id in ipairs(Keys(options.docks or {})) do
+		add("dock", id, options.docks[id])
+	end
+	for _, id in ipairs(Keys(options.taxiNodes or {})) do
+		local node = options.taxiNodes[id]
+		if Eligible(node, options) then
+			add("taxi", id, node)
+		end
+	end
+	for id, portal in ipairs(options.portals or {}) do
+		if not portal.requires and Eligible(portal, options) then
+			add("portal", id * 2 - 1, portal.from)
+			add("portal", id * 2, portal.to, portal.name and portal.name:gsub("^%a+ to ", ""))
+		end
+	end
+	return places
 end
 
 -- Changing arrival states must not turn a round trip into a shortcut around a measured continuous walk.
@@ -201,7 +224,7 @@ end
 
 function Planner.Plan(options)
 	local nodes, edges, masses = {}, {}, {}
-	local docks, taxis = {}, {}
+	local docks, taxis, portals = {}, {}, {}
 	local speed = options.walkSpeed or 7
 	assert(speed > 0, "walkSpeed must be positive")
 
@@ -220,21 +243,20 @@ function Planner.Plan(options)
 	end
 
 	local start, goal = Add("start", nil, options.from), Add("goal", nil, options.to)
-	for _, id in ipairs(Keys(options.docks or {})) do
-		docks[id] = Add("dock", id, options.docks[id])
-	end
-	for _, id in ipairs(Keys(options.taxiNodes or {})) do
-		local node = options.taxiNodes[id]
-		if Eligible(node, options) then
-			taxis[id] = Add("taxi", id, node)
-			nodes[taxis[id]].undiscovered = options.taxiKnown ~= nil and not options.taxiKnown[id]
+	for _, place in ipairs(Planner.Places(options)) do
+		local index = Add(place.kind, place.id, place)
+		if place.kind == "dock" then
+			docks[place.id] = index
+		elseif place.kind == "taxi" then
+			taxis[place.id] = index
+			nodes[index].undiscovered = options.taxiKnown ~= nil and not options.taxiKnown[place.id]
+		else
+			portals[place.id] = index
 		end
 	end
 	for id, portal in ipairs(options.portals or {}) do
-		if not portal.requires and Eligible(portal, options) then
-			local from, to = Add("portal", id * 2 - 1, portal.from), Add("portal", id * 2, portal.to)
-			-- Where a portal leads, by name: the tram's tunnel (map 369) has no zone to name it by.
-			nodes[to].label = portal.name and portal.name:gsub("^%a+ to ", "")
+		local from, to = portals[id * 2 - 1], portals[id * 2]
+		if from and to then
 			Edge(from, to, { mode = portal.kind, duration = portal.seconds * 1000 })
 		end
 	end
@@ -287,14 +309,21 @@ function Planner.Plan(options)
 		for to = from + 1, #nodes do
 			local b = nodes[to]
 			if a.map == b.map and masses[from] == masses[to] and not (ride and from == start) then
-				local baked, yards, estimated = BakedCost(options, a, b)
-				if not baked then
-					yards, estimated = WalkCost(options.walks or {}, a, b)
-				end
-				if yards then
-					local duration = yards / speed * 1000
-					Edge(from, to, { mode = "walk", duration = duration, yards = yards, estimated = estimated })
-					Edge(to, from, { mode = "walk", duration = duration, yards = yards, estimated = estimated })
+				for direction = 1, 2 do
+					local first, last = direction == 1 and from or to, direction == 1 and to or from
+					local origin, destination = nodes[first], nodes[last]
+					local baked, yards, estimated = BakedCost(options, origin, destination)
+					if not baked then
+						yards, estimated = WalkCost(options, origin, destination)
+					end
+					if yards then
+						Edge(first, last, {
+							mode = "walk",
+							duration = yards / speed * 1000,
+							yards = yards,
+							estimated = estimated,
+						})
+					end
 				end
 			end
 		end

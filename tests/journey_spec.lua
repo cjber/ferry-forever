@@ -1,101 +1,27 @@
-local ns = { db = { journey = true } }
-local now, here, target, shown, click = 0, { map = 1, x = 0, y = 0, z = 0 }
-local function noop() end
-local driver = {
-	SetScript = function(self, name, fn)
-		self[name] = fn
-	end,
-	RegisterEvent = noop,
-	Show = noop,
-	Hide = noop,
-}
-local env = setmetatable({
-	CreateFrame = function()
-		return driver
-	end,
-	UnitPosition = function()
-		return here.x, here.y, here.z, here.map
-	end,
-	GetTime = function()
-		return now / 1000
-	end,
-	GetUnitSpeed = function()
-		return 0, 7
-	end,
-	canaccessvalue = function()
-		return true
-	end,
-	UnitOnTaxi = noop,
-	UnitFactionGroup = function()
-		return "Alliance"
-	end,
-	IsShiftKeyDown = function()
-		return true
-	end,
-	C_UnitAuras = { GetPlayerAuraBySpellID = noop },
-	IsPlayerSpell = noop,
-	C_Map = {
-		GetWorldPosFromMapPos = function(map, point)
-			return map, point
-		end,
-		HasUserWaypoint = noop,
-		GetUserWaypoint = noop,
-	},
-	CreateVector2D = function(x, y)
-		return {
-			GetXY = function()
-				return x, y
-			end,
-		}
-	end,
-	C_SuperTrack = {
-		GetSuperTrackedQuestID = noop,
-		IsSuperTrackingUserWaypoint = noop,
-		GetHighestPrioritySuperTrackingType = noop,
-	},
-	WorldMapFrame = {
-		dataProviders = {},
-		AddCanvasClickHandler = function(_, fn)
-			click = fn
-		end,
-		AddGlobalPinMouseActionHandler = noop,
-	},
-	Minimap = { HookScript = noop },
-	Menu = { ModifyMenu = noop },
-}, { __index = _G })
-local function load(file)
-	setfenv(assert(loadfile(file)), env)("ShortestPathForever", ns)
+local driver = assert(loadfile("tests/journey_driver.lua"))()
+local ns = driver.ns
+local here, target = { map = 1, x = 0, y = 0, z = 0 }, { map = 1, x = 1200, y = 0 }
+local jobs, batches, plans, logs = {}, {}, {}, {}
+ns.db.debug = true
+ns.Print = function(message)
+	logs[#logs + 1] = message
 end
-ns.Init = function(fn)
-	fn()
+local plan = ns.Planner.Plan
+ns.Planner.Plan = function(options)
+	plans[#plans + 1] = options
+	return plan(options)
 end
-ns.NowMs = function()
-	return now
-end
-ns.CurrentRide, ns.RefreshTracker, ns.PointGuideArrow = noop, noop, noop
-ns.KnownTaxiNodes, ns.FreshAnchors = function()
-	return {}
-end, function()
-	return {}
-end
-ns.Locate = function()
-	return { zone = "Test" }
-end
-ns.FormatCountdown = tostring
-ns.SetJourneyRoute = function(_, route)
-	shown = route
-end
-load("Model.lua")
-load("Planner.lua")
-load("Journey.lua")
-
-local jobs = {}
 ns.Path = {
 	HasData = function()
 		return true
 	end,
-	Find = function(_, from, to, callback)
-		local job = { from = from, to = to, callback = callback }
+	FindMany = function(map, from, targets, callback, water, reverse)
+		local job = { map = map, from = from, targets = targets, callback = callback, water = water, reverse = reverse }
+		batches[#batches + 1] = job
+		return job
+	end,
+	Find = function(_, from, to, callback, water)
+		local job = { from = from, to = to, callback = callback, water = water }
 		jobs[#jobs + 1] = job
 		return job
 	end,
@@ -103,146 +29,215 @@ ns.Path = {
 		job.cancelled = true
 	end,
 }
-local map = {
-	GetMapID = function()
-		return target.map
-	end,
-	GetNormalizedCursorPosition = function()
-		return target.x, target.y
-	end,
-}
-local function begin(to)
-	target = to or { map = 1, x = 1200, y = 0 }
-	assert(click(map, "LeftButton"))
+local function begin()
+	driver.begin(here, target)
 end
-local function update(seconds)
-	now = now + seconds * 1000
-	driver:OnUpdate(seconds)
+local function costs(job, cost, reason)
+	local values = {}
+	for i = 1, #job.targets do
+		values[i] = cost
+	end
+	job.callback(values, reason, job)
+end
+local function ready(cost)
+	costs(batches[#batches], cost or 1400)
+	costs(batches[#batches - 1], cost or 1400)
 end
 local function finish(job, points, cost)
-	job.callback(points, cost, job)
+	job.callback(points, cost or 1400, job)
 end
 
--- A search spanning timed replans still belongs to the retained plan and finishes exactly once.
+-- Neither the timer nor the first batch completion can choose an exact plan before both batches finish.
 begin()
-local first = jobs[#jobs]
-local count = #jobs
-local title, waiting = ns.JourneyInfo()
 local settling, round, pending = ns.JourneyStatus()
-assert(settling and round == 1 and pending == 1 and shown.settling)
-assert(title:find("finding the fastest way", 1, true))
-assert(waiting[1].text:find("finding walking path", 1, true))
-update(5)
-update(5)
-assert(#jobs == count and not first.cancelled)
+assert(settling and round == 0 and pending == 2 and driver.shown().settling)
+assert(#jobs == 0 and #plans == 1 and #batches == 2)
+assert(ns.JourneyInfo():find("finding the fastest way", 1, true))
+for _ = 1, 3 do
+	driver.update(5)
+end
+assert(#plans == 1 and #jobs == 0)
+costs(batches[2], 1400)
+assert(#plans == 1 and #jobs == 0)
+costs(batches[1], 1400)
+settling, round, pending = ns.JourneyStatus()
+assert(settling and round == 1 and pending == 1 and #plans == 2 and #jobs == 1)
+assert(not driver.shown().legs[1].estimated)
+local first = jobs[1]
 local points = { first.from, { map = 1, x = 600, y = 300 }, first.to }
-finish(first, points, 1400)
-assert(shown.legs[1].measured and shown.legs[1].walkPoints[2] == points[2])
-assert(not shown.legs[1].estimated, "the measured cost is replanned without discarding its geometry")
-settling, round, pending = ns.JourneyStatus()
-assert(not settling and round == 2 and pending == 0 and not shown.settling)
-assert(not ns.JourneyInfo():find("finding the fastest way", 1, true))
+-- Even a disagreement only logs; geometry cannot start another plan.
+finish(first, points, 2100)
+assert(#plans == 2 and #jobs == 1 and #logs == 1)
+assert(driver.shown().legs[1].walkPoints[2] == points[2])
+assert(not ns.JourneyStatus() and not driver.shown().settling)
 
--- A cleared or replaced plan cannot be resurrected by an already queued callback.
-begin()
-local stale = jobs[#jobs]
-begin({ map = 1, x = 1500, y = 0 })
-local current = jobs[#jobs]
-finish(stale, points, 1400)
-assert(stale.cancelled and not shown.legs[1].measured)
-settling, round, pending = ns.JourneyStatus()
-assert(settling and round == 1 and pending == 1, "stale callbacks cannot settle the replacement plan")
-ns.ClearJourney()
-finish(current, points, 1400)
-assert(not shown and not ns.JourneyInfo())
+-- Remaining() wins for the followed leg; other start costs are carried unchanged, never distance-shifted.
+here = { map = 1, x = 600, y = 300 }
+driver.move(here)
+driver.update(5)
+assert(#batches == 2 and #jobs == 1)
+local walks = plans[#plans].walks
+assert(walks[1].cost == 1400 and math.abs(walks[#walks].cost - 700) < 0.01)
+driver.update(5)
+walks = plans[#plans].walks
+assert(math.abs(walks[#walks].cost - 700) < 0.01, "retiming must not repeatedly shrink the cost basis")
+assert(driver.shown().legs[1].walkPoints[#driver.shown().legs[1].walkPoints] == first.to)
+local batchCount = #batches
+-- A minute refreshes only the start batch, in the background; geometry stays visible.
+driver.update(60)
+assert(#batches == batchCount + 1 and not batches[#batches].reverse and #jobs == 1)
+assert(#driver.shown().legs[1].walkPoints >= 2)
+costs(batches[#batches], 1300)
+assert(#jobs == 1 and not ns.JourneyStatus())
+
+-- Off-route refresh retains the old points both while costs and replacement geometry are pending.
+here = { map = 1, x = 600, y = -100 }
+driver.move(here)
+driver.update(5)
+assert(#batches == batchCount + 2 and not batches[#batches].reverse)
+assert(#jobs == 1)
+costs(batches[#batches], 1500)
+local replacement = jobs[#jobs]
+assert(#jobs == 2 and driver.shown().legs[1].walkPoints[2] == points[2])
+local count = #plans
+finish(replacement, nil, "unreachable")
+assert(#plans == count and driver.shown().legs[1].walkPoints[2] == points[2], "failed refresh keeps drawn points")
 assert(not ns.JourneyStatus())
 
--- Hysteresis keeps the followed plan's pending callback, while a measured detour forces the new route to search.
+-- Replacing/clearing a journey cancels both job types; late callbacks cannot settle or resurrect the new one.
 begin()
-first, count = jobs[#jobs], #jobs
-local plan = ns.Planner.Plan
+local stale = batches[#batches]
+begin()
+local current = batches[#batches]
+costs(stale, 1400)
+assert(stale.cancelled and select(3, ns.JourneyStatus()) == 2)
+ready()
+local stalePoints = jobs[#jobs]
+ns.ClearJourney()
+costs(current, 1400)
+finish(stalePoints, points)
+assert(stalePoints.cancelled and not driver.shown() and not ns.JourneyInfo() and not ns.JourneyStatus())
+
+-- A blocked endpoint is settled once, and a move retries the start without repeating the goal batch.
+here = { map = 1, x = 0, y = 0 }
+begin()
+costs(batches[#batches], false)
+costs(batches[#batches - 1], false)
+assert(not driver.shown() and not ns.JourneyStatus())
+count = #batches
+driver.update(5)
+assert(#batches == count)
+here = { map = 1, x = 1, y = 0 }
+driver.move(here)
+driver.update(5)
+assert(#batches == count + 1 and not batches[#batches].reverse)
+costs(batches[#batches], 1400)
+finish(jobs[#jobs], nil, "error")
+assert(#driver.shown().legs[1].walkPoints == 0, "a terminal failure cannot keep a straight estimate")
+count = #jobs
+here = { map = 1, x = 2, y = 0 }
+driver.move(here)
+driver.update(5)
+costs(batches[#batches], 1400)
+assert(#jobs == count + 1, "moving after a failed point search must search the replacement geometry")
+finish(jobs[#jobs], { jobs[#jobs].from, jobs[#jobs].to })
+
+-- Changing the water mode invalidates both cost batches and points, keeping drawn points until replacement.
+begin()
+ready()
+first = jobs[#jobs]
+points = { first.from, { map = 1, x = 600, y = 300 }, first.to }
+finish(first, points)
+count = #batches
+ns.water = true
+driver.update(5)
+assert(#batches == count + 2 and batches[#batches].water)
+ready()
+assert(jobs[#jobs].water and driver.shown().legs[1].walkPoints[2] == points[2])
+finish(jobs[#jobs], points)
+ns.ClearJourney()
+
+-- Cancelling a pending replacement must keep the drawing it inherited from an earlier completed search.
+ns.water = nil
+here = { map = 1, x = 0, y = 0 }
+begin()
+ready()
+first = jobs[#jobs]
+points = { first.from, { map = 1, x = 600, y = 300 }, first.to }
+finish(first, points)
+here = { map = 1, x = 600, y = -100 }
+driver.move(here)
+driver.update(5)
+costs(batches[#batches], 1500)
+local cancelledReplacement = jobs[#jobs]
+ns.water = true
+driver.update(5)
+assert(cancelledReplacement.cancelled)
+ready()
+assert(driver.shown().legs[1].walkPoints[2] == points[2], "a second replacement cannot reset drawn geometry")
+finish(cancelledReplacement, nil, "error")
+assert(ns.JourneyStatus(), "a cancelled callback cannot finish the current replacement")
+finish(jobs[#jobs], points)
+ns.ClearJourney()
+
+-- Hysteresis can reject the newly computed route; it must still clear the background pulse.
+ns.water = nil
+here = { map = 1, x = 0, y = 0 }
+begin()
+ready()
+first = jobs[#jobs]
+finish(first, { first.from, { map = 1, x = 600, y = 300 }, first.to })
+local trackedPlan, arrive = ns.Planner.Plan, driver.shown().arrive
+count = #jobs
 ns.Planner.Plan = function(options)
-	if #jobs == count and not first.cancelled then
-		local checking, rounds, left = ns.JourneyStatus()
-		assert(checking and rounds >= 1, "settling stays on during the forced planner call")
-		assert(left > 0 or rounds == 2, "a forced round stays settling even after the last callback")
-	end
-	local mid = { map = 1, x = 600, y = 100, kind = "portal", id = 1 }
+	local mid = { map = 1, x = 600, y = 100 }
 	return {
-		arrive = options.now + 165000,
+		now = options.now,
+		arrive = arrive - 1000,
 		legs = {
 			{
 				mode = "walk",
-				from = first.from,
+				from = options.from,
 				to = mid,
+				yards = 700,
 				depart = options.now,
-				arrive = options.now + 85000,
-				yards = 600,
-				estimated = true,
+				arrive = arrive - 10000,
 			},
 			{
 				mode = "walk",
 				from = mid,
-				to = first.to,
-				depart = options.now + 85000,
-				arrive = options.now + 165000,
-				yards = 600,
-				estimated = true,
+				to = options.to,
+				yards = 700,
+				depart = arrive - 10000,
+				arrive = arrive - 1000,
 			},
 		},
 	}
 end
-update(5)
-assert(#jobs == count and not first.cancelled, "a near-tie must keep the pending search")
-finish(first, points, 2000)
-assert(#jobs == count + 2, "the forced replacement must start all its estimated walks")
-settling, round, pending = ns.JourneyStatus()
-assert(settling and round == 2 and pending == 2 and shown.settling)
-for index = count + 1, #jobs do
-	local job = jobs[index]
-	finish(job, { job.from, { map = 1, x = 600, y = 50 }, job.to }, 605)
-	local checking, _, left = ns.JourneyStatus()
-	assert(left == #jobs - index and checking == (left > 0))
-end
-for _, leg in ipairs(shown.legs) do
-	assert(leg.measured)
-end
+driver.update(60)
+assert(driver.shown().settling)
+costs(batches[#batches], 1400)
+assert(not driver.shown().settling and #jobs == count and driver.shown().legs[1].to == first.to)
+ns.Planner.Plan = trackedPlan
 ns.ClearJourney()
-ns.Planner.Plan = plan
 
--- Every terminal search failure resolves the estimate, including an endpoint outside the walkable mesh.
-for _, reason in ipairs({ "unreachable", "offmesh", "outside" }) do
-	begin()
-	finish(jobs[#jobs], nil, reason)
-	assert(not shown, reason .. " must remove the impossible walk")
-	local _, rows = ns.JourneyInfo()
-	assert(rows[1].key == "unreachable")
-	count = #jobs
-	update(5)
-	assert(#jobs == count, reason .. " must not be searched repeatedly")
-	if reason == "offmesh" or reason == "outside" then
-		here.x = here.x + 1
-		update(5)
-		assert(#jobs == count + 1, "moving onto the mesh must retry even within the cache radius")
-	end
-end
-
--- Missing data and execution errors are visible failures, not proof that the terrain is impassable.
-for _, reason in ipairs({ "nodata", "error" }) do
-	begin()
-	finish(jobs[#jobs], nil, reason)
-	local _, rows = ns.JourneyInfo()
-	assert(shown.legs[1].walkError == reason and rows[1].text:find("walking", 1, true))
-	assert(not ns.JourneyStatus() and not shown.settling, "failed searches also settle")
-	count = #jobs
-	update(5)
-	assert(#jobs == count and shown.legs[1].walkError == reason)
-end
+-- A searched two-point path is still genuine geometry, and survives a failed off-route replacement.
+begin()
+ready()
+first = jobs[#jobs]
+finish(first, { first.from, first.to })
+here = { map = 1, x = 600, y = -100 }
+driver.move(here)
+driver.update(5)
+costs(batches[#batches], 1500)
+finish(jobs[#jobs], nil, "error")
+assert(#driver.shown().legs[1].walkPoints == 2 and driver.shown().legs[1].walkPoints[2] == first.to)
+ns.ClearJourney()
 
 -- A recent ride remains observed after disembarking; a docked boat must not force a round trip.
 ns.ClearJourney()
 ns.Path = nil
-load("Data/Routes.lua")
+driver.load("Data/Routes.lua")
 local ratchet = ns.Routes[241]
 local dock = ns.Docks[ratchet.stops[1].dock]
 ns.DockTitle = function()
@@ -259,19 +254,34 @@ ns.FreshAnchors = function()
 	return { [241] = { epoch = 0 } }
 end
 ns.NextStop = function()
-	return ratchet.stops[2].dock, ratchet.stops[2].arrive - now
+	return ratchet.stops[2].dock, ratchet.stops[2].arrive - ns.NowMs()
 end
 here = { map = dock.map, x = dock.x, y = dock.y, z = dock.z }
-now = ratchet.stops[1].arrive + 1000
-begin({ map = here.map, x = here.x + 100, y = here.y })
-assert(#shown.legs == 1 and shown.legs[1].mode == "walk", "a docked Ratchet ride must allow the 100-yard walk")
+ns.NowMs = function()
+	return ratchet.stops[1].arrive + 1000
+end
+driver.begin(here, { map = here.map, x = here.x + 100, y = here.y })
+assert(
+	#driver.shown().legs == 1 and driver.shown().legs[1].mode == "walk",
+	"a docked Ratchet ride must allow the 100-yard walk"
+)
 here.x = here.x + 35
-update(5)
-assert(#shown.legs == 1 and shown.legs[1].mode == "walk", "walking away must not restore the stale ride")
+driver.update(5)
+assert(
+	#driver.shown().legs == 1 and driver.shown().legs[1].mode == "walk",
+	"walking away must not restore the stale ride"
+)
 ns.ClearJourney()
-now = ratchet.stops[1].depart + 55000
-begin({ map = dock.map, x = dock.x + 100, y = dock.y })
-assert(shown.legs[1].mode == "boat" and shown.legs[1].aboard, "a ride in transit must still reach its next dock")
+ns.NowMs = function()
+	return ratchet.stops[1].depart + 55000
+end
+driver.begin(here, { map = dock.map, x = dock.x + 100, y = dock.y })
+assert(
+	driver.shown().legs[1].mode == "boat" and driver.shown().legs[1].aboard,
+	"a ride in transit must still reach its next dock"
+)
 ns.ClearJourney()
 
+-- The durable long-route regression uses real Journey, Path and all three nav maps.
+assert(loadfile("tests/journey_bench.lua"))()
 print("journey_spec: ok")

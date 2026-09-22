@@ -1,13 +1,15 @@
 local _, ns = ...
 
 -- Walking routes over a continent's collision map: HPA* between ADT-tile clusters, an 8 yd grid inside them,
--- then string-pulling so the drawn line is not jagged. Coordinates are UnitPosition's frame (x north, y west).
+-- then string-pulling so the drawn line is not jagged. FindMany resolves costs in one abstract Dijkstra.
+-- Costs use the graph and local grid weights; smoothing changes only the drawing.
+-- Coordinates are UnitPosition's frame (x north, y west).
 -- A cell holds its base surface and, where surfaces overlap (a tunnel under a mountain, a city under ruins, both
 -- ends of a lift), floors above or below it. A node is a local cell (the base surface) or C * C + a floor's index.
 local Path = {}
 ns.Path = Path
 
-Path.budget = 3 -- milliseconds of CPU per frame for Find
+Path.budget = 3 -- milliseconds of CPU per frame, shared by Find and FindMany
 Path.clusters = 12 -- decoded cluster grids kept in memory (at least 4)
 Path.clock = debugprofilestop or function()
 	return os.clock() * 1000
@@ -146,6 +148,8 @@ local function State(map)
 			ncell = {}, -- [id] = local cell
 			nlayer = {}, -- [id] = 0 for the base surface, i for the cell's ith floor
 			ncomp = {},
+			ends = {}, -- bounded local connections, shared by successive endpoint batches
+			endCount = 0,
 			nadj = {}, -- [id] = { target, cost swimming, cost walking on water, ... }
 		}
 		states[map] = st
@@ -762,6 +766,84 @@ local trees = { S = Tree(), G = Tree(), R = Tree() }
 -- Abstract A* state.
 local ag, apar, astamp, aclosed, agen = {}, {}, {}, {}, 0
 
+-- Endpoint searches: grid Dijkstra to the cluster's entrances (and the other endpoint when they share it).
+local function endpoint(st, swim, tree, k, node, others)
+	local targets, left = {}, 0
+	for _, id in ipairs(nodesOf(st, k)) do
+		local e = entrance(st, id)
+		if e and not targets[e] then
+			targets[e], left = true, left + 1
+		end
+	end
+	for other in pairs(others or {}) do
+		if not targets[other] then
+			targets[other], left = true, left + 1
+		end
+	end
+	search(st, k, swim, node, tree, nil, targets, left)
+end
+-- An endpoint on a rooftop or ledge the grid cannot leave moves to the nearest node that reaches an entrance,
+-- down a ledge but never up one or onto another level.
+local function settle(st, swim, tree, k, node)
+	local C = st.C
+	endpoint(st, swim, tree, k, node)
+	local function connected()
+		for _, id in ipairs(nodesOf(st, k)) do
+			local e = entrance(st, id)
+			if e and reached(tree, e) then
+				return true
+			end
+		end
+		return false
+	end
+	local tries = 0
+	local h = st.z[k][node + 1]
+	local cell = cellOf(st, k, node)
+	local lx, ly = floor(cell / C), cell % C
+	for r = 1, SNAP do
+		for dx = -r, r do
+			for dy = -r, r do
+				if connected() or tries >= RETRIES then
+					return node
+				end
+				local x, y = lx + dx, ly + dy
+				local ring = dx == r or dx == -r or dy == r or dy == -r
+				if ring and x >= 0 and y >= 0 and x < C and y < C then
+					local near = standing(st, k, x * C + y, h)
+					local rise = near and st.z[k][near + 1] - h
+					if near and rise <= ZTOL and rise >= -DROP and not reached(tree, near) then
+						tries, node = tries + 1, near
+						endpoint(st, swim, tree, k, node)
+					end
+				end
+			end
+		end
+	end
+	return node
+end
+
+-- Both APIs connect endpoints with the same local search. Connections are outward at both ends, as in the
+-- baked undirected graph; the same-cluster direct edge retains the grid's entering-water direction.
+local function connections(st, tree, k)
+	local edges = {}
+	for _, id in ipairs(nodesOf(st, k)) do
+		local e = entrance(st, id)
+		if e and reached(tree, e) then
+			edges[id] = tree.g[e + 1]
+		end
+	end
+	return edges
+end
+
+local function pointNode(st, point)
+	local k, node = locate(st, point.x, point.y)
+	if not k then
+		return nil, nil, "outside"
+	end
+	node = snap(st, k, node, point.x, point.y, point.z)
+	return k, node, not node and "offmesh" or nil
+end
+
 local function run(map, from, to, waterWalking)
 	local st = State(map)
 	if not st then
@@ -783,65 +865,13 @@ local function run(map, from, to, waterWalking)
 	end
 	local C = st.C
 
-	-- Endpoint searches: grid Dijkstra to the cluster's entrances (and the other endpoint when they share it).
-	local function endpoint(tree, k, node, other)
-		local targets, left = {}, 0
-		for _, id in ipairs(nodesOf(st, k)) do
-			local e = entrance(st, id)
-			if e and not targets[e] then
-				targets[e], left = true, left + 1
-			end
-		end
-		if other and not targets[other] then
-			targets[other], left = true, left + 1
-		end
-		search(st, k, swim, node, tree, nil, targets, left)
-	end
-	-- An endpoint on a rooftop or ledge the grid cannot leave moves to the nearest node that reaches an entrance,
-	-- down a ledge but never up one or onto another level.
-	local function settle(tree, k, node, other)
-		endpoint(tree, k, node, other)
-		local function connected()
-			if other and reached(tree, other) then
-				return true
-			end
-			for _, id in ipairs(nodesOf(st, k)) do
-				local e = entrance(st, id)
-				if e and reached(tree, e) then
-					return true
-				end
-			end
-			return false
-		end
-		local tries = 0
-		local h = st.z[k][node + 1]
-		local cell = cellOf(st, k, node)
-		local lx, ly = floor(cell / C), cell % C
-		for r = 1, SNAP do
-			for dx = -r, r do
-				for dy = -r, r do
-					if connected() or tries >= RETRIES then
-						return node
-					end
-					local x, y = lx + dx, ly + dy
-					local ring = dx == r or dx == -r or dy == r or dy == -r
-					if ring and x >= 0 and y >= 0 and x < C and y < C then
-						local near = standing(st, k, x * C + y, h)
-						local rise = near and st.z[k][near + 1] - h
-						if near and rise <= ZTOL and rise >= -DROP and not reached(tree, near) then
-							tries, node = tries + 1, near
-							endpoint(tree, k, node, other)
-						end
-					end
-				end
-			end
-		end
-		return node
-	end
 	local S, G = trees.S, trees.G
 	local same = sk == gk
-	gc = settle(G, gk, gc, nil)
-	settle(S, sk, sc, same and gc)
+	sc = settle(st, swim, S, sk, sc)
+	gc = settle(st, swim, G, gk, gc)
+	if same then
+		endpoint(st, swim, S, sk, sc, { [gc] = true })
+	end
 	local direct = same and reached(S, gc) and S.g[gc + 1] or nil
 
 	-- O(1)-ish reject: the endpoints' entrances must share a component.
@@ -868,9 +898,14 @@ local function run(map, from, to, waterWalking)
 		local k, lc = floor(id / 4096), st.ncell[id]
 		return x0 + (floor(k / st.ny) * C + floor(lc / C) + 0.5) * cs, y0 + ((k % st.ny) * C + lc % C + 0.5) * cs
 	end
+	-- Rounded graph edges and snapping must not let the heuristic overstate the remaining cost.
+	local goalCell = cellOf(st, gk, gc)
+	local goalX = x0 + (floor(gk / st.ny) * C + floor(goalCell / C) + 0.5) * cs
+	local goalY = y0 + (gk % st.ny * C + goalCell % C + 0.5) * cs
+	local lower = max(0, 1 - 0.5 / cs)
 	local function h(id)
 		local x, y = world(id)
-		return sqrt((x - to.x) ^ 2 + (y - to.y) ^ 2)
+		return sqrt((x - goalX) ^ 2 + (y - goalY) ^ 2) * lower
 	end
 	agen = agen + 1
 	local gen = agen
@@ -984,20 +1019,130 @@ local function run(map, from, to, waterWalking)
 		}
 	end
 	points[#points + 1] = { map = map, x = to.x, y = to.y, z = to.z }
-	local cost, wetYards = 0, 0
+	local wetYards = 0
 	for i = 2, #points do
 		local p, q = keep[i - 1], keep[i]
 		local wet = q > p and (P.w[q] - P.w[p]) / (q - p) or 0
 		local length = sqrt((points[i].x - points[i - 1].x) ^ 2 + (points[i].y - points[i - 1].y) ^ 2)
-		cost = cost + length * (1 + (swim - 1) * wet)
 		wetYards = wetYards + length * wet
 	end
 	points.wet = wetYards
-	return points, cost
+	-- Smoothing only changes drawing: planning and FindMany use the identical graph cost.
+	return points, ag[GOAL]
+end
+
+-- Fixed places recur in both batches and in later journeys. Keep their small entrance-cost vectors, not the
+-- grid trees; cap the cache so moving start positions cannot grow it for the entire play session.
+local function connect(st, swim, k, node)
+	local key = k .. ":" .. node .. ":" .. swim
+	local entry = st.ends[key]
+	if not entry then
+		node = settle(st, swim, trees.G, k, node)
+		entry = { node = node, edges = connections(st, trees.G, k) }
+		if st.endCount >= 256 then
+			st.ends, st.endCount = {}, 0
+		end
+		st.ends[key], st.endCount = entry, st.endCount + 1
+	end
+	return entry.node, entry.edges
+end
+
+-- One Dijkstra on the abstract graph, stopping when every target entrance is settled (or the heap empties).
+-- Local endpoint searches run before the abstract search because they share its scratch heap.
+local function runMany(map, from, targets, waterWalking, reverse)
+	local costs = {}
+	for i = 1, #targets do
+		costs[i] = false
+	end
+	local st = State(map)
+	if not st then
+		return costs, "nodata"
+	end
+	local sk, sc, reason = pointNode(st, from)
+	if not sc then
+		return costs, reason
+	end
+	local swim, cost2 = waterWalking and 1 or st.swim, waterWalking and 2 or 1
+	local S, G = trees.S, trees.G
+	local source
+	sc, source = connect(st, swim, sk, sc)
+	local ends, others, wanted, left = {}, {}, {}, 0
+	for i, point in ipairs(targets) do
+		local k, node = pointNode(st, point)
+		if node then
+			local edges
+			node, edges = connect(st, swim, k, node)
+			if k == sk then
+				others[node] = true
+				if reverse then
+					endpoint(st, swim, G, k, node, { [sc] = true })
+					costs[i] = reached(G, sc) and G.g[sc + 1] or false
+				end
+			end
+			ends[i] = { edges = edges, node = node, k = k }
+			for id in pairs(edges) do
+				if not wanted[id] then
+					wanted[id], left = true, left + 1
+				end
+			end
+		end
+	end
+	if next(others) and not reverse then
+		endpoint(st, swim, S, sk, sc, others)
+		for i, target in pairs(ends) do
+			if target.k == sk and reached(S, target.node) then
+				costs[i] = S.g[target.node + 1]
+			end
+		end
+	end
+	agen = agen + 1
+	local gen = agen
+	hn = 0
+	local function relax(id, cost)
+		if astamp[id] ~= gen or cost < ag[id] then
+			ag[id], astamp[id] = cost, gen
+			push(cost, id)
+		end
+	end
+	for id, cost in pairs(source) do
+		relax(id, cost)
+	end
+	while hn > 0 and left > 0 do
+		local u = pop()
+		if aclosed[u] ~= gen then
+			aclosed[u] = gen
+			tick()
+			if wanted[u] then
+				left = left - 1
+			end
+			nodesOf(st, floor(u / 4096))
+			local adj = st.nadj[u]
+			for e = 1, #adj, 3 do
+				local v = adj[e]
+				if aclosed[v] ~= gen then
+					relax(v, ag[u] + adj[e + cost2])
+				end
+			end
+		end
+	end
+	for i, target in pairs(ends) do
+		for id, cost in pairs(target.edges) do
+			if aclosed[id] == gen then
+				local total = ag[id] + cost
+				if not costs[i] or total < costs[i] then
+					costs[i] = total
+				end
+			end
+		end
+	end
+	return costs
 end
 
 local function start(job)
 	expansions = 0
+	if job.targets then
+		return runMany(job.map, job.from, job.targets, job.waterWalking, job.reverse)
+	end
 	return run(job.map, job.from, job.to, job.waterWalking)
 end
 
@@ -1011,6 +1156,14 @@ function Path.FindSync(map, from, to, waterWalking)
 		error(points)
 	end
 	return points, cost, expansions
+end
+
+-- Costs indexed like targets, false for unreachable/off-mesh points; no geometry is built. reverse returns
+-- target -> from costs, including the directed same-cluster water step. The shipped abstract edges are symmetric.
+function Path.FindManySync(map, from, targets, waterWalking, reverse)
+	deadline, ops, expansions = huge, 0, 0
+	local costs, reason = runMany(map, from, targets, waterWalking, reverse)
+	return costs, reason, expansions
 end
 
 -- Jobs run one at a time, each resumed once a frame until Path.budget ms of CPU is spent.
@@ -1060,7 +1213,8 @@ end
 
 -- Search coroutine-sliced over frames between two { x, y, z } points (z optional: it picks the floor to start or end
 -- on). callback(points, cost, job) or callback(nil, reason, job): points are { map, x, y, z } from the start to the
--- goal, with points.wet the yards over water, and cost is the walk in running yards, a swum yard counting as the
+-- goal, with points.wet the drawn yards over water. Cost is the abstract route in running yards, not the smoothed
+-- polyline length; a swum grid yard counts as the
 -- data's swim (so routes keep out of water) unless waterWalking, when water is ground. reason is "nodata",
 -- "outside", "offmesh", "unreachable" or "error". Returns a handle for Path.Cancel.
 function Path.Find(map, from, to, callback, waterWalking)
@@ -1069,6 +1223,25 @@ function Path.Find(map, from, to, callback, waterWalking)
 		from = from,
 		to = to,
 		waterWalking = waterWalking,
+		callback = callback,
+		co = coroutine.create(start),
+		frames = 0,
+		cpu = 0,
+	}
+	queue[#queue + 1] = job
+	schedule()
+	return job
+end
+
+-- The same queue, budget and cancellation contract as Find; callback(costs, reason, job). Missing data or an
+-- invalid source returns all false plus a reason. Individual unreachable targets are false without failing peers.
+function Path.FindMany(map, from, targets, callback, waterWalking, reverse)
+	local job = {
+		map = map,
+		from = from,
+		targets = targets,
+		waterWalking = waterWalking,
+		reverse = reverse,
 		callback = callback,
 		co = coroutine.create(start),
 		frames = 0,
