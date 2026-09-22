@@ -32,7 +32,7 @@ off. **Plan journey** in a quest's right-click menu, or Shift-clicking its marke
 for its objective, or its turn-in once it is complete. The route is drawn on the world map and minimap as a
 slim outlined line that reads on any map, walking legs dotted and the destination marked with the
 waypoint pin, and its steps sit in the objective tracker like a tracked quest. **Guide**, on from the start of every journey and toggled from the tracker header,
-moves the game's own waypoint marker along the route turn by turn (or only to where each step ends, a setting), dots the next few yards of the walk faintly on the ground, and gives your tracked quest back when you finish. Walking legs follow the ground round walls, cliffs and water on Eastern Kingdoms, Kalimdor
+moves the game's own waypoint marker along the route turn by turn (or only to where each step ends, a setting), and gives your tracked quest back when you finish. Walking legs follow the ground round walls, cliffs and water on Eastern Kingdoms, Kalimdor
 and Zephras Isle, from walking maps that come in the same download. They take tunnels such as Dun Algaz and
 the Undercity's lower levels, ride a lift when the way round on foot is longer, and take the boat rather than
 a long swim. Walks keep out of water, unless you have Water Walking or Levitate, when the step asks you to

@@ -25,7 +25,6 @@ Taxi.lua
 Map.lua
 Tracker.lua
 Arrow.lua
-Trail.lua
 Path.lua
 Journey.lua
 Route.lua

@@ -11,7 +11,6 @@ local DEFAULTS = {
 	alertSound = true,
 	journey = true,
 	share = true,
-	trail = true,
 	guideStops = false,
 }
 

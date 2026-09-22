@@ -108,11 +108,6 @@ function ns.RefreshGuideStops()
 	index, target = 1, path and path[1]
 end
 
--- The whole walk for Trail.lua to dot, the bend Guide is leading to, and whether the native marker sits on it.
-function ns.GuideProgress()
-	return source, target, native
-end
-
 -- placeBend owns waypoint placement and returns whether native tracking is ours. Progress lives only here.
 function ns.PointGuideArrow(points, placeBend)
 	if points and #points == 0 then

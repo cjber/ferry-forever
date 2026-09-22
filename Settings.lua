@@ -66,11 +66,6 @@ ns.Init(function()
 		false
 	)
 	Checkbox(
-		"trail",
-		"Dot Guide's route on the ground ahead of you (experimental)",
-		"Faint dots along the next 40 yards of the walk, placed using the game's navigation marker."
-	)
-	Checkbox(
 		"share",
 		"Share departure times with other players",
 		"Sends and receives sighting times over guild, party and at the dock. No chat messages are shown."
