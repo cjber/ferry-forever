@@ -18,6 +18,7 @@ local goal, guide, result
 local progress = { index = 1 }
 local driver
 local ARRIVAL = 15
+local lastRunSpeed = 7
 local PATH_REUSE = 3
 local pathJobs, walkCache, pathVersion = {}, {}, 0
 
@@ -221,6 +222,13 @@ local function UpdateProgress()
 	ns.ClearJourney()
 end
 
+-- Guide's waypoint only steers the native marker; Ferry's own pins already draw the route and destination.
+local function HideGuideWaypointPin(provider)
+	if provider.pin and guide and (guide.writing or SameWaypoint(C_Map.GetUserWaypoint(), guide.expectedWaypoint)) then
+		provider.pin:Hide()
+	end
+end
+
 function ns.IsJourneyGuided()
 	return guide ~= nil
 end
@@ -375,6 +383,10 @@ local function Plan()
 		return nil
 	end
 	local _, runSpeed = GetUnitSpeed("player")
+	-- In combat the client returns unit speed as a secret value; keep the last one it let us read.
+	if canaccessvalue(runSpeed) then
+		lastRunSpeed = runSpeed
+	end
 	local now = ns.NowMs()
 	-- Taxi paths cannot be interrupted; retain their chosen destination until landing.
 	if result and UnitOnTaxi("player") then
@@ -393,7 +405,7 @@ local function Plan()
 		to = goal,
 		now = now,
 		ride = ride,
-		walkSpeed = math.max(runSpeed, 7),
+		walkSpeed = math.max(lastRunSpeed, 7),
 		faction = UnitFactionGroup("player"),
 		taxiKnown = ns.KnownTaxiNodes(),
 		anchors = ns.FreshAnchors(),
@@ -568,6 +580,11 @@ ns.Init(function()
 	end)
 	driver:Hide()
 	WorldMapFrame:AddCanvasClickHandler(OnCanvasClick)
+	for provider in pairs(WorldMapFrame.dataProviders) do
+		if provider.RefreshAllData == WaypointLocationDataProviderMixin.RefreshAllData then
+			hooksecurefunc(provider, "RefreshAllData", HideGuideWaypointPin)
+		end
+	end
 	WorldMapFrame:AddGlobalPinMouseActionHandler(OnPinClick)
 	Menu.ModifyMenu("MENU_QUEST_OBJECTIVE_TRACKER", function(owner, root)
 		-- The native menu owner is the tracker container, with no quest ID/context data.
