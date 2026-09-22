@@ -3,12 +3,13 @@ local _, ns = ...
 -- Shift-click the world map: the fastest way there from here, by foot, flight, boat, zeppelin, tram and portal,
 -- with the boats' live waits. The tracker owns the list; closing the map leaves the journey running.
 local REPLAN_EVERY = 5
-local SCHEDULED = { boat = true, zeppelin = true, tram = true }
+local SCHEDULED = { boat = true, zeppelin = true, lift = true, tram = true }
 local VERB = {
 	walk = "Walk to",
 	flight = "Fly to",
 	boat = "Boat to",
 	zeppelin = "Zeppelin to",
+	lift = "Lift to",
 	tram = "Tram to",
 	portal = "Portal to",
 	passage = "Go through to",
@@ -18,9 +19,19 @@ local goal, guide, result
 local progress = { index = 1 }
 local driver
 local ARRIVAL = 15
+-- A lift's landings share a spot on the map; height tells the top from the bottom.
+local ARRIVAL_HEIGHT = 30
 local lastRunSpeed = 7
-local PATH_REUSE = 3
+local PATH_REUSE, PATH_REUSE_HEIGHT = 3, 10
 local pathJobs, walkCache, pathVersion = {}, {}, 0
+-- Walks the pathfinder has measured on this journey, for the planner; the newest record of a walk replaces older
+-- ones. A walk turning out this much longer than planned, or blocked, replans once the plan's searches are in.
+local REPLAN_SLACK = 1.1
+-- Walking along a measured path from where you stood, how far off it you may stray and still be on it.
+local ON_PATH = 15
+local SAME_WALK = 30
+local measured = {}
+local Replan
 
 local function CancelPaths()
 	pathVersion = pathVersion + 1
@@ -53,8 +64,11 @@ local function LegTime(leg)
 end
 
 local function Near(node)
-	local x, y, _, map = UnitPosition("player")
-	return x and map == node.map and (x - node.x) ^ 2 + (y - node.y) ^ 2 <= ARRIVAL ^ 2
+	local x, y, z, map = UnitPosition("player")
+	return x
+		and map == node.map
+		and (x - node.x) ^ 2 + (y - node.y) ^ 2 <= ARRIVAL ^ 2
+		and not (z and node.z and math.abs(z - node.z) > ARRIVAL_HEIGHT)
 end
 
 local function SameWaypoint(a, b)
@@ -193,7 +207,7 @@ end
 
 function ns.ClearJourney()
 	CancelPaths()
-	walkCache = {}
+	walkCache, measured = {}, {}
 	StopGuide()
 	goal, result = nil, nil
 	progress.index, progress.departed = 1, false
@@ -321,7 +335,64 @@ local function Refresh()
 end
 
 local function NearPathEndpoint(a, b)
-	return a.map == b.map and (a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 <= PATH_REUSE ^ 2
+	return a.map == b.map
+		and (a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 <= PATH_REUSE ^ 2
+		and not (a.z and b.z and math.abs(a.z - b.z) > PATH_REUSE_HEIGHT)
+end
+
+local function Apart(a, b)
+	local dz = a.z and b.z and a.z - b.z or 0
+	return a.map ~= b.map or (a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 + dz ^ 2 > SAME_WALK ^ 2
+end
+
+-- Walks from your position change as you move, so only the newest to each destination is kept.
+local function Measure(from, to, cost, points)
+	for index = #measured, 1, -1 do
+		local walk = measured[index]
+		local sameStart = from.kind == "start" and walk.from.kind == "start"
+		if not Apart(walk.to, to) and (sameStart or not Apart(walk.from, from)) then
+			table.remove(measured, index)
+		end
+	end
+	measured[#measured + 1] = { from = from, to = to, cost = cost, points = points }
+end
+
+-- The rest of a measured walk from a point on it, in the walk's own yards (so swimming keeps its weight).
+local function Remaining(walk, here)
+	local points, total, best, after = walk.points, 0, nil, nil
+	local lengths = {}
+	for index = 2, #points do
+		local a, b = points[index - 1], points[index]
+		lengths[index] = math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2)
+		total = total + lengths[index]
+	end
+	local walked = 0
+	for index = 2, #points do
+		local a, b = points[index - 1], points[index]
+		local dx, dy, length = b.x - a.x, b.y - a.y, lengths[index]
+		local t = length > 0 and math.max(0, math.min(1, ((here.x - a.x) * dx + (here.y - a.y) * dy) / length ^ 2)) or 0
+		local off = math.sqrt((a.x + t * dx - here.x) ^ 2 + (a.y + t * dy - here.y) ^ 2)
+		local z = a.z and b.z and a.z + t * (b.z - a.z)
+		local level = not (z and here.z and math.abs(z - here.z) > ARRIVAL_HEIGHT)
+		if off <= ON_PATH and level and (not best or off < best) then
+			best, after = off, total - walked - t * length
+		end
+		walked = walked + length
+	end
+	return after and total > 0 and walk.cost * after / total
+end
+
+-- Measurements for the planner, with the walks from where you stood carried along to where you are now.
+local function Walks(here)
+	local walks = {}
+	for _, walk in ipairs(measured) do
+		walks[#walks + 1] = walk
+		local rest = walk.from.kind == "start" and walk.points and Remaining(walk, here)
+		if rest then
+			walks[#walks + 1] = { from = here, to = walk.to, cost = rest }
+		end
+	end
+	return walks
 end
 
 local function PrepareWalks(planned)
@@ -353,18 +424,25 @@ local function PrepareWalks(planned)
 end
 
 local function FindWalks(planned, searches)
-	local version = pathVersion
+	local version, pending, worse = pathVersion, #searches, false
 	for _, search in ipairs(searches) do
 		local leg, entry = search.leg, search.entry
 		local from, to = leg.from, leg.to
-		local job = ns.Path.Find(from.map, from.x, from.y, to.x, to.y, function(points, _, finished)
+		local job = ns.Path.Find(from.map, from, to, function(points, cost, finished)
 			pathJobs[finished] = nil
 			if result ~= planned or version ~= pathVersion then
 				return
 			end
+			pending = pending - 1
 			entry.done, entry.points = true, points
-			if points then
-				-- Geometry improves asynchronously; arrival times still use the planner's straight-line estimate.
+			if points or cost == "unreachable" then
+				Measure(from, to, points and cost, points)
+				-- The planner guessed a straight line; a walk that turns out blocked or longer may change the plan.
+				worse = worse or not points or cost > leg.yards * REPLAN_SLACK
+			end
+			if pending == 0 and worse then
+				Replan()
+			elseif points then
 				leg.walkPoints = points
 				if guide and result.legs[progress.index] == leg then
 					guide.target = nil
@@ -399,7 +477,7 @@ local function Render(planned)
 end
 
 local function Plan()
-	local x, y, _, map = UnitPosition("player")
+	local x, y, z, map = UnitPosition("player")
 	if not (x and goal) then
 		return nil
 	end
@@ -422,7 +500,7 @@ local function Plan()
 		end
 	end
 	local planned = ns.Planner.Plan({
-		from = { map = map, x = x, y = y },
+		from = { map = map, x = x, y = y, z = z },
 		to = goal,
 		now = now,
 		ride = ride,
@@ -436,11 +514,16 @@ local function Plan()
 		taxiPaths = ns.TaxiPaths,
 		portals = ns.Portals,
 		landmasses = ns.Landmasses,
+		walks = Walks({ map = map, x = x, y = y, z = z }),
 	})
 	if planned then
 		planned.now = now
 	end
 	return planned
+end
+
+Replan = function()
+	Render(Plan())
 end
 
 local function Update(self, elapsed)
@@ -472,7 +555,7 @@ end
 
 local function StartJourney(point)
 	CancelPaths()
-	walkCache = {}
+	walkCache, measured = {}, {}
 	if guide then
 		StopGuide()
 	end

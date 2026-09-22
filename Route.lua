@@ -13,6 +13,7 @@ local COLORS = {
 	flight = CreateColor(0.2, 1, 0.35),
 	boat = CreateColor(0, 0.75, 1),
 	zeppelin = CreateColor(1, 0.35, 0.1),
+	lift = ORANGE_FONT_COLOR,
 	tram = ORANGE_FONT_COLOR,
 	portal = CreateColor(0.85, 0.35, 1),
 	passage = CreateColor(0.85, 0.35, 1),
