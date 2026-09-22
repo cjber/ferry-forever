@@ -436,6 +436,22 @@ for map, walks in pairs(ns.Walks) do
 		assert(places[a].map == map and places[b].map == map, "baked walk on the wrong map " .. key)
 	end
 end
+for key, place in pairs(places) do
+	if place.map == 0 or place.map == 1 or place.map == 2991 then
+		local coords = ns.WalkPlaces[place.map] and ns.WalkPlaces[place.map][key]
+		assert(coords and (coords[1] - place.x) ^ 2 + (coords[2] - place.y) ^ 2 <= 1, "moved baked place " .. key)
+		for otherKey, other in pairs(places) do
+			if
+				key < otherKey
+				and place.map == other.map
+				and ns.Planner.Landmass(place, ns.Landmasses) == ns.Planner.Landmass(other, ns.Landmasses)
+			then
+				local pair = key .. " " .. otherKey
+				assert(ns.Walks[place.map] and ns.Walks[place.map][pair], "missing baked walk " .. pair)
+			end
+		end
+	end
+end
 -- Walking between two fixed places costs what was baked, not the straight line: with the direct way blocked, the
 -- walk goes by the docks at their baked cost.
 local baked = Plan({

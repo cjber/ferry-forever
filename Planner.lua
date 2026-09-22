@@ -108,7 +108,7 @@ function Planner.LegPoints(leg, routes)
 	return points
 end
 
-local function Landmass(node, landmasses)
+function Planner.Landmass(node, landmasses)
 	for index, land in ipairs(landmasses) do
 		if
 			node.map == land.map
@@ -210,7 +210,7 @@ function Planner.Plan(options)
 		nodes[index] =
 			{ kind = kind, id = id, map = point.map, x = point.x, y = point.y, z = point.z, label = point.label }
 		edges[index] = {}
-		masses[index] = Landmass(point, options.landmasses or {})
+		masses[index] = Planner.Landmass(point, options.landmasses or {})
 		return index
 	end
 
