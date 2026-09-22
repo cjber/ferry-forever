@@ -49,7 +49,7 @@ boat.anchors = { [7] = { epoch = 0 } }
 local ride = only(Plan(boat), "boat")
 near(ride.wait, 9000)
 near(ride.arrive, 20000)
-assert(ride.route == 7 and ride.stops == 1 and not ride.estimated)
+assert(ride.route == 7 and not ride.estimated)
 local points = LegPoints(ride, boat.routes)
 assert(#points == 3 and points[1].map == 1 and points[3].map == 1)
 near(points[1].x, boat.docks[1].x)
@@ -74,6 +74,32 @@ ride = only(Plan(boat), "boat")
 near(ride.wait, 30000)
 near(ride.arrive, 41000)
 assert(ride.estimated)
+
+-- Replanning on deck must stay aboard to the known next arrival, even if walking looks faster.
+boat.ride = { route = 7, dock = 1001, arrive = 20000 }
+boat.from, boat.now = point(1, 20, 10), 12000
+ride = only(Plan(boat), "boat")
+assert(ride.aboard and ride.to.id == 1001 and not ride.estimated)
+near(ride.wait, 0)
+near(ride.depart, 12000)
+near(ride.arrive, 20000)
+points = LegPoints(ride, boat.routes)
+assert(#points == 3)
+near(points[1].x, 20)
+near(points[2].x, 40)
+near(points[3].x, 100)
+boat.to = boat.from
+local returning = Plan(boat)
+assert(returning.legs[1].aboard, "even the nearby origin cannot be reached on foot while aboard")
+boat.from, boat.to, boat.now = point(1, 90, -10), point(1), 40000
+boat.ride = { route = 7, dock = 1, arrive = 60000 }
+ride = only(Plan(boat), "boat")
+points = LegPoints(ride, boat.routes)
+assert(#points == 4 and points[2].jump == 1 and not points[3].jump)
+near(points[1].x, 90)
+near(points[2].x, 80)
+near(points[3].x, 20)
+boat.ride, boat.from, boat.to, boat.now = nil, point(1), point(1, 100), 1000
 
 -- Reaching the second dock after departure costs another loop, even though it had not departed at now.
 local connection = options()
@@ -145,7 +171,7 @@ flight.taxiPaths[2] = { from = 2, to = 3, seconds = 20, estimated = true }
 flight.taxiPaths[1].points = { 1, 0, 0, 1, 3500, 200, 1, 7000, 0 }
 flight.taxiPaths[2].points = { 1, 7000, 0, 1, 10500, -200, 1, 14000, 0 }
 flying = only(Plan(flight), "flight")
-near(flying.arrive, 37000)
+near(flying.arrive, 34000)
 near(flying.wait, 3000)
 assert(flying.from.id == 1 and flying.to.id == 3 and flying.estimated)
 assert(#flying.hops == 2 and flying.hops[1] == flight.taxiPaths[1] and flying.hops[2] == flight.taxiPaths[2])
@@ -157,11 +183,35 @@ near(points[6].x, 10500)
 near(points[6].y, -200)
 near(points[8].x, 14000)
 
+-- A slightly later in-flight arrival beats an earlier ground arrival that must pay boarding again.
+local competing = options()
+competing.to = point(1, 7000)
+competing.taxiNodes = { point(1), point(1, 70), point(1, 7000) }
+competing.taxiPaths = { { from = 1, to = 2, seconds = 8 }, { from = 2, to = 3, seconds = 10 } }
+flying = only(Plan(competing), "flight")
+near(flying.arrive, 22000)
+assert(#flying.hops == 2)
+-- A ground transfer breaks the merged flight and pays a second boarding charge.
+competing.taxiNodes[3] = point(1, 140)
+competing.taxiNodes[4] = competing.to
+competing.taxiPaths[1].seconds = 1
+competing.taxiPaths[2] = { from = 3, to = 4, seconds = 10 }
+result = Plan(competing)
+assert(#result.legs == 3 and result.legs[2].mode == "walk")
+near(result.legs[1].wait, 3000)
+near(result.legs[3].wait, 3000)
+near(result.arrive, 28000)
+-- Co-located but disconnected taxi nodes still require landing and boarding another flight.
+competing.taxiNodes[3] = point(1, 70)
+result = Plan(competing)
+assert(#result.legs == 2 and #result.legs[1].hops == 1 and #result.legs[2].hops == 1)
+near(result.legs[2].wait, 3000)
+near(result.arrive, 18000)
+
 -- Multi-stop rides include the middle dwell, and the final destination may wrap past phase zero.
 connection.routes[1].stops[3] = { dock = 3, arrive = 20000, depart = 25000 }
 connection.routes[2] = nil
 ride = only(Plan(connection), "boat")
-assert(ride.stops == 2)
 near(ride.arrive, 20000)
 connection.from, connection.to, connection.now = point(3), point(1), 21000
 ride = only(Plan(connection), "boat")
@@ -182,6 +232,32 @@ points = LegPoints(only(Plan(real), "tram"), real.routes)
 assert(#points > 2 and points[1].map == 369 and points[#points].map == 369)
 near(points[1].y, ns.Docks[1101].y)
 near(points[#points].y, ns.Docks[1102].y)
+-- The reported Ratchet regression: 55 seconds out, Booty Bay is still only 52 seconds ahead.
+local ratchet = ns.Routes[241]
+real.now = ratchet.stops[1].depart + 55000
+for index = 1, #ratchet.frames - 1 do
+	local a, b = ratchet.frames[index], ratchet.frames[index + 1]
+	if a[2] <= real.now and real.now < b[1] then
+		local t = (real.now - a[2]) / (b[1] - a[2])
+		real.from = point(a[3], a[4] + (b[4] - a[4]) * t, a[5] + (b[5] - a[5]) * t)
+		break
+	end
+end
+real.to = ns.Docks[2]
+real.ride = { route = 241, dock = 2, arrive = ratchet.stops[2].arrive }
+ride = only(Plan(real), "boat")
+assert(ride.aboard and ride.route == 241)
+near(ride.arrive - real.now, 51854)
+points = LegPoints(ride, real.routes)
+assert(points[1].map == 1 and points[#points].map == 0)
+local jump
+for index, p in ipairs(points) do
+	if p.jump then
+		jump = index
+	end
+end
+assert(jump and points[jump].map == 1 and points[jump + 1].map == 0)
+real.ride = nil
 real.from, real.to = ns.Docks[7], ns.Docks[10]
 assert(Plan(real), "Rut'theran to Auberdine is reachable")
 for _, path in ipairs(ns.TaxiPaths) do

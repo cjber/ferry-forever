@@ -398,9 +398,6 @@ function FerryForeverPortalPinMixin:OnMouseEnter()
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 	GameTooltip_SetTitle(GameTooltip, portal.name)
 	GameTooltip_AddNormalLine(GameTooltip, "to " .. (destination and destination.zone or UNKNOWN))
-	if portal.requires then
-		GameTooltip_AddColoredLine(GameTooltip, portal.requires, GRAY_FONT_COLOR)
-	end
 	GameTooltip:Show()
 end
 

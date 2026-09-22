@@ -18,7 +18,24 @@ function Planner.LegPoints(leg, routes)
 	elseif leg.route then
 		local route = routes[leg.route]
 		local boarding, alighting = leg.boarding, leg.alighting
-		if route and route.frames and boarding and alighting then
+		if route and route.frames and leg.aboard and alighting then
+			-- Only the remaining geometry, including any continent jump ahead of the player.
+			local remaining = leg.arrive - leg.depart
+			local ordered = {}
+			for index, frame in ipairs(route.frames) do
+				local untilDock = (alighting.arrive - frame[1]) % route.period
+				if untilDock > 0 and untilDock < remaining then
+					ordered[#ordered + 1] = { frame = frame, remaining = untilDock, index = index }
+				end
+			end
+			table.sort(ordered, function(a, b)
+				return a.remaining > b.remaining or (a.remaining == b.remaining and a.index < b.index)
+			end)
+			for _, entry in ipairs(ordered) do
+				local frame = entry.frame
+				points[#points + 1] = { map = frame[3], x = frame[4], y = frame[5], jump = frame[6] }
+			end
+		elseif route and route.frames and boarding and alighting then
 			local duration = Model.RideTime(route, boarding, alighting)
 			for index, frame in ipairs(route.frames) do
 				if frame[2] % route.period == boarding.depart % route.period then
@@ -105,6 +122,8 @@ function Planner.Plan(options)
 	for id, portal in ipairs(options.portals or {}) do
 		if not portal.requires and Eligible(portal, options) then
 			local from, to = Add("portal", id * 2 - 1, portal.from), Add("portal", id * 2, portal.to)
+			-- Where a portal leads, by name: the tram's tunnel (map 369) has no zone to name it by.
+			nodes[to].label = portal.name and portal.name:gsub("^%a+ to ", "")
 			Edge(from, to, { mode = portal.kind, duration = portal.seconds * 1000 })
 		end
 	end
@@ -131,7 +150,6 @@ function Planner.Plan(options)
 								route = id,
 								stop = stop,
 								alighting = onward,
-								stops = offset,
 								duration = Model.RideTime(route, stop, onward),
 							})
 						end
@@ -140,10 +158,26 @@ function Planner.Plan(options)
 			end
 		end
 	end
+	local ride = options.ride
+	if ride and docks[ride.dock] and (options.routes or {})[ride.route] then
+		local route = options.routes[ride.route]
+		for _, stop in ipairs(route.stops) do
+			if stop.dock == ride.dock then
+				Edge(start, docks[ride.dock], {
+					mode = route.kind,
+					route = ride.route,
+					aboard = true,
+					alighting = stop,
+					duration = math.max(0, ride.arrive - options.now),
+				})
+				break
+			end
+		end
+	end
 	for from, a in ipairs(nodes) do
 		for to = from + 1, #nodes do
 			local b = nodes[to]
-			if a.map == b.map and masses[from] == masses[to] then
+			if a.map == b.map and masses[from] == masses[to] and not (ride and from == start) then
 				local duration = math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2) / speed * 1000
 				Edge(from, to, { mode = "walk", duration = duration, estimated = true })
 				Edge(to, from, { mode = "walk", duration = duration, estimated = true })
@@ -151,10 +185,12 @@ function Planner.Plan(options)
 		end
 	end
 
+	-- A taxi reached on foot and the same taxi reached in flight have different onward boarding costs.
+	local count = #nodes
 	local arrival, visited, previous = { [start] = options.now }, {}, {}
-	for _ = 1, #nodes do
+	for _ = 1, count * 2 do
 		local current, earliest
-		for index in ipairs(nodes) do
+		for index = 1, count * 2 do
 			if not visited[index] and arrival[index] and (not earliest or arrival[index] < earliest) then
 				current, earliest = index, arrival[index]
 			end
@@ -166,9 +202,10 @@ function Planner.Plan(options)
 			break
 		end
 		visited[current] = true
-		for _, edge in ipairs(edges[current]) do
+		local node = (current - 1) % count + 1
+		for _, edge in ipairs(edges[node]) do
 			local wait, estimated = 0, edge.estimated or false
-			if edge.route then
+			if edge.route and not edge.aboard then
 				local route = options.routes[edge.route]
 				local anchor = (options.anchors or {})[edge.route]
 				if anchor then
@@ -177,25 +214,26 @@ function Planner.Plan(options)
 				else
 					wait, estimated = route.period / 2, true
 				end
-			elseif edge.mode == "flight" then
+			elseif edge.mode == "flight" and current <= count then
 				wait = BOARDING
 			end
 			local depart = earliest + wait
 			local finish = depart + edge.duration
-			if not visited[edge.to] and (not arrival[edge.to] or finish < arrival[edge.to]) then
-				arrival[edge.to] = finish
-				previous[edge.to] = {
+			local target = edge.to + (edge.mode == "flight" and count or 0)
+			if not visited[target] and (not arrival[target] or finish < arrival[target]) then
+				arrival[target] = finish
+				previous[target] = {
 					index = current,
 					leg = {
 						mode = edge.mode,
-						from = nodes[current],
+						from = nodes[node],
 						to = nodes[edge.to],
 						depart = depart,
 						arrive = finish,
 						wait = wait,
 						estimated = estimated,
 						route = edge.route,
-						stops = edge.stops,
+						aboard = edge.aboard,
 						boarding = edge.stop,
 						alighting = edge.alighting,
 						hops = edge.path and { edge.path } or nil,
@@ -214,10 +252,11 @@ function Planner.Plan(options)
 	end
 	for index = #reversed, 1, -1 do
 		local leg, last = reversed[index], legs[#legs]
-		if leg.mode == "flight" and last and last.mode == "flight" then
+		local preceding = reversed[index + 1]
+		if leg.mode == "flight" and last and preceding.mode == "flight" then
 			last.to, last.arrive = leg.to, leg.arrive
 			last.hops[#last.hops + 1] = leg.hops[1]
-			-- Intermediate boarding is inside the leg; wait describes only its initial departure.
+			-- Connecting hops stay in flight; only the initial departure pays boarding.
 			last.estimated = last.estimated or leg.estimated
 		elseif leg.mode ~= "walk" or leg.arrive > leg.depart or #reversed == 1 then
 			legs[#legs + 1] = leg
