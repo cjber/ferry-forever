@@ -15,8 +15,11 @@
 	</Frame>
 	<Frame name="FerryForeverPortalPinTemplate" inherits="BaseHighlightableMapPoiPinTemplate"
 		mixin="FerryForeverPortalPinMixin" enableMouse="true" virtual="true"/>
+	<Frame name="FerryForeverFlightPinTemplate" inherits="FlightPointPinTemplate"
+		mixin="FerryForeverFlightPinMixin" virtual="true"/>
+	<Frame name="FerryForeverTransportPinTemplate" mixin="FerryForeverTransportPinMixin" virtual="true"/>
 	<Frame name="FerryForeverRoutePinTemplate" mixin="FerryForeverRoutePinMixin" virtual="true"/>
-	<Frame name="FerryForeverGoalPinTemplate" mixin="FerryForeverGoalPinMixin" virtual="true">
+	<Frame name="FerryForeverGoalPinTemplate" mixin="FerryForeverGoalPinMixin" enableMouse="true" virtual="true">
 		<Layers>
 			<Layer level="ARTWORK">
 				<Texture parentKey="Texture" setAllPoints="true"/>

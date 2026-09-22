@@ -1,6 +1,7 @@
 local _, ns = ...
 
 local PIN_TEMPLATE = "FerryForeverDockPinTemplate"
+local FLIGHT_TEMPLATE = "FerryForeverFlightPinTemplate"
 local PORTAL_TEMPLATE = "FerryForeverPortalPinTemplate"
 local PIN_SIZE = 20
 local ARROW_SIZE = 15
@@ -76,6 +77,21 @@ local function AddDepartureLines(departures)
 			StatusColor(departure)
 		)
 	end
+end
+
+-- Use the same departure rows on a route hover as on its docks.
+function ns.TransportTooltip(routeID)
+	local route, departures = ns.Routes[routeID], {}
+	for _, stop in ipairs(route.stops) do
+		for _, departure in ipairs(ns.DockDepartures(stop.dock)) do
+			if departure.route == routeID then
+				departures[#departures + 1] = departure
+			end
+		end
+	end
+	GameTooltip_SetTitle(GameTooltip, KIND[route.kind])
+	AddDepartureLines(departures)
+	GameTooltip:Show()
 end
 
 FerryForeverDockPinMixin = CreateFromMixins(MapCanvasPinMixin)
@@ -172,6 +188,13 @@ function FerryForeverDockPinMixin:RefreshTooltip()
 end
 
 function FerryForeverDockPinMixin:OnMouseEnter()
+	local routes = {}
+	for _, dock in ipairs(self.cluster.docks) do
+		for _, departure in ipairs(ns.DockDepartures(dock.id)) do
+			routes[departure.route] = true
+		end
+	end
+	ns.HoverTransportRoutes(self, routes)
 	provider:ShowDestinations(self)
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 	self:RefreshTooltip()
@@ -190,6 +213,7 @@ function FerryForeverDockPinMixin:OnMouseEnter()
 end
 
 function FerryForeverDockPinMixin:OnMouseLeave()
+	ns.HoverTransportRoutes(self, nil)
 	provider:HideDestinations()
 	self:SetScript("OnUpdate", nil)
 	if GameTooltip:IsOwned(self) then
@@ -435,18 +459,117 @@ function PortalProviderMixin:RefreshAllData()
 	end
 end
 
-local portalProvider
+-- Reuse the native flight-point template and acquisition (atlas size, nudging and supertracking).
+FerryForeverFlightPinMixin = CreateFromMixins(FlightPointPinMixin)
+
+function FerryForeverFlightPinMixin:OnMouseEnter()
+	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	GameTooltip_SetTitle(GameTooltip, self.poiInfo.name)
+	if self.poiInfo.isUndiscovered then
+		GameTooltip_AddNormalLine(GameTooltip, "Not discovered")
+	end
+	GameTooltip:Show()
+end
+
+function FerryForeverFlightPinMixin:OnMouseLeave()
+	if GameTooltip:IsOwned(self) then
+		GameTooltip:Hide()
+	end
+end
+
+function FerryForeverFlightPinMixin:OnReleased()
+	self:OnMouseLeave()
+	MapCanvasPinMixin.OnReleased(self)
+end
+
+local FlightProviderMixin = CreateFromMixins(FlightPointDataProviderMixin)
+
+function FlightProviderMixin:RemoveAllData()
+	self:GetMap():RemoveAllPinsByTemplate(FLIGHT_TEMPLATE)
+end
+
+function FlightProviderMixin:RefreshAllData()
+	self:RemoveAllData()
+	local map = self:GetMap()
+	local mapID = map:GetMapID()
+	if not (ns.db.mapFlightMasters and mapID and map:IsVisible()) then
+		return
+	end
+	local known, faction = ns.KnownTaxiNodes(), UnitFactionGroup("player")
+	local queried, reported = {}, {}
+	local function Query(id)
+		if id and not queried[id] then
+			queried[id] = true
+			for _, info in ipairs(C_TaxiMap.GetTaxiNodesForMap(id) or {}) do
+				reported[info.nodeID] = info
+			end
+		end
+	end
+	Query(mapID)
+	for id, node in pairs(ns.TaxiNodes) do
+		local location = ns.Locate(node)
+		local x, y = MapPosition(node, mapID)
+		if x and location and IsDockMap(location, mapID) then
+			Query(location.uiMap)
+			local unknown = known ~= nil and not known[id]
+			local native = reported[id]
+			-- The API's nodeID is the TaxiNodes DB2 key, also used by Taxi.lua; no name/position guessing.
+			local info = {
+				nodeID = id,
+				name = node.name,
+				position = CreateVector2D(x, y),
+				isUndiscovered = unknown,
+				faction = Enum.FlightPathFaction[node.faction or "Neutral"],
+				-- Native fallback atlases from UiTextureAtlasMember, build 1.60.1.69913.
+				atlasName = unknown and "taxinode_undiscovered" or "taxinode_" .. (node.faction or "Neutral"):lower(),
+			}
+			if native and native.isUndiscovered == unknown and native.atlasName ~= "" then
+				info.atlasName = native.atlasName
+				info.textureKit = native.textureKit ~= "" and native.textureKit or nil
+			end
+			if self:ShouldShowTaxiNode(faction, info) then
+				map:AcquirePin(FLIGHT_TEMPLATE, info)
+			end
+		end
+	end
+end
+
+local portalProvider, flightProvider
 
 function ns.RefreshMap()
 	if provider then
 		provider:RefreshAllData()
 		portalProvider:RefreshAllData()
+		flightProvider:RefreshAllData()
+		ns.RefreshTransportRoutes()
 	end
+end
+
+-- Works before the matching Settings.lua checkboxes are registered as well as afterwards.
+local function ToggleMapOption(key)
+	local value = not ns.db[key]
+	local setting = Settings.GetSetting("FerryForever_" .. key)
+	if setting then
+		setting:SetValue(value)
+	else
+		ns.db[key] = value
+	end
+	ns.RefreshMap()
 end
 
 -- The world map's Map Filter ("Show:") menu gets the same switches as the settings panel.
 local function AddFilters(_, rootDescription)
 	rootDescription:CreateDivider()
+	rootDescription:CreateCheckbox("Flight Masters", function()
+		return ns.db.mapFlightMasters
+	end, function()
+		ToggleMapOption("mapFlightMasters")
+	end)
+	rootDescription:CreateCheckbox("Boat and Zeppelin Routes", function()
+		return ns.db.mapRoutes
+	end, function()
+		ToggleMapOption("mapRoutes")
+	end)
 	rootDescription:CreateCheckbox("Boats & Zeppelins", function()
 		return ns.db.pins
 	end, function()
@@ -470,6 +593,28 @@ local function AddFilters(_, rootDescription)
 end
 
 ns.Init(function()
+	for _, key in ipairs({ "mapFlightMasters", "mapRoutes" }) do
+		if ns.db[key] == nil then
+			ns.db[key] = true
+		end
+	end
+	-- Replace only this map's stock provider, avoiding duplicates if the native gate starts returning true.
+	for existing in pairs(WorldMapFrame.dataProviders) do
+		if existing.RefreshAllData == FlightPointDataProviderMixin.RefreshAllData then
+			WorldMapFrame:RemoveDataProvider(existing)
+		end
+	end
+	flightProvider = CreateFromMixins(FlightProviderMixin)
+	WorldMapFrame:AddDataProvider(flightProvider)
+	local taxiEvents = CreateFrame("Frame")
+	taxiEvents:RegisterEvent("TAXI_NODE_STATUS_CHANGED")
+	taxiEvents:RegisterEvent("TAXIMAP_OPENED")
+	taxiEvents:SetScript("OnEvent", function()
+		-- Let Taxi.lua finish updating the known-set before recolouring the pins.
+		C_Timer.After(0, function()
+			flightProvider:RefreshAllData()
+		end)
+	end)
 	provider = CreateFromMixins(ProviderMixin)
 	portalProvider = CreateFromMixins(PortalProviderMixin)
 	WorldMapFrame:AddDataProvider(provider)

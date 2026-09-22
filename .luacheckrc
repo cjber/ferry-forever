@@ -80,3 +80,13 @@ read_globals = {
 	"C_Minimap",
 }
 files["tests/"] = { std = "+luajit", globals = { "arg" } }
+
+-- Round 3: native flight pins, tracker colours and context menus.
+globals[#globals + 1] = "FerryForeverFlightPinMixin"
+globals[#globals + 1] = "FerryForeverTransportPinMixin"
+read_globals[#read_globals + 1] = "FlightPointPinMixin"
+read_globals[#read_globals + 1] = "FlightPointDataProviderMixin"
+read_globals[#read_globals + 1] = "OBJECTIVE_TRACKER_COLOR"
+read_globals[#read_globals + 1] = "MenuUtil"
+-- Shared-workspace arrow: Blizzard_QuestNavigation/SuperTrackedFrame.lua:291.
+read_globals[#read_globals + 1] = "C_Navigation"

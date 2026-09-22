@@ -19,9 +19,9 @@ Core.lua
 Observer.lua
 Sync.lua
 Map.xml
+Taxi.lua
 Map.lua
 Tracker.lua
-Taxi.lua
 Journey.lua
 Route.lua
 Alert.lua
