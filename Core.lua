@@ -1,16 +1,31 @@
 local addonName, ns = ...
 
 local Model = ns.Model
-local DEFAULTS = { pins = true, otherFaction = true, tracker = true, share = true }
+local DEFAULTS = {
+	pins = true,
+	transit = true,
+	portals = true,
+	otherFaction = true,
+	tracker = true,
+	alerts = true,
+	alertSound = true,
+	journey = true,
+	share = true,
+}
 
 function ns.Print(message)
 	print(NORMAL_FONT_COLOR:WrapTextInColorCode("Ferry Forever:") .. " " .. message)
 end
 
+-- Each module starts on its own, so one that fails (reported as usual) does not stop the rest.
+local function Start(fn)
+	xpcall(fn, geterrorhandler())
+end
+
 local pending, ready = {}, false
 function ns.Init(fn)
 	if ready then
-		fn()
+		Start(fn)
 	else
 		pending[#pending + 1] = fn
 	end
@@ -65,12 +80,11 @@ function ns.FreshAnchors()
 	return fresh
 end
 
--- The zone map a dock sits on. GetMapPosFromWorldPos may answer with the continent, so descend to the zone
--- under the point when it does.
-local locations = {}
-local function Resolve(dock)
-	local world = CreateVector2D(dock.x, dock.y)
-	local uiMap, position = C_Map.GetMapPosFromWorldPos(dock.map, world)
+-- The zone map a world point ({ map, x, y }) sits on. GetMapPosFromWorldPos may answer with the continent, so
+-- descend to the zone under the point when it does.
+local function Resolve(point)
+	local world = CreateVector2D(point.x, point.y)
+	local uiMap, position = C_Map.GetMapPosFromWorldPos(point.map, world)
 	if not uiMap then
 		return nil
 	end
@@ -78,7 +92,7 @@ local function Resolve(dock)
 	if info and info.mapType ~= Enum.UIMapType.Zone then
 		local zone = C_Map.GetMapInfoAtPosition(uiMap, position:GetXY())
 		if zone and zone.mapType == Enum.UIMapType.Zone then
-			local zoneMap, zonePosition = C_Map.GetMapPosFromWorldPos(dock.map, world, zone.mapID)
+			local zoneMap, zonePosition = C_Map.GetMapPosFromWorldPos(point.map, world, zone.mapID)
 			if zoneMap then
 				uiMap, position, info = zoneMap, zonePosition, zone
 			end
@@ -88,11 +102,22 @@ local function Resolve(dock)
 	return { uiMap = uiMap, x = x, y = y, zone = info and info.name or UNKNOWN }
 end
 
-function ns.DockLocation(dockID)
-	if locations[dockID] == nil then
-		locations[dockID] = Resolve(ns.Docks[dockID]) or false
+local locations = setmetatable({}, { __mode = "k" })
+function ns.Locate(point)
+	if locations[point] == nil then
+		locations[point] = Resolve(point) or false
 	end
-	return locations[dockID] or nil
+	return locations[point] or nil
+end
+
+-- Where a dock is drawn: the tram's stations are on a map with no world map, so they show at the city entrance.
+function ns.DockPoint(dockID)
+	local dock = ns.Docks[dockID]
+	return dock.pin or dock
+end
+
+function ns.DockLocation(dockID)
+	return ns.Locate(ns.DockPoint(dockID))
 end
 
 function ns.DockZone(dockID)
@@ -100,15 +125,27 @@ function ns.DockZone(dockID)
 	return location and location.zone or UNKNOWN
 end
 
+-- A dock as a destination: a lift's landing or a tram station by name, a pier by its zone.
+function ns.DockLabel(dockID)
+	return ns.Docks[dockID].name or ns.DockZone(dockID)
+end
+
+-- A dock as a heading: "The Great Lift, Top", or the zone.
+function ns.DockTitle(dockID)
+	local dock = ns.Docks[dockID]
+	return dock.site and dock.site .. ", " .. dock.name or ns.DockZone(dockID)
+end
+
 function ns.NearestDock()
-	local x, y, _, map = UnitPosition("player")
+	local x, y, z, map = UnitPosition("player")
 	if not x then
 		return nil
 	end
+	-- Height counts where it is known, so a lift's top and bottom landings stay apart.
 	local nearest, yards
-	for dockID, dock in ipairs(ns.Docks) do
+	for dockID, dock in pairs(ns.Docks) do
 		if dock.map == map then
-			local distance = math.sqrt((dock.x - x) ^ 2 + (dock.y - y) ^ 2)
+			local distance = math.sqrt((dock.x - x) ^ 2 + (dock.y - y) ^ 2 + (dock.z and z and (dock.z - z) ^ 2 or 0))
 			if not yards or distance < yards then
 				nearest, yards = dockID, distance
 			end
@@ -127,6 +164,12 @@ end
 -- Anyone can ride either faction's boats, so the other faction's show unless turned off.
 function ns.RouteShown(route)
 	return ns.db.otherFaction or not route.faction or route.faction == UnitFactionGroup("player")
+end
+
+-- Which map filter each kind of route answers to.
+local FILTER = { boat = "pins", zeppelin = "pins", lift = "transit", tram = "transit" }
+function ns.KindShown(kind)
+	return ns.db[FILTER[kind] or error("unknown route kind " .. tostring(kind))]
 end
 
 function ns.DockDepartures(dockID)
@@ -149,6 +192,45 @@ function ns.DockDepartures(dockID)
 	end
 	table.sort(departures, SoonestFirst)
 	return departures
+end
+
+-- Boats sharing a lane (Auberdine's two Menethil boats, a lift's two cars) read as one line: the soonest,
+-- with when the one after it leaves once both are timed. Departures arrive soonest first.
+function ns.ByDestination(departures)
+	local merged, first = {}, {}
+	for _, departure in ipairs(departures) do
+		local labels = {}
+		for _, dockID in ipairs(departure.to) do
+			labels[#labels + 1] = ns.DockLabel(dockID)
+		end
+		local key = table.concat(labels, ",")
+		local lead = first[key]
+		if not lead then
+			first[key] = departure
+			merged[#merged + 1] = departure
+		elseif lead.known and departure.known and not lead.thenIn then
+			lead.thenIn = departure.departIn
+		end
+	end
+	return merged
+end
+
+-- Where the route being ridden calls next, and in how many ms, when its schedule is known.
+function ns.NextStop(routeID)
+	local anchor = ns.FreshAnchors()[routeID]
+	if not anchor then
+		return nil
+	end
+	local route = ns.Routes[routeID]
+	local phase = (ns.NowMs() - anchor.epoch) % route.period
+	local dockID, soonest
+	for _, stop in ipairs(route.stops) do
+		local docked, arriveIn = Model.Visit(route, stop, phase)
+		if not docked and (not soonest or arriveIn < soonest) then
+			dockID, soonest = stop.dock, arriveIn
+		end
+	end
+	return dockID, soonest
 end
 
 ns.FormatCountdown = Model.FormatCountdown
@@ -176,7 +258,7 @@ frame:SetScript("OnEvent", function(self, _, name)
 	end
 	ready = true
 	for _, fn in ipairs(pending) do
-		fn()
+		Start(fn)
 	end
 	pending = nil
 end)

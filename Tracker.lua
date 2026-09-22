@@ -2,6 +2,7 @@ local _, ns = ...
 
 local module
 local ModuleMixin = { headerText = "Boats" }
+local HEADER = { boat = "Boats", zeppelin = "Boats", lift = "Lifts", tram = "Deeprun Tram" }
 
 local function OpenDockMap(dockID)
 	local location = dockID and ns.DockLocation(dockID)
@@ -10,32 +11,53 @@ end
 
 function ModuleMixin:OnBlockHeaderClick(_block, button)
 	if button == "LeftButton" then
-		OpenDockMap(self.dockID)
+		OpenDockMap(self.mapDock)
 	end
 end
 
 local function DepartureText(departure)
-	local text = ns.DockZone(departure.to[1]) .. "   " .. ns.DepartureStatus(departure)
+	local text = ns.DockLabel(departure.to[1]) .. "   " .. ns.DepartureStatus(departure)
 	return departure.known and text or GRAY_FONT_COLOR:WrapTextInColorCode(text)
 end
 
 function ModuleMixin:LayoutContents()
-	if not self.dockID then
+	if not self.blockKey then
 		return
 	end
-	local block = self:GetBlock(self.dockID)
-	block:SetHeader(ns.DockZone(self.dockID))
-	for _, departure in ipairs(self.departures) do
-		block:AddObjective(departure.route, DepartureText(departure), nil, true)
+	local block = self:GetBlock(self.blockKey)
+	block:SetHeader(self.title)
+	for _, row in ipairs(self.rows) do
+		block:AddObjective(row.key, row.text, nil, true)
 	end
 	self:LayoutBlock(block)
+end
+
+-- Waiting at a dock: its departures, one line per destination.
+local function DockRows(dockID)
+	local departures = ns.ByDestination(ns.DockDepartures(dockID))
+	local rows = {}
+	for _, departure in ipairs(departures) do
+		rows[#rows + 1] = { key = departure.route, text = DepartureText(departure) }
+	end
+	return rows, departures[1] and departures[1].kind
+end
+
+-- On board, out of sight of any dock: where the boat calls next.
+local function RideRows(routeID)
+	local dockID, arriveIn = ns.NextStop(routeID)
+	if not dockID then
+		return nil
+	end
+	local kind = ns.Routes[routeID].kind
+	local text = "arrives " .. ns.FormatCountdown(arriveIn)
+	return { { key = routeID, text = text } }, kind, dockID
 end
 
 function ns.RefreshTracker()
 	if not module then
 		return
 	end
-	local dockID, yards
+	local dockID, yards, rows, kind, title, blockKey, mapDock
 	if ns.db.tracker then
 		dockID, yards = ns.NearestDock()
 		local radius = module.dockID and 160 or 120
@@ -43,33 +65,47 @@ function ns.RefreshTracker()
 			dockID = nil
 		end
 	end
-	local departures = dockID and ns.DockDepartures(dockID) or {}
-	local changed = dockID ~= module.dockID or #departures ~= #module.departures
-	for index, departure in ipairs(departures) do
-		local previous = module.departures[index]
-		if not previous or departure.route ~= previous.route then
+	if dockID then
+		rows, kind = DockRows(dockID)
+		title, blockKey, mapDock = ns.DockTitle(dockID), "dock" .. dockID, dockID
+	elseif ns.db.tracker and ns.CurrentRide() then
+		rows, kind, mapDock = RideRows(ns.CurrentRide())
+		if rows then
+			title, blockKey = "On board to " .. ns.DockTitle(mapDock), "ride" .. mapDock
+		end
+	end
+	rows = rows or {}
+	local changed = blockKey ~= module.blockKey or title ~= module.title or #rows ~= #module.rows
+	for index, row in ipairs(rows) do
+		local previous = module.rows[index]
+		if not previous or row.key ~= previous.key then
 			changed = true
 		end
 	end
-	module.dockID, module.departures = dockID, departures
+	module.dockID, module.mapDock, module.blockKey, module.title, module.rows = dockID, mapDock, blockKey, title, rows
+	local header = kind and HEADER[kind] or ModuleMixin.headerText
+	if header ~= module.headerText then
+		module.headerText = header
+		module:SetHeader(header)
+		changed = true
+	end
 	if changed then
 		module:MarkDirty()
 		return
 	end
-	if not dockID or module:IsDirty() then
+	if not blockKey or module:IsDirty() then
 		return
 	end
-	local block = module:GetExistingBlock(dockID)
+	local block = module:GetExistingBlock(blockKey)
 	if not (block and block.used) then
 		return
 	end
 	-- Countdown ticks reuse Blizzard's lines; only changed wrapping needs a new layout.
 	local resized = false
-	for _, departure in ipairs(departures) do
-		local line = block:GetExistingLine(departure.route)
-		local text = DepartureText(departure)
-		if line and line.used and line.Text:GetText() ~= text then
-			local height = block:SetStringText(line.Text, text, true, nil, block.isHighlighted)
+	for _, row in ipairs(rows) do
+		local line = block:GetExistingLine(row.key)
+		if line and line.used and line.Text:GetText() ~= row.text then
+			local height = block:SetStringText(line.Text, row.text, true, nil, block.isHighlighted)
 			resized = resized or height ~= line:GetHeight()
 		end
 	end
@@ -91,13 +127,13 @@ ns.Init(function()
 	end
 	module = CreateFrame("Frame", "FerryForeverObjectiveTracker", UIParent, "ObjectiveTrackerModuleTemplate")
 	Mixin(module, ModuleMixin)
-	module.departures = {}
+	module.rows = {}
 	module:SetHeader(ModuleMixin.headerText)
 	module.uiOrder = -2
 	module.Header:EnableMouse(true)
 	module.Header:SetScript("OnMouseUp", function(_, button)
 		if button == "LeftButton" then
-			OpenDockMap(module.dockID)
+			OpenDockMap(module.mapDock)
 		end
 	end)
 	-- The manager's Init is deferred through a closure; AddContainer remains hookable.

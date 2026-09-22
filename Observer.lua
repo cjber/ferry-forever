@@ -4,10 +4,13 @@ local Model = ns.Model
 -- A ride ends once the boat has not moved for this long: it docked (a minute), or the player got off. A
 -- continent crossing's loading screen takes a few seconds; the far side is the same ride.
 local RIDE_GAP = 30000
--- Only samples moving at least this fast count: boats cruise at 30 yd/s, a running player makes 7.
+-- Only samples moving at least this fast count: boats cruise at 30 yd/s, a running player makes 7. Lifts set
+-- their own (route.fit.speed), since they climb slower than a boat sails.
 local MIN_SPEED = 12
 -- Fitting is quadratic in samples, so it runs every few samples rather than every second.
 local FIT_EVERY = 10
+-- About 25 minutes of debug samples.
+local TRACE_LIMIT = 1500
 
 -- { samples = { [route] = {...} }, count, last = ms of the latest moving sample, announced = route }
 local ride
@@ -34,26 +37,37 @@ local function Record()
 	end
 	local sighting = { epoch = fits[routeID].epoch, seen = GetServerTime(), source = "you" }
 	if ns.Sighted(routeID, sighting) and ride.announced ~= routeID then
-		ns.Print(string.format("synced the %s schedule from your ride.", ns.Routes[routeID].kind))
+		local route = ns.Routes[routeID]
+		ns.Print(string.format("synced the %s schedule from your ride.", route.site or route.kind))
 	end
 	ride.announced = routeID
 	ns.Share(routeID)
 end
 
-local function Moving(now, x, y, map)
-	local moving = previous
-		and previous.map == map
-		and math.sqrt((x - previous.x) ^ 2 + (y - previous.y) ^ 2) >= MIN_SPEED * (now - previous.now) / 1000
-	previous = { now = now, x = x, y = y, map = map }
-	return moving
+-- Speed since the last sample in yd/s, height included (0 across a map change).
+local function Speed(now, x, y, z, map)
+	local speed = 0
+	if previous and previous.map == map and now > previous.now then
+		local distance = math.sqrt((x - previous.x) ^ 2 + (y - previous.y) ^ 2 + (z - previous.z) ^ 2)
+		speed = distance * 1000 / (now - previous.now)
+	end
+	previous = { now = now, x = x, y = y, z = z, map = map }
+	return speed
+end
+
+-- The route the player is riding, once the ride has shown which.
+function ns.CurrentRide()
+	return ride and ride.announced
 end
 
 local function Sample()
 	local now = ns.NowMs()
-	local x, y, _, map = UnitPosition("player")
-	if x and not UnitOnTaxi("player") and Moving(now, x, y, map) then
+	local x, y, z, map = UnitPosition("player")
+	local speed = x and not UnitOnTaxi("player") and Speed(now, x, y, z or 0, map) or 0
+	if speed > 0 then
 		for routeID, route in pairs(ns.Routes) do
-			local phases = Model.Phases(route, map, x, y)
+			local phases = speed >= (route.fit and route.fit.speed or MIN_SPEED) and Model.Phases(route, map, x, y, z)
+				or {}
 			if #phases > 0 then
 				ride = ride or { samples = {}, count = 0 }
 				ride.samples[routeID] = ride.samples[routeID] or {}
@@ -73,8 +87,28 @@ local function Sample()
 		Record()
 		ride = nil
 	end
+	-- `/ferry debug` also keeps the raw samples in the saved variables, to diagnose a ride that did not sync.
+	if ns.db.debug then
+		local fits = {}
+		for routeID, samples in pairs(ride and ride.samples or {}) do
+			local epoch, support = Model.FitEpoch(ns.Routes[routeID], samples)
+			fits[#fits + 1] = string.format("%d:%d/%d%s", routeID, support, #samples, epoch and "*" or "")
+		end
+		table.insert(ns.db.trace, {
+			GetServerTime(),
+			map or -1,
+			x or 0,
+			y or 0,
+			z or 0,
+			math.floor(speed * 10) / 10,
+			table.concat(fits, " "),
+		})
+		if #ns.db.trace > TRACE_LIMIT then
+			table.remove(ns.db.trace, 1)
+		end
+	end
 	-- `/ferry debug`: whether the position reads on a transport, and what the ride has matched so far.
-	if ns.debug and GetTime() - lastDebug >= 5 then
+	if ns.db.debug and GetTime() - lastDebug >= 5 then
 		lastDebug = GetTime()
 		local matched = {}
 		for routeID, samples in pairs(ride and ride.samples or {}) do
@@ -93,5 +127,16 @@ local function Sample()
 end
 
 ns.Init(function()
+	if ns.db.debug then
+		ns.db.trace = ns.db.trace or {}
+	end
 	C_Timer.NewTicker(1, Sample)
+	-- A /reload or logout on board would otherwise drop the ride so far (it lives only in memory).
+	local frame = CreateFrame("Frame")
+	frame:RegisterEvent("PLAYER_LEAVING_WORLD")
+	frame:SetScript("OnEvent", function()
+		if ride then
+			Record()
+		end
+	end)
 end)
