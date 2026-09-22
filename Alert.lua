@@ -17,7 +17,7 @@ local function Alert(key, text)
 		return
 	end
 	alerted[key] = GetTime()
-	RaidNotice_AddMessage(RaidWarningFrame, text, ChatTypeInfo.RAID_WARNING)
+	RaidWarningUtil.AddMessage(text, ChatTypeInfo.RAID_WARNING)
 	if ns.db.alertSound then
 		PlaySound(SOUNDKIT.RAID_WARNING, "Master")
 	end

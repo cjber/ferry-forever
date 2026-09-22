@@ -9,6 +9,11 @@ local RIDE_GAP = 30000
 local MIN_SPEED = 12
 -- Fitting is quadratic in samples, so it runs every few samples rather than every second.
 local FIT_EVERY = 10
+-- A ride's newest samples per route, enough for any crossing: fitting is quadratic, and a lift or tram ride
+-- never pauses long enough to end.
+local MAX_SAMPLES = 300
+-- Your own sighting this recent makes a repeat ride routine: no chat line, nothing new worth sharing.
+local QUIET = 600
 -- About 25 minutes of debug samples.
 local TRACE_LIMIT = 1500
 
@@ -35,13 +40,15 @@ local function Record()
 	if not routeID then
 		return
 	end
-	local sighting = { epoch = fits[routeID].epoch, seen = GetServerTime(), source = "you" }
-	if ns.Sighted(routeID, sighting) and ride.announced ~= routeID then
+	local now = GetServerTime()
+	local held = ns.FreshAnchors()[routeID]
+	local routine = held and held.source == "you" and now - held.seen < QUIET
+	ride.announced = routeID
+	if ns.Sighted(routeID, { epoch = fits[routeID].epoch, seen = now, source = "you" }) and not routine then
 		local route = ns.Routes[routeID]
 		ns.Print(string.format("synced the %s schedule from your ride.", route.site or route.kind))
+		ns.Share(routeID)
 	end
-	ride.announced = routeID
-	ns.Share(routeID)
 end
 
 -- Speed since the last sample in yd/s, height included (0 across a map change).
@@ -72,6 +79,9 @@ local function Sample()
 				ride = ride or { samples = {}, count = 0 }
 				ride.samples[routeID] = ride.samples[routeID] or {}
 				table.insert(ride.samples[routeID], { now = now, phases = phases })
+				if #ride.samples[routeID] > MAX_SAMPLES then
+					table.remove(ride.samples[routeID], 1)
+				end
 				ride.last = now
 			end
 		end
@@ -89,10 +99,14 @@ local function Sample()
 	end
 	-- `/ferry debug` also keeps the raw samples in the saved variables, to diagnose a ride that did not sync.
 	if ns.db.debug then
-		local fits = {}
-		for routeID, samples in pairs(ride and ride.samples or {}) do
-			local epoch, support = Model.FitEpoch(ns.Routes[routeID], samples)
-			fits[#fits + 1] = string.format("%d:%d/%d%s", routeID, support, #samples, epoch and "*" or "")
+		-- Fitting is the costly part, so the trace refits on the same cadence as syncing.
+		if ride and (not ride.traceFits or ride.count % FIT_EVERY == 0) then
+			local fits = {}
+			for routeID, samples in pairs(ride.samples) do
+				local epoch, support = Model.FitEpoch(ns.Routes[routeID], samples)
+				fits[#fits + 1] = string.format("%d:%d/%d%s", routeID, support, #samples, epoch and "*" or "")
+			end
+			ride.traceFits = table.concat(fits, " ")
 		end
 		table.insert(ns.db.trace, {
 			GetServerTime(),
@@ -101,7 +115,7 @@ local function Sample()
 			y or 0,
 			z or 0,
 			math.floor(speed * 10) / 10,
-			table.concat(fits, " "),
+			ride and ride.traceFits or "",
 		})
 		if #ns.db.trace > TRACE_LIMIT then
 			table.remove(ns.db.trace, 1)
