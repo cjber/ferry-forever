@@ -57,8 +57,8 @@ for m in $MAPS; do
 	# CascLib keeps nothing on disk; the working directory only collects .NET crash dumps.
 	(cd "$OUT/run" && "$DOTNET_ROOT/dotnet" "$OUT/bin/NavBaker.dll" --continent "$WOW" "$PRODUCT" "$m" "$OUT/mm$m" "$THREADS") \
 		2>&1 | grep --line-buffered -v '^delaunayHull' | tee -a "$OUT/bake$m.log"
-	if grep -q FAILED "$OUT/mm$m/tiles.log"; then
-		echo "map $m: failed tiles (see $OUT/mm$m/tiles.log); rerun after deleting their status files" >&2
+	if grep -q '^FAILED' "$OUT/mm$m/status/"*; then
+		echo "map $m: failed tiles (see $OUT/mm$m/status/); rerun after deleting their status files" >&2
 		exit 1
 	fi
 	name=${TITLE[$m]:-${MAP_NAME:?set MAP_NAME for map $m}}

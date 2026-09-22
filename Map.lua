@@ -79,21 +79,6 @@ local function AddDepartureLines(departures)
 	end
 end
 
--- Use the same departure rows on a route hover as on its docks.
-function ns.TransportTooltip(routeID)
-	local route, departures = ns.Routes[routeID], {}
-	for _, stop in ipairs(route.stops) do
-		for _, departure in ipairs(ns.DockDepartures(stop.dock)) do
-			if departure.route == routeID then
-				departures[#departures + 1] = departure
-			end
-		end
-	end
-	GameTooltip_SetTitle(GameTooltip, KIND[route.kind])
-	AddDepartureLines(departures)
-	GameTooltip:Show()
-end
-
 ShortestPathForeverDockPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function ShortestPathForeverDockPinMixin:OnLoad()
@@ -548,36 +533,19 @@ end
 -- The world map's Map Filter ("Show:") menu gets the same switches as the settings panel.
 local function AddFilters(_, rootDescription)
 	rootDescription:CreateDivider()
-	rootDescription:CreateCheckbox("Flight Masters", function()
-		return ns.db.mapFlightMasters
-	end, function()
-		ns.SetOption("mapFlightMasters", not ns.db.mapFlightMasters)
-	end)
-	rootDescription:CreateCheckbox("Boat and Zeppelin Routes", function()
-		return ns.db.mapRoutes
-	end, function()
-		ns.SetOption("mapRoutes", not ns.db.mapRoutes)
-	end)
-	rootDescription:CreateCheckbox("Boats & Zeppelins", function()
-		return ns.db.pins
-	end, function()
-		ns.SetOption("pins", not ns.db.pins)
-	end)
-	rootDescription:CreateCheckbox("Lifts & Tram", function()
-		return ns.db.transit
-	end, function()
-		ns.SetOption("transit", not ns.db.transit)
-	end)
-	rootDescription:CreateCheckbox("Portals", function()
-		return ns.db.portals
-	end, function()
-		ns.SetOption("portals", not ns.db.portals)
-	end)
-	rootDescription:CreateCheckbox("Other Faction's Routes", function()
-		return ns.db.otherFaction
-	end, function()
-		ns.SetOption("otherFaction", not ns.db.otherFaction)
-	end)
+	local function AddFilter(key, label)
+		rootDescription:CreateCheckbox(label, function()
+			return ns.db[key]
+		end, function()
+			ns.SetOption(key, not ns.db[key])
+		end)
+	end
+	AddFilter("mapFlightMasters", "Flight Masters")
+	AddFilter("mapRoutes", "Boat and Zeppelin Routes")
+	AddFilter("pins", "Boats & Zeppelins")
+	AddFilter("transit", "Lifts & Tram")
+	AddFilter("portals", "Portals")
+	AddFilter("otherFaction", "Other Faction's Routes")
 end
 
 ns.Init(function()

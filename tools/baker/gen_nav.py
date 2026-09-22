@@ -250,10 +250,6 @@ def load_window(tiles):
     return polys, adj, portal
 
 
-def triarea2(a, b, c):
-    return (c[0] - a[0]) * (b[1] - a[1]) - (b[0] - a[0]) * (c[1] - a[1])
-
-
 def point_in_convex(px, py, pts):
     sign = 0
     n = len(pts)
@@ -429,7 +425,7 @@ def rasterize_tile(rc):
     vals = bytes(g(gx, gy) for gx in range(tx0, tx1 + 1) for gy in range(ty0, ty1 + 1))
     zs = [layers[gx * GH + gy][0][0] if gx * GH + gy in layers else None
           for gx in range(tx0, tx1 + 1) for gy in range(ty0, ty1 + 1)]
-    return rc, vals, zs, floors, links, sorted(own), len(polys)
+    return rc, vals, zs, floors, links, sorted(own)
 
 
 def step_ok(grid, cuts, ux, uy, vx, vy):
@@ -872,12 +868,12 @@ def main():
     print(f"map {map_id}: {len(TILES)} tiles, rows {ROWS.start}-{ROWS.stop - 1}, cols {COLS.start}-{COLS.stop - 1}, "
           f"grid {GW}x{GH}", flush=True)
     components()
-    grid, cuts, polys = bytearray(GW * GH), set(), 0
+    grid, cuts = bytearray(GW * GH), set()
     BASE_Z.frombytes(bytes(4 * GW * GH))
     floors, links = [], []
     order = sorted(TILES, key=ORD.get)
     with multiprocessing.get_context("fork").Pool(jobs) as pool:  # workers inherit the pass-1 globals
-        for n, (rc, vals, zs, tf, tl, own, np_) in enumerate(pool.imap(rasterize_tile, order, chunksize=2)):
+        for n, (rc, vals, zs, tf, tl, own) in enumerate(pool.imap(rasterize_tile, order, chunksize=2)):
             kx, ky = divmod(cluster_of_tile(*rc), NY)
             for i in range(CELLS):
                 row = (kx * CELLS + i) * GH + ky * CELLS
@@ -888,7 +884,6 @@ def main():
             floors += tf
             links += tl
             cuts.update(own)
-            polys += np_
             if (n + 1) % 100 == 0:
                 print(f"  rasterized {n + 1}/{len(order)} tiles", flush=True)
     print(f"grid {GW}x{GH}: ground {grid.count(1)}, water {grid.count(2)}, cut steps {len(cuts)}", flush=True)

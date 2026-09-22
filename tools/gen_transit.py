@@ -426,8 +426,8 @@ def main():
     spawns, teleports = classicdb(args.refresh, args.offline)
     triggers = {int(r["ID"]): r for r in tables["AreaTrigger"]}
     docks, routes = transports(tables["TransportAnimation"], spawns, triggers)
-    durations = inflight(download(f"{INFLIGHT_URL}/Defaults.lua", "InFlight-Defaults.lua", args.refresh, args.offline))
-    license_text = download(f"{INFLIGHT_URL}/LICENSE", "InFlight-LICENSE", args.refresh, args.offline)
+    durations = inflight(download(f"{INFLIGHT_URL}/Defaults.lua", f"InFlight-{INFLIGHT_REV}-Defaults.lua", args.refresh, args.offline))
+    license_text = download(f"{INFLIGHT_URL}/LICENSE", f"InFlight-{INFLIGHT_REV}-LICENSE", args.refresh, args.offline)
     nodes, paths = taxis(tables["TaxiNodes"], tables["TaxiPath"], tables["TaxiPathNode"], durations)
     islands = landmasses(tables["UiMapAssignment"], {int(r["ID"]): r for r in tables["Map"]})
     passages = portals(triggers, teleports)
