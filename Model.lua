@@ -38,28 +38,42 @@ end
 
 -- The docks visited after stop `index`, in order, until the route returns to it.
 function Model.Onward(route, index)
-	local stops, onward = route.stops, {}
+	local stops, onward, seen = route.stops, {}, { [route.stops[index].dock] = true }
 	for offset = 1, #stops - 1 do
 		local dock = stops[(index + offset - 1) % #stops + 1].dock
-		if dock ~= stops[index].dock then
+		if not seen[dock] then
 			onward[#onward + 1] = dock
+			seen[dock] = true
 		end
 	end
 	return onward
 end
 
+-- Ride time excludes the boarding stop's dwell and includes intermediate stops, across phase zero.
+function Model.RideTime(route, from, to)
+	return (to.arrive - from.depart) % route.period
+end
+
 -- Every phase at which the route passes within NEAR yards of (map, x, y) while moving. A docked boat is
 -- still for a minute, so a stop's own point yields no phase.
-function Model.Phases(route, map, x, y)
+function Model.Phases(route, map, x, y, z)
 	local frames, phases = route.frames, {}
+	-- Adjacent lift shafts can run different periods; a boat-sized radius confuses their cars.
+	local near = route.kind == "lift" and 10 or NEAR
 	for i = 1, #frames - 1 do
 		local a, b = frames[i], frames[i + 1]
 		if a[3] == map and not a[6] then
 			local dx, dy = b[4] - a[4], b[5] - a[5]
-			local length = dx * dx + dy * dy
-			local t = length > 0 and math.min(1, math.max(0, ((x - a[4]) * dx + (y - a[5]) * dy) / length)) or 0
+			local dz, oz = 0, 0
+			if z and a[7] and b[7] then
+				dz, oz = b[7] - a[7], z - a[7]
+			end
+			local length = dx * dx + dy * dy + dz * dz
+			local t = length > 0 and math.min(1, math.max(0, ((x - a[4]) * dx + (y - a[5]) * dy + oz * dz) / length))
+				or 0
 			local px, py = a[4] + t * dx - x, a[5] + t * dy - y
-			if px * px + py * py <= NEAR * NEAR and t > 0 and t < 1 then
+			local pz = t * dz - oz
+			if px * px + py * py + pz * pz <= near * near and t > 0 and t < 1 then
 				phases[#phases + 1] = a[2] + t * (b[1] - a[2])
 			end
 		end
@@ -73,6 +87,9 @@ end
 -- hold for the whole leg.
 function Model.FitEpoch(route, samples)
 	local period, offsets = route.period, {}
+	local fit = route.fit or {}
+	-- A UC ride lasts only 3.5 s; the boat window also fits its opposite-direction phases.
+	local agree = route.kind == "lift" and 2000 or AGREE
 	for _, sample in ipairs(samples) do
 		for _, phase in ipairs(sample.phases) do
 			offsets[#offsets + 1] = { offset = (sample.now - phase) % period, now = sample.now }
@@ -83,16 +100,16 @@ function Model.FitEpoch(route, samples)
 		local members, sum, first, last = 0, 0, math.huge, -math.huge
 		for _, other in ipairs(offsets) do
 			local delta = (other.offset - center.offset + period / 2) % period - period / 2
-			if math.abs(delta) <= AGREE / 2 then
+			if math.abs(delta) <= agree / 2 then
 				members, sum = members + 1, sum + delta
 				first, last = math.min(first, other.now), math.max(last, other.now)
 			end
 		end
-		if members > support and last - first >= Model.MIN_SPAN then
+		if members > support and last - first >= (fit.span or Model.MIN_SPAN) then
 			best, support = (center.offset + sum / members) % period, members
 		end
 	end
-	if support < Model.MIN_SAMPLES then
+	if support < (fit.samples or Model.MIN_SAMPLES) then
 		return nil, support
 	end
 	return best, support

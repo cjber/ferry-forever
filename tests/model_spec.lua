@@ -82,7 +82,7 @@ for routeID, route in pairs(Routes) do
 			fits[candidateID] = { epoch = fitted, support = support }
 		end
 	end
-	assert(Model.RideRoute(fits) == routeID, "ride on " .. routeID .. " read as " .. tostring(Model.RideRoute(fits)))
+	assert(Model.RideRoute(fits) == routeID, "ride on " .. routeID .. " read as " .. tostring((Model.RideRoute(fits))))
 	local error = (fits[routeID].epoch - epoch + route.period / 2) % route.period - route.period / 2
 	near(error, 0, 1500, "route " .. routeID .. " epoch")
 end
@@ -119,5 +119,88 @@ local own = { seen = now, source = "you" }
 assert(not Model.Newer({ seen = now + 60, source = "player" }, own, now + 60))
 assert(Model.Newer({ seen = now + 3700, source = "player" }, own, now + 3700))
 assert(Model.Newer({ seen = now + 60, source = "you" }, own, now + 60))
+
+-- Sparse transport docks must not change any boat's dock index or timetable.
+assert(loadfile("Data/Transports.lua"))("FerryForever", ns)
+assert(#ns.Docks == 25 and ns.Docks[1001] and ns.Docks[1101])
+
+local function animatedPosition(frames, phase)
+	for i = 1, #frames - 1 do
+		local a, b = frames[i], frames[i + 1]
+		if not a[6] and phase >= a[2] and phase < b[1] then
+			local t = (phase - a[2]) / (b[1] - a[2])
+			local dx, dy, dz = b[4] - a[4], b[5] - a[5], b[7] - a[7]
+			local speed = math.sqrt(dx * dx + dy * dy + dz * dz) * 1000 / (b[1] - a[2])
+			return a[3], a[4] + t * dx, a[5] + t * dy, a[7] + t * dz, speed
+		end
+	end
+end
+
+-- Every car, both directions: one ride sampled at 1 Hz must identify its route and epoch. This includes
+-- the 3.5-second UC ride across phase zero, the TB periods, and both tracks of counterweighted pairs.
+for routeID, route in pairs(Routes) do
+	if route.kind == "lift" or route.kind == "tram" then
+		local tracks, track = {}, {}
+		for index, frame in ipairs(route.frames) do
+			track[#track + 1] = frame
+			if frame[6] or index == #route.frames then
+				tracks[#tracks + 1], track = track, {}
+			end
+		end
+		for _, frames in ipairs(tracks) do
+			local dwells = {}
+			for _, frame in ipairs(frames) do
+				if frame[2] > frame[1] then
+					dwells[#dwells + 1] = frame
+				end
+			end
+			for index, dwell in ipairs(dwells) do
+				local duration = (dwells[index % #dwells + 1][1] - dwell[2]) % route.period
+				if duration > 0 then
+					local epoch, samples = 1790000000000 + routeID * 7919, {}
+					for phase = dwell[2] + 500, dwell[2] + duration - 1, 1000 do
+						local m, px, py, pz, speed = animatedPosition(frames, phase % route.period)
+						if m then
+							for candidateID, candidate in pairs(Routes) do
+								if speed >= (candidate.fit and candidate.fit.speed or 12) then
+									local phases = Model.Phases(candidate, m, px + 2, py - 2, pz + 1)
+									if #phases > 0 then
+										samples[candidateID] = samples[candidateID] or {}
+										table.insert(samples[candidateID], { now = epoch + phase, phases = phases })
+									end
+								end
+							end
+						end
+					end
+					local fits = {}
+					for candidateID, ride in pairs(samples) do
+						local fitted, support = Model.FitEpoch(Routes[candidateID], ride)
+						if fitted then
+							fits[candidateID] = { epoch = fitted, support = support }
+						end
+					end
+					local label = ("route %d from %d"):format(routeID, dwell[2])
+					assert(Model.RideRoute(fits) == routeID, label .. " read as " .. tostring((Model.RideRoute(fits))))
+					local error = (fits[routeID].epoch - epoch + route.period / 2) % route.period - route.period / 2
+					near(error, 0, 1500, label .. " epoch")
+				end
+			end
+		end
+		for index in ipairs(route.stops) do
+			assert(#Model.Onward(route, index) == 1, "repeated landing should appear only once")
+		end
+	end
+end
+
+local vertical = { frames = { { 0, 0, 1, 0, 0, nil, 0 }, { 10000, 10000, 1, 0, 0, nil, 100 } } }
+near(Model.Phases(vertical, 1, 0, 0, 50)[1], 5000, 0, "vertical projection")
+assert(#Model.Phases(vertical, 1, 0, 0) == 0, "2D callers retain their old behavior")
+assert(#Model.Phases(vertical, 1, 0, 0, 1000) == 0, "a different floor is not a rider")
+near(
+	Model.RideTime(Routes[303], Routes[303].stops[1], Routes[303].stops[2]),
+	(Routes[303].stops[2].arrive - Routes[303].stops[1].depart) % Routes[303].period,
+	0,
+	"ride across wrap"
+)
 
 print("model_spec: ok")
