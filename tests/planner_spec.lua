@@ -61,6 +61,32 @@ near(walk.depart, 1000)
 near(walk.arrive, 11000)
 assert(walk.from.kind == "start" and walk.to.kind == "goal" and walk.estimated)
 
+-- A measured detour cannot be bypassed by guessing two adjacent walks through an arbitrary flight master.
+-- Its separate transit arrival must still survive when a later flight there can lead to a faster finish.
+do
+	local detour = options()
+	detour.to = point(1, 7000)
+	detour.taxiNodes = { point(1, 3500) }
+	detour.walks = { { from = detour.from, to = detour.to, cost = 14000 } }
+	near(only(Plan(detour), "walk").yards, 14000)
+	detour.walks[1].cost = false
+	assert(not Plan(detour), "splitting a blocked walk does not make it reachable")
+	detour.docks = { point(1, 1000), point(2) }
+	detour.routes = {
+		[1] = {
+			kind = "boat",
+			period = 10000,
+			stops = { { dock = 1, arrive = 0, depart = 0 }, { dock = 2, arrive = 5000, depart = 5000 } },
+		},
+	}
+	assert(not Plan(detour), "a round trip must not reset a blocked walk into two estimated walks")
+	detour.taxiNodes[2] = point(1, 350)
+	detour.taxiPaths = { { from = 2, to = 1, seconds = 600 } }
+	local result = Plan(detour)
+	assert(#result.legs == 3 and result.legs[2].mode == "flight")
+	assert(result.legs[1].to.id == 2 and result.legs[3].from.id == 1)
+end
+
 -- Same continent, different islands: the mainland cannot be reached by walking across the water.
 local boat = options()
 boat.to = point(1, 100)
@@ -435,3 +461,4 @@ baked = Plan({
 near(only(baked, "walk").yards, 4000)
 
 print("planner_spec: ok")
+assert(loadfile("tests/journey_spec.lua"))()

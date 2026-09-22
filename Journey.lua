@@ -44,6 +44,13 @@ local WATER_SPELLS = { 546, 1706 }
 -- Yards over water worth casting for.
 local WATER_HINT = 20
 local waterMode
+local WALK_FAILURE = {
+	unreachable = "no walking path",
+	offmesh = "no walking path",
+	outside = "no walking path",
+	nodata = "walking map unavailable",
+	error = "walking search failed",
+}
 
 local function CancelPaths()
 	pathVersion = pathVersion + 1
@@ -320,6 +327,11 @@ function ns.JourneyInfo()
 			if leg.estimated and SCHEDULED[leg.mode] then
 				text = text .. " (no sighting yet)"
 			end
+			if leg.walkError then
+				text = text .. " (" .. (WALK_FAILURE[leg.walkError] or "walking search failed") .. ")"
+			elseif leg.mode == "walk" and ns.Path and not leg.measured then
+				text = text .. " (finding walking path)"
+			end
 			local _, spell = WaterWalking()
 			if spell and leg.wet and leg.wet >= WATER_HINT then
 				text = text .. " (cast " .. C_Spell.GetSpellName(spell) .. ")"
@@ -396,7 +408,7 @@ local function Apart(a, b, reach)
 end
 
 -- Walks from your position change as you move, so only the newest to each destination is kept.
-local function Measure(from, to, cost, points)
+local function Measure(from, to, cost, points, exact)
 	for index = #measured, 1, -1 do
 		local walk = measured[index]
 		local sameStart = from.kind == "start" and walk.from.kind == "start"
@@ -404,7 +416,7 @@ local function Measure(from, to, cost, points)
 			table.remove(measured, index)
 		end
 	end
-	measured[#measured + 1] = { from = from, to = to, cost = cost, points = points }
+	measured[#measured + 1] = { from = from, to = to, cost = cost, points = points, exact = exact }
 end
 
 -- The rest of a measured walk from a point on it, in the walk's own yards (so swimming keeps its weight).
@@ -421,7 +433,12 @@ local function Walks(here)
 		local rest = walk.from.kind == "start" and walk.points and Remaining(walk, here)
 		if rest then
 			walks[#walks + 1] = { from = here, to = walk.to, cost = rest }
-		elseif walk.from.kind == "start" and walk.cost == false and not Apart(walk.from, here, BLOCKED_REACH) then
+		elseif
+			walk.from.kind == "start"
+			and walk.cost == false
+			and not walk.exact
+			and not Apart(walk.from, here, BLOCKED_REACH)
+		then
 			-- Proving a place unreachable searches everything reachable, the dearest search there is; a few steps
 			-- on foot will not change the answer.
 			walks[#walks + 1] = { from = here, to = walk.to, cost = false }
@@ -442,7 +459,8 @@ local function PrepareWalks(planned)
 			if ns.Path and leg.from.map == leg.to.map and ns.Path.HasData(leg.from.map) then
 				local found
 				for _, entry in ipairs(walkCache) do
-					if entry.done and NearPathEndpoint(entry.from, leg.from) and NearPathEndpoint(entry.to, leg.to) then
+					local matches = entry.exact and SamePlace or NearPathEndpoint
+					if entry.done and matches(entry.from, leg.from) and matches(entry.to, leg.to) then
 						found = entry
 						break
 					end
@@ -453,6 +471,7 @@ local function PrepareWalks(planned)
 				if found then
 					leg.walkPoints, leg.measured = entry.points or leg.walkPoints, entry.points ~= nil
 					leg.wet = entry.points and entry.points.wet
+					leg.walkError = entry.reason
 				else
 					searches[#searches + 1] = { leg = leg, entry = entry }
 					-- Until the search is in, keep drawing the walk it replaces rather than a straight line.
@@ -463,6 +482,8 @@ local function PrepareWalks(planned)
 						end
 					end
 				end
+			elseif ns.Path then
+				leg.walkError = "nodata"
 			end
 		end
 	end
@@ -482,8 +503,13 @@ local function FindWalks(planned, searches)
 			end
 			pending = pending - 1
 			entry.done, entry.points = true, points
-			if points or cost == "unreachable" then
-				Measure(from, to, points and cost or false, points)
+			entry.reason = not points and cost or nil
+			entry.exact = cost == "offmesh" or cost == "outside"
+			leg.walkError = entry.reason
+			-- A map click can fall outside the mesh even on a supported continent. That is a failed walk too;
+			-- caching it without a blocked cost leaves the planner's straight-line estimate alive forever.
+			if points or cost == "unreachable" or cost == "offmesh" or cost == "outside" then
+				Measure(from, to, points and cost or false, points, entry.exact)
 				-- The planner guessed a straight line; a walk that turns out blocked or longer may change the plan.
 				worse = worse or not points or cost > leg.yards * REPLAN_SLACK
 			end
@@ -496,7 +522,7 @@ local function FindWalks(planned, searches)
 			-- A replan that keeps these legs only retimes them, so the points above still draw.
 			if pending == 0 and worse then
 				Replan()
-			elseif points then
+			else
 				UpdateProgress()
 				Refresh()
 			end

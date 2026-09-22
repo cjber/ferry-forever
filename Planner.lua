@@ -141,6 +141,17 @@ local function Gap(a, b)
 end
 
 local function Matches(walk, a, b)
+	-- Moving onto the mesh can fix an off-mesh endpoint immediately; it is not a blocked region.
+	if walk.exact then
+		return walk.from.map == a.map
+			and walk.to.map == b.map
+			and walk.from.x == a.x
+			and walk.from.y == a.y
+			and walk.from.z == a.z
+			and walk.to.x == b.x
+			and walk.to.y == b.y
+			and walk.to.z == b.z
+	end
 	return walk.from.map == a.map and Gap(walk.from, a) <= MATCH and Gap(walk.to, b) <= MATCH
 end
 
@@ -173,6 +184,17 @@ local function BakedCost(options, a, b)
 	local pair = baked and baked[ka < kb and ka .. " " .. kb or kb .. " " .. ka]
 	if pair then
 		return true, pair[options.waterWalking and 2 or 1]
+	end
+	return false
+end
+
+-- Changing arrival states must not turn a round trip into a shortcut around a measured continuous walk.
+local function Revisits(previous, current, target, count)
+	while current do
+		if (current - 1) % count + 1 == target then
+			return true
+		end
+		current = previous[current] and previous[current].index
 	end
 	return false
 end
@@ -278,12 +300,15 @@ function Planner.Plan(options)
 		end
 	end
 
-	-- A taxi reached on foot and the same taxi reached in flight have different onward boarding costs.
+	-- Keep arrivals on foot separate from transit and flight. Splitting a continuous walk at arbitrary places
+	-- invents fresh straight-line shortcuts around a measured detour (or a blocked walk), so it must be one search.
+	-- Zero-length transfers still connect co-located places and break a flight for boarding costs.
 	local count = #nodes
 	local arrival, visited, previous = { [start] = options.now }, {}, {}
-	for _ = 1, count * 2 do
+	local finishAt
+	for _ = 1, count * 3 do
 		local current, earliest
-		for index = 1, count * 2 do
+		for index = 1, count * 3 do
 			if not visited[index] and arrival[index] and (not earliest or arrival[index] < earliest) then
 				current, earliest = index, arrival[index]
 			end
@@ -291,14 +316,19 @@ function Planner.Plan(options)
 		if not current then
 			return nil
 		end
-		if current == goal then
+		local node = (current - 1) % count + 1
+		if node == goal then
+			finishAt = current
 			break
 		end
 		visited[current] = true
-		local node = (current - 1) % count + 1
+		local flying, walked = current > count and current <= count * 2, current > count * 2
 		for _, edge in ipairs(edges[node]) do
 			-- Unknown nodes may be learned on foot or crossed in flight, but never used to land.
-			local canLeave = current <= count or not nodes[node].undiscovered or edge.mode == "flight"
+			local canLeave = not flying or not nodes[node].undiscovered or edge.mode == "flight"
+			if walked and edge.mode == "walk" and edge.yards > 0 then
+				canLeave = false
+			end
 			local wait, estimated = 0, edge.estimated or false
 			if edge.route and not edge.aboard then
 				local route = options.routes[edge.route]
@@ -309,13 +339,21 @@ function Planner.Plan(options)
 				else
 					wait, estimated = route.period / 2, true
 				end
-			elseif edge.mode == "flight" and current <= count then
+			elseif edge.mode == "flight" and not flying then
 				wait = BOARDING
 			end
 			local depart = earliest + wait
 			local finish = depart + edge.duration
 			local target = edge.to + (edge.mode == "flight" and count or 0)
-			if canLeave and not visited[target] and (not arrival[target] or finish < arrival[target]) then
+			if edge.mode == "walk" and (walked or edge.yards > 0) then
+				target = edge.to + count * 2
+			end
+			if
+				canLeave
+				and not visited[target]
+				and (not arrival[target] or finish < arrival[target])
+				and not Revisits(previous, current, edge.to, count)
+			then
 				arrival[target] = finish
 				previous[target] = {
 					index = current,
@@ -338,10 +376,10 @@ function Planner.Plan(options)
 			end
 		end
 	end
-	if not arrival[goal] then
+	if not finishAt then
 		return nil
 	end
-	local reversed, legs, current = {}, {}, goal
+	local reversed, legs, current = {}, {}, finishAt
 	while previous[current] do
 		reversed[#reversed + 1] = previous[current].leg
 		current = previous[current].index
@@ -358,5 +396,5 @@ function Planner.Plan(options)
 			legs[#legs + 1] = leg
 		end
 	end
-	return { arrive = arrival[goal], legs = legs }
+	return { arrive = arrival[finishAt], legs = legs }
 end

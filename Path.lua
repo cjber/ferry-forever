@@ -47,14 +47,18 @@ local clock = function()
 	return Path.clock()
 end
 
+local function slice()
+	if deadline < huge and clock() > deadline then
+		yield()
+	end
+end
+
 local function tick()
 	expansions = expansions + 1
 	ops = ops + 1
 	if ops >= CHECK then
 		ops = 0
-		if clock() > deadline then
-			yield()
-		end
+		slice()
 	end
 end
 
@@ -344,6 +348,10 @@ local function evict(st)
 end
 
 local function grid(st, k)
+	-- A single expansion can decode a whole cluster. Yield before it, while no half-decoded grid is visible.
+	if st.val[k] == nil then
+		slice()
+	end
 	local val = st.val[k]
 	if val == nil then
 		if st.decoded >= max(Path.clusters, 4) then
@@ -367,6 +375,7 @@ local function cellOf(st, k, node)
 end
 
 local function decodeGraph(st, k)
+	slice()
 	local ids = {}
 	st.nodes[k] = ids
 	local chunks = st.D.graph[k + 1]
@@ -1034,7 +1043,10 @@ pump = function()
 		table.remove(queue, 1)
 		if not ok then
 			geterrorhandler()(points)
-		elseif not job.cancelled then
+			points, cost = nil, "error"
+		end
+		-- Journey must be able to settle its pending walks even when a coroutine fails.
+		if not job.cancelled then
 			job.callback(points, cost, job)
 		end
 	end
@@ -1050,7 +1062,7 @@ end
 -- on). callback(points, cost, job) or callback(nil, reason, job): points are { map, x, y, z } from the start to the
 -- goal, with points.wet the yards over water, and cost is the walk in running yards, a swum yard counting as the
 -- data's swim (so routes keep out of water) unless waterWalking, when water is ground. reason is "nodata",
--- "outside", "offmesh" or "unreachable". Returns a handle for Path.Cancel.
+-- "outside", "offmesh", "unreachable" or "error". Returns a handle for Path.Cancel.
 function Path.Find(map, from, to, callback, waterWalking)
 	local job = {
 		map = map,
@@ -1070,7 +1082,7 @@ end
 function Path.Cancel(job)
 	job.cancelled = true
 	for i, queued in ipairs(queue) do
-		if queued == job and i > 1 then
+		if queued == job then
 			table.remove(queue, i)
 			return
 		end
@@ -1078,39 +1090,6 @@ function Path.Cancel(job)
 end
 
 -- The walkable height at a global cell nearest height h, within ZTOL.
-local function cellHeight(st, gx, gy, h)
-	if gx < 0 or gy < 0 or gx >= st.GX or gy >= st.GY then
-		return nil
-	end
-	local C = st.C
-	local k = floor(gx / C) * st.ny + floor(gy / C)
-	local node, gap = standing(st, k, (gx % C) * C + gy % C, h)
-	return node and gap <= ZTOL and st.z[k][node + 1] or nil
-end
-
--- The ground under a world point on the surface nearest height z, blended between the four cells around it, or
--- nil off the data. For drawing on the ground; heights are stored every cell, to the data's zstep.
-function Path.Ground(map, x, y, z)
-	local st = State(map)
-	if not st then
-		return nil
-	end
-	local fx, fy = (x - st.x0) / st.cs - 0.5, (y - st.y0) / st.cs - 0.5
-	local gx, gy = floor(fx), floor(fy)
-	local tx, ty = fx - gx, fy - gy
-	local sum, weight = 0, 0
-	for dx = 0, 1 do
-		for dy = 0, 1 do
-			local height = cellHeight(st, gx + dx, gy + dy, z)
-			if height then
-				local w = (dx == 1 and tx or 1 - tx) * (dy == 1 and ty or 1 - ty)
-				sum, weight = sum + height * w, weight + w
-			end
-		end
-	end
-	return weight > 0 and sum / weight or nil
-end
-
 function Path.HasData(map)
 	return Data(map) ~= nil
 end

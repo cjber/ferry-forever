@@ -77,6 +77,42 @@ Path.Cancel(first)
 drain()
 assert(not cancelled)
 
+-- Cancelling a partially searched route frees the next frame for its replacement.
+Path.budget = -1
+local abandoned = Path.Find(0, GOLDSHIRE, STORMWIND_FM, function()
+	error("cancelled search called back")
+end)
+table.remove(frames, 1)()
+assert(abandoned.frames == 1 and coroutine.status(abandoned.co) == "suspended")
+Path.Cancel(abandoned)
+local replacement = Path.Find(0, NORTHSHIRE, GOLDSHIRE, function(p)
+	assert(p)
+end)
+table.remove(frames, 1)()
+assert(replacement.frames == 1 and abandoned.frames == 1, "cancelled work must not hold up the queue")
+Path.budget = 3
+drain()
+
+-- A coroutine error reports a terminal result and leaves subsequent jobs runnable.
+local previousHandler, reported, failure = rawget(_G, "geterrorhandler")
+rawset(_G, "geterrorhandler", function()
+	return function(message)
+		reported = message
+	end
+end)
+local failed = Path.Find(0, { x = "invalid", y = 0 }, GOLDSHIRE, function(p, reason, finished)
+	assert(p == nil and reason == "error")
+	assert(not failure, "a failed job completes only once")
+	failure = finished
+end)
+local recovered
+Path.Find(0, NORTHSHIRE, GOLDSHIRE, function(p)
+	recovered = p
+end)
+drain()
+rawset(_G, "geterrorhandler", previousHandler)
+assert(reported and failure == failed and recovered, "errors must not strand Journey's pending count")
+
 -- Coordinates: the navmesh stands where the addon's pins stand (UnitPosition frame, x north, y west).
 -- Taxi.lua Stormwind flight master and Transports.lua tram pin, each with a nearby street point.
 for _, pin in ipairs({ { -8840.56, 489.7, 0, -20 }, { -8346.46, 514.031, 8, 0 } }) do
@@ -110,5 +146,31 @@ local over, overCost = Path.FindSync(0, THELSAMAR_SHORE, WEST_SHORE, true)
 assert(round and over)
 assert(round.wet < 50 and over.wet > 300, round.wet .. " " .. over.wet)
 assert(overCost < 550 and roundCost > overCost * 1.4, roundCost .. " " .. overCost)
+
+-- The reported Darkshore route: reachable Felwood points go round the mountains; neighbouring map clicks can
+-- miss every walkable surface. Both outcomes must arrive through the sliced callback as well as FindSync.
+assert(loadfile("ShortestPathForever_Nav1/Nav1.lua"))()
+local AUBERDINE = { x = 6341.38, y = 557.68, z = 16.29 }
+for _, target in ipairs({
+	{ x = 5068.4, y = -337.22 },
+	{ x = 6205.88, y = -1949.63 },
+	{ x = 5000, y = -2000 },
+	{ x = 5500, y = -1500 },
+	{ x = 4800, y = -1200 },
+}) do
+	local expected, cost = Path.FindSync(1, AUBERDINE, target)
+	local done
+	Path.Find(1, AUBERDINE, target, function(p, c)
+		done = true
+		assert(c == cost and (p and #p) == (expected and #expected))
+		if p then
+			assert(#p > 2 and c > dist(AUBERDINE.x, AUBERDINE.y, target.x, target.y) * 2)
+		else
+			assert(c == "offmesh")
+		end
+	end)
+	drain()
+	assert(done)
+end
 
 print("path_spec ok")
