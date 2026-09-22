@@ -7,7 +7,7 @@ local _, ns = ...
 -- Lists built from that query before it was dropped; they claim every node, so start again from empty.
 local KNOWN_VERSION = 2
 
--- `/ferry debug`: what the game's taxi queries return, to check how this client reports known flight points.
+-- `/path debug`: what the game's taxi queries return, to check how this client reports known flight points.
 local function Log(key, uiMap, nodes)
 	if not ns.db.debug then
 		return
@@ -50,8 +50,8 @@ function ns.KnownTaxiNodes()
 end
 
 ns.Init(function()
-	FerryForeverCharDB = FerryForeverCharDB or {}
-	ns.charDB = FerryForeverCharDB
+	ShortestPathForeverCharDB = ShortestPathForeverCharDB or {}
+	ns.charDB = ShortestPathForeverCharDB
 	if ns.charDB.taxiVersion ~= KNOWN_VERSION then
 		ns.charDB.taxi, ns.charDB.taxiScanned, ns.charDB.taxiVersion = {}, nil, KNOWN_VERSION
 	end

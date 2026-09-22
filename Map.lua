@@ -1,8 +1,8 @@
 local _, ns = ...
 
-local PIN_TEMPLATE = "FerryForeverDockPinTemplate"
-local FLIGHT_TEMPLATE = "FerryForeverFlightPinTemplate"
-local PORTAL_TEMPLATE = "FerryForeverPortalPinTemplate"
+local PIN_TEMPLATE = "ShortestPathForeverDockPinTemplate"
+local FLIGHT_TEMPLATE = "ShortestPathForeverFlightPinTemplate"
+local PORTAL_TEMPLATE = "ShortestPathForeverPortalPinTemplate"
 local PIN_SIZE = 20
 local ARROW_SIZE = 15
 -- Half a pin, as a fraction of a zoomed-out map.
@@ -42,7 +42,7 @@ local function SetIcon(texture, kind)
 	if kind == "boat" then
 		texture:SetAtlas("flightmasterferry")
 	elseif kind == "zeppelin" then
-		texture:SetTexture("Interface\\AddOns\\FerryForever\\Media\\zeppelin")
+		texture:SetTexture("Interface\\AddOns\\ShortestPathForever\\media\\zeppelin")
 	elseif kind == "lift" then
 		texture:SetAtlas("poi-door-arrow-up")
 	elseif kind == "tram" then
@@ -94,9 +94,9 @@ function ns.TransportTooltip(routeID)
 	GameTooltip:Show()
 end
 
-FerryForeverDockPinMixin = CreateFromMixins(MapCanvasPinMixin)
+ShortestPathForeverDockPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
-function FerryForeverDockPinMixin:OnLoad()
+function ShortestPathForeverDockPinMixin:OnLoad()
 	-- Above town, flight point and dungeon icons, so a dock beside one still takes the hover.
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_GOSSIP")
 	self:SetScalingLimits(1, 1, 1.2)
@@ -106,7 +106,7 @@ end
 
 -- cluster = { docks = { { id, x, y }... }, x, y, kind, kinds = { [kind] = true } }: one dock, or several too
 -- close to tell apart.
-function FerryForeverDockPinMixin:OnAcquired(cluster)
+function ShortestPathForeverDockPinMixin:OnAcquired(cluster)
 	self.cluster = cluster
 	SetIcon(self.Texture, cluster.kind)
 	SetIcon(self.HighlightTexture, cluster.kind)
@@ -139,7 +139,7 @@ local function LandingName(cluster, dock, kind)
 end
 
 -- Titled by what the pin is, not where: the map already names the zone.
-function FerryForeverDockPinMixin:RefreshTooltip()
+function ShortestPathForeverDockPinMixin:RefreshTooltip()
 	local cluster, all = self.cluster, {}
 	local groups = {}
 	for _, dock in ipairs(cluster.docks) do
@@ -187,7 +187,7 @@ function FerryForeverDockPinMixin:RefreshTooltip()
 	GameTooltip:Show()
 end
 
-function FerryForeverDockPinMixin:OnMouseEnter()
+function ShortestPathForeverDockPinMixin:OnMouseEnter()
 	local routes = {}
 	for _, dock in ipairs(self.cluster.docks) do
 		for _, departure in ipairs(ns.DockDepartures(dock.id)) do
@@ -212,7 +212,7 @@ function FerryForeverDockPinMixin:OnMouseEnter()
 	end)
 end
 
-function FerryForeverDockPinMixin:OnMouseLeave()
+function ShortestPathForeverDockPinMixin:OnMouseLeave()
 	ns.HoverTransportRoutes(self, nil)
 	provider:HideDestinations()
 	self:SetScript("OnUpdate", nil)
@@ -221,7 +221,7 @@ function FerryForeverDockPinMixin:OnMouseLeave()
 	end
 end
 
-function FerryForeverDockPinMixin:OnReleased()
+function ShortestPathForeverDockPinMixin:OnReleased()
 	self:OnMouseLeave()
 	self.Glow:Hide()
 	self.cluster = nil
@@ -401,22 +401,22 @@ function ProviderMixin:OnCanvasScaleChanged()
 	self:RefreshAllData()
 end
 
-FerryForeverPortalPinMixin = CreateFromMixins(MapCanvasPinMixin)
+ShortestPathForeverPortalPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
-function FerryForeverPortalPinMixin:OnLoad()
+function ShortestPathForeverPortalPinMixin:OnLoad()
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_GOSSIP")
 	self:SetScalingLimits(1, 1, 1.2)
 	self:SetSize(PIN_SIZE, PIN_SIZE)
 end
 
-function FerryForeverPortalPinMixin:OnAcquired(portal, x, y)
+function ShortestPathForeverPortalPinMixin:OnAcquired(portal, x, y)
 	self.portal = portal
 	SetIcon(self.Texture, "portal")
 	SetIcon(self.HighlightTexture, "portal")
 	self:SetPosition(x, y)
 end
 
-function FerryForeverPortalPinMixin:OnMouseEnter()
+function ShortestPathForeverPortalPinMixin:OnMouseEnter()
 	local portal = self.portal
 	local destination = ns.Locate(portal.to)
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -425,7 +425,7 @@ function FerryForeverPortalPinMixin:OnMouseEnter()
 	GameTooltip:Show()
 end
 
-function FerryForeverPortalPinMixin:OnMouseLeave()
+function ShortestPathForeverPortalPinMixin:OnMouseLeave()
 	if GameTooltip:IsOwned(self) then
 		GameTooltip:Hide()
 	end
@@ -460,9 +460,9 @@ function PortalProviderMixin:RefreshAllData()
 end
 
 -- Reuse the native flight-point template and acquisition (atlas size, nudging and supertracking).
-FerryForeverFlightPinMixin = CreateFromMixins(FlightPointPinMixin)
+ShortestPathForeverFlightPinMixin = CreateFromMixins(FlightPointPinMixin)
 
-function FerryForeverFlightPinMixin:OnMouseEnter()
+function ShortestPathForeverFlightPinMixin:OnMouseEnter()
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 	GameTooltip_SetTitle(GameTooltip, self.poiInfo.name)
 	if self.poiInfo.isUndiscovered then
@@ -471,13 +471,13 @@ function FerryForeverFlightPinMixin:OnMouseEnter()
 	GameTooltip:Show()
 end
 
-function FerryForeverFlightPinMixin:OnMouseLeave()
+function ShortestPathForeverFlightPinMixin:OnMouseLeave()
 	if GameTooltip:IsOwned(self) then
 		GameTooltip:Hide()
 	end
 end
 
-function FerryForeverFlightPinMixin:OnReleased()
+function ShortestPathForeverFlightPinMixin:OnReleased()
 	self:OnMouseLeave()
 	MapCanvasPinMixin.OnReleased(self)
 end

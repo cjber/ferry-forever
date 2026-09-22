@@ -1,6 +1,6 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
-	<Frame name="FerryForeverDockPinTemplate" inherits="BaseHighlightableMapPoiPinTemplate"
-		mixin="FerryForeverDockPinMixin" enableMouse="true" virtual="true">
+	<Frame name="ShortestPathForeverDockPinTemplate" inherits="BaseHighlightableMapPoiPinTemplate"
+		mixin="ShortestPathForeverDockPinMixin" enableMouse="true" virtual="true">
 		<Layers>
 			<!-- The map legend's glow for a related pin (LegendHighlightablePoiPinMixin:ShowMapLegendGlow). -->
 			<Layer level="BACKGROUND">
@@ -13,13 +13,13 @@
 			</Layer>
 		</Layers>
 	</Frame>
-	<Frame name="FerryForeverPortalPinTemplate" inherits="BaseHighlightableMapPoiPinTemplate"
-		mixin="FerryForeverPortalPinMixin" enableMouse="true" virtual="true"/>
-	<Frame name="FerryForeverFlightPinTemplate" inherits="FlightPointPinTemplate"
-		mixin="FerryForeverFlightPinMixin" virtual="true"/>
-	<Frame name="FerryForeverTransportPinTemplate" mixin="FerryForeverTransportPinMixin" virtual="true"/>
-	<Frame name="FerryForeverRoutePinTemplate" mixin="FerryForeverRoutePinMixin" virtual="true"/>
-	<Frame name="FerryForeverGoalPinTemplate" mixin="FerryForeverGoalPinMixin" enableMouse="true" virtual="true">
+	<Frame name="ShortestPathForeverPortalPinTemplate" inherits="BaseHighlightableMapPoiPinTemplate"
+		mixin="ShortestPathForeverPortalPinMixin" enableMouse="true" virtual="true"/>
+	<Frame name="ShortestPathForeverFlightPinTemplate" inherits="FlightPointPinTemplate"
+		mixin="ShortestPathForeverFlightPinMixin" virtual="true"/>
+	<Frame name="ShortestPathForeverTransportPinTemplate" mixin="ShortestPathForeverTransportPinMixin" virtual="true"/>
+	<Frame name="ShortestPathForeverRoutePinTemplate" mixin="ShortestPathForeverRoutePinMixin" virtual="true"/>
+	<Frame name="ShortestPathForeverGoalPinTemplate" mixin="ShortestPathForeverGoalPinMixin" enableMouse="true" virtual="true">
 		<Layers>
 			<Layer level="ARTWORK">
 				<Texture parentKey="Texture" setAllPoints="true"/>

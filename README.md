@@ -1,15 +1,9 @@
-# Ferry Forever
+# Shortest Path Forever
 
-Every boat, zeppelin, lift and tram in WoW: Forever on the world map, with when the next one arrives and
-leaves, and a planner for the fastest way anywhere.
+The fastest way anywhere in WoW: Forever. Shift-click the world map or pick a quest, and it plans the route:
+walking paths round walls and hills, the flight points you know, boats and zeppelins with their live
+departure times, lifts, the tram and portals. Then it walks you there with the game's own navigation marker.
 
-- **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower a matching
-  zeppelin, on its zone and continent map. Hover one to see where each boat goes next, when it arrives and
-  when it leaves; the docks it sails to light up. Docks too close to tell apart at the current zoom share
-  one icon, and its tooltip names each pier by where it lies, and draws its routes on the map.
-- **Lifts, the Deeprun Tram and portals.** The Great Lift, Freewind Post, Thunder Bluff and Undercity
-  lifts, and both tram trains, count down like the boats (each landing or station is its own stop). The
-  tram shows at its Stormwind and Ironforge entrances. Portals are marked with where they go.
 - **Journey planner.** Shift-click anywhere on the world map for the fastest way there from where you
   stand: walking, the flight points you know, boats and zeppelins with their live waits, the tram and
   portals, including a flight master you haven't found yet if walking to it pays off. The route is drawn
@@ -19,6 +13,13 @@ leaves, and a planner for the fastest way anywhere.
   rather than straight at the stop, and hands your tracked quest back when you finish. A trail of dots on the ground
   marks the next 40 yards of the walk (experimental; turn it off in the options). To head for a quest, pick **Plan journey** from its right-click menu in the objective
   tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
+- **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower a matching
+  zeppelin, on its zone and continent map. Hover one to see where each boat goes next, when it arrives and
+  when it leaves; the docks it sails to light up. Docks too close to tell apart at the current zoom share
+  one icon, and its tooltip names each pier by where it lies, and draws its routes on the map.
+- **Lifts, the Deeprun Tram and portals.** The Great Lift, Freewind Post, Thunder Bluff and Undercity
+  lifts, and both tram trains, count down like the boats (each landing or station is its own stop). The
+  tram shows at its Stormwind and Ironforge entrances. Portals are marked with where they go.
 - **Flight masters on the world map**, known and undiscovered, with the game's own flight point icons.
 - **In the map's filter menu.** *Flight Masters*, *Boat and Zeppelin Routes*, *Boats & Zeppelins*, *Lifts &
   Tram* and *Portals* turn each layer off; *Other Faction's Routes* hides the
@@ -33,8 +34,8 @@ leaves, and a planner for the fastest way anywhere.
 - **Shared between players.** Sightings are passed on quietly over guild, party and yell at the docks, so
   someone else's ride can time your boat. No chat messages are shown; turn it off in the settings.
 
-Settings: `/ferry`, or *Options → AddOns → Ferry Forever*. Every feature above has its own switch there.
-`/ferry debug` keeps a trace of your position and ride matching in the saved variables, for reporting a ride
+Settings: `/path`, or *Options → AddOns → Shortest Path Forever*. Every feature above has its own switch there.
+`/path debug` keeps a trace of your position and ride matching in the saved variables, for reporting a ride
 that did not sync.
 
 ## How the times work
@@ -53,7 +54,7 @@ points your character has discovered.
 ```sh
 python3 tools/gen_routes.py          # regenerate Data/Routes.lua for the pinned build
 python3 tools/gen_transit.py         # regenerate Data/Transports.lua, Data/Taxi.lua and Data/Portals.lua
-tools/draw_zeppelin.py               # redraw Media/zeppelin.tga (the game has no zeppelin map icon)
+tools/draw_zeppelin.py               # redraw media/zeppelin.tga (the game has no zeppelin map icon)
 luajit tests/model_spec.lua          # timetable, ride fitting and wire format
 luajit tests/planner_spec.lua        # journey planning
 ```

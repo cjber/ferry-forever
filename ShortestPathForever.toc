@@ -1,0 +1,32 @@
+## Interface: 16001
+## Title: Shortest Path Forever
+## Notes: The fastest way anywhere: walking paths, flight points, boats, zeppelins, lifts, the tram and portals, with live departure times.
+## Author: cjber
+## Version: @project-version@
+## Category: Map
+## X-License: GPL-3.0-or-later
+## X-Website: https://github.com/cjber/shortest-path-forever
+## SavedVariables: ShortestPathForeverDB
+## SavedVariablesPerCharacter: ShortestPathForeverCharDB
+## IconTexture: Interface\AddOns\ShortestPathForever\media\Icon
+
+Data\Routes.lua
+Data\Transports.lua
+Data\Taxi.lua
+Data\Portals.lua
+Model.lua
+Planner.lua
+Core.lua
+Observer.lua
+Sync.lua
+Map.xml
+Taxi.lua
+Map.lua
+Tracker.lua
+Arrow.lua
+Trail.lua
+Path.lua
+Journey.lua
+Route.lua
+Alert.lua
+Settings.lua

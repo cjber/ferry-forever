@@ -1,4 +1,4 @@
-package-as: FerryForever
+package-as: ShortestPathForever
 
 manual-changelog:
   filename: .release-notes.md
@@ -8,5 +8,7 @@ ignore:
   - .release-notes.md
   - tools
   - tests
+  - media/icon.svg
+  - media/icon-400.png
   - .luacheckrc
   - stylua.toml

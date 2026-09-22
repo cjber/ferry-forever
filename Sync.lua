@@ -1,7 +1,7 @@
 local _, ns = ...
 
 local Model = ns.Model
-local PREFIX = "FerryFvr1"
+local PREFIX = "ShortPath1"
 local MAX_MESSAGE = 250
 local SPACING = 1.5
 -- Ask the dock at most this often, and only within this range of it.

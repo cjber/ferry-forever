@@ -1,6 +1,6 @@
 local ns = {}
-assert(loadfile("Data/Routes.lua"))("FerryForever", ns)
-assert(loadfile("Model.lua"))("FerryForever", ns)
+assert(loadfile("Data/Routes.lua"))("ShortestPathForever", ns)
+assert(loadfile("Model.lua"))("ShortestPathForever", ns)
 local Model, Routes = ns.Model, ns.Routes
 
 local function near(actual, expected, tolerance, label)
@@ -121,7 +121,7 @@ assert(Model.Newer({ seen = now + 3700, source = "player" }, own, now + 3700))
 assert(Model.Newer({ seen = now + 60, source = "you" }, own, now + 60))
 
 -- Sparse transport docks must not change any boat's dock index or timetable.
-assert(loadfile("Data/Transports.lua"))("FerryForever", ns)
+assert(loadfile("Data/Transports.lua"))("ShortestPathForever", ns)
 assert(#ns.Docks == 25 and ns.Docks[1001] and ns.Docks[1101])
 
 local function animatedPosition(frames, phase)

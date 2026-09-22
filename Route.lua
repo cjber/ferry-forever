@@ -1,8 +1,8 @@
 local _, ns = ...
 
-local LINE_TEMPLATE = "FerryForeverRoutePinTemplate"
-local TRANSPORT_TEMPLATE = "FerryForeverTransportPinTemplate"
-local GOAL_TEMPLATE = "FerryForeverGoalPinTemplate"
+local LINE_TEMPLATE = "ShortestPathForeverRoutePinTemplate"
+local TRANSPORT_TEMPLATE = "ShortestPathForeverTransportPinTemplate"
+local GOAL_TEMPLATE = "ShortestPathForeverGoalPinTemplate"
 -- A solid colour line with a slim dark border, so it reads on parchment and minimap alike; the taxi line
 -- atlas is mostly transparent and turned into a thin core inside a heavy border. Walks are short breadcrumbs.
 local THICKNESS, DASH, GAP = 2, 6, 5
@@ -97,16 +97,16 @@ local function HideUnused(owner)
 	end
 end
 
-FerryForeverRoutePinMixin = CreateFromMixins(MapCanvasPinMixin)
+ShortestPathForeverRoutePinMixin = CreateFromMixins(MapCanvasPinMixin)
 
-function FerryForeverRoutePinMixin:OnLoad()
+function ShortestPathForeverRoutePinMixin:OnLoad()
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_QUEST_BLOB")
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScaleStyle(AM_PIN_SCALE_STYLE_WITH_TERRAIN)
 	self.lines, self.underlines = {}, {}
 end
 
-function FerryForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
+function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
 	local low, high = ClipAxis(x1, x2 - x1, 0, 1, 0, 1)
 	if low then
 		low, high = ClipAxis(y1, y2 - y1, low, high, 0, 1)
@@ -125,7 +125,7 @@ function FerryForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
 	)
 end
 
-function FerryForeverRoutePinMixin:Mark(x, y, color)
+function ShortestPathForeverRoutePinMixin:Mark(x, y, color)
 	if x and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
 		local size = 4 / self:GetEffectiveScale()
 		local dx, dy = size / self:GetWidth(), size / self:GetHeight()
@@ -215,7 +215,7 @@ local function Bridge(pin, points, index, ax, ay, bx, by, color)
 	end
 end
 
-function FerryForeverRoutePinMixin:Draw()
+function ShortestPathForeverRoutePinMixin:Draw()
 	local map = self:GetMap()
 	local canvas = map:GetCanvas()
 	self:SetSize(canvas:GetWidth(), canvas:GetHeight())
@@ -253,22 +253,22 @@ function FerryForeverRoutePinMixin:Draw()
 	end
 end
 
-function FerryForeverRoutePinMixin:OnAcquired(route, geometry)
+function ShortestPathForeverRoutePinMixin:OnAcquired(route, geometry)
 	self.result, self.paths = route, geometry
 	self:Draw()
 end
 
-function FerryForeverRoutePinMixin:OnCanvasScaleChanged()
+function ShortestPathForeverRoutePinMixin:OnCanvasScaleChanged()
 	self:Draw()
 end
 
-function FerryForeverRoutePinMixin:OnCanvasSizeChanged()
+function ShortestPathForeverRoutePinMixin:OnCanvasSizeChanged()
 	self:Draw()
 end
 
-FerryForeverGoalPinMixin = CreateFromMixins(MapCanvasPinMixin)
+ShortestPathForeverGoalPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
-function FerryForeverGoalPinMixin:OnLoad()
+function ShortestPathForeverGoalPinMixin:OnLoad()
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_SUPER_TRACKED_CONTENT")
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScalingLimits(1, 1, 1)
@@ -279,11 +279,11 @@ function FerryForeverGoalPinMixin:OnLoad()
 	self:SetScript("OnHide", self.OnMouseLeave)
 end
 
-function FerryForeverGoalPinMixin:OnAcquired(x, y)
+function ShortestPathForeverGoalPinMixin:OnAcquired(x, y)
 	self:SetPosition(x, y)
 end
 
-function FerryForeverGoalPinMixin:OnMouseEnter()
+function ShortestPathForeverGoalPinMixin:OnMouseEnter()
 	local title, rows = ns.JourneyInfo()
 	if not title then
 		return
@@ -297,40 +297,40 @@ function FerryForeverGoalPinMixin:OnMouseEnter()
 	GameTooltip:Show()
 end
 
-function FerryForeverGoalPinMixin:OnMouseLeave()
+function ShortestPathForeverGoalPinMixin:OnMouseLeave()
 	if GameTooltip:IsOwned(self) then
 		GameTooltip:Hide()
 	end
 end
 
 -- Pins pass right clicks to the canvas to zoom out (Blizzard_MapCanvas.lua:328); this one clears instead.
-function FerryForeverGoalPinMixin.ShouldMouseButtonBePassthrough()
+function ShortestPathForeverGoalPinMixin.ShouldMouseButtonBePassthrough()
 	return false
 end
 
-function FerryForeverGoalPinMixin.OnMouseClickAction(_self, button)
+function ShortestPathForeverGoalPinMixin.OnMouseClickAction(_self, button)
 	if button == "RightButton" then
 		ns.ClearJourney()
 	end
 end
 
-function FerryForeverGoalPinMixin:OnReleased()
+function ShortestPathForeverGoalPinMixin:OnReleased()
 	self:OnMouseLeave()
 	MapCanvasPinMixin.OnReleased(self)
 end
 
 -- One mouse-transparent canvas pin holds every boat and zeppelin route, each hidden until its dock is hovered.
-FerryForeverTransportPinMixin = CreateFromMixins(FerryForeverRoutePinMixin)
+ShortestPathForeverTransportPinMixin = CreateFromMixins(ShortestPathForeverRoutePinMixin)
 
-function FerryForeverTransportPinMixin:OnLoad()
-	FerryForeverRoutePinMixin.OnLoad(self)
+function ShortestPathForeverTransportPinMixin:OnLoad()
+	ShortestPathForeverRoutePinMixin.OnLoad(self)
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_FOG_OF_WAR")
 	self:EnableMouse(false)
 	self.hits = {}
 	self:SetScript("OnHide", self.OnReleased)
 end
 
-function FerryForeverTransportPinMixin:UpdateAlpha()
+function ShortestPathForeverTransportPinMixin:UpdateAlpha()
 	for index, hit in ipairs(self.hits) do
 		local alpha = highlightedRoutes and highlightedRoutes[hit.route] and 1 or 0
 		self.lines[index]:SetAlpha(alpha * hit.fade)
@@ -348,13 +348,13 @@ function ns.HoverTransportRoutes(owner, routes)
 	end
 end
 
-function FerryForeverTransportPinMixin:OnAcquired(_, geometry)
+function ShortestPathForeverTransportPinMixin:OnAcquired(_, geometry)
 	self.paths = geometry
 	transportPin = self
 	self:Draw()
 end
 
-function FerryForeverTransportPinMixin:OnReleased()
+function ShortestPathForeverTransportPinMixin:OnReleased()
 	if not dockHover then
 		highlightedRoutes = nil
 	end
@@ -567,7 +567,7 @@ ns.Init(function()
 	WorldMapFrame:AddDataProvider(transportProvider)
 	provider = CreateFromMixins(ProviderMixin)
 	WorldMapFrame:AddDataProvider(provider)
-	minimap = CreateFrame("Frame", "FerryForeverMinimapRoute", Minimap)
+	minimap = CreateFrame("Frame", "ShortestPathForeverMinimapRoute", Minimap)
 	minimap:SetAllPoints(Minimap)
 	minimap:EnableMouse(false)
 	minimap.lines, minimap.underlines, minimap.used = {}, {}, 0

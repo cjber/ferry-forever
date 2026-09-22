@@ -94,15 +94,15 @@ local function pop()
 	return top
 end
 
--- Collision maps ship as one load-on-demand addon per continent (FerryForever_Nav<map>), so only players who
+-- Collision maps ship as one load-on-demand addon per continent (ShortestPathForever_Nav<map>), so only players who
 -- walk there pay for them. A separate addon cannot share `ns`, hence the global.
 local tried = {}
 local function Data(map)
-	if not (FerryForeverPathData and FerryForeverPathData[map]) and not tried[map] and C_AddOns then
+	if not (ShortestPathForeverPathData and ShortestPathForeverPathData[map]) and not tried[map] and C_AddOns then
 		tried[map] = true
-		C_AddOns.LoadAddOn("FerryForever_Nav" .. map)
+		C_AddOns.LoadAddOn("ShortestPathForever_Nav" .. map)
 	end
-	return FerryForeverPathData and FerryForeverPathData[map]
+	return ShortestPathForeverPathData and ShortestPathForeverPathData[map]
 end
 
 -- Per-map state; clusters are decoded on first use.

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Shortest Path Forever</title>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#1c3230"/>
+      <stop offset="1" stop-color="#07100f"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbe7a1"/>
+      <stop offset="0.45" stop-color="#d9a441"/>
+      <stop offset="1" stop-color="#7a4f14"/>
+    </linearGradient>
+    <radialGradient id="gem" cx="40%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#fff6cf"/>
+      <stop offset="0.5" stop-color="#f2c14e"/>
+      <stop offset="1" stop-color="#9a5e12"/>
+    </radialGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="6" y="6" width="244" height="244" rx="28" fill="url(#gold)"/>
+  <rect x="16" y="16" width="224" height="224" rx="20" fill="url(#bg)"/>
+
+  <!-- faint contours: the terrain the route bends round -->
+  <g fill="none" stroke="#4d7a73" stroke-opacity="0.5" stroke-width="3">
+    <path d="M108 136 C120 114 152 116 158 138 C162 158 138 168 120 162 C106 157 100 148 108 136 Z"/>
+    <path d="M84 136 C98 96 170 94 182 136 C190 174 146 194 112 186 C84 178 74 158 84 136 Z"/>
+  </g>
+
+  <!-- the route, winding round the hill to the destination -->
+  <path d="M50 208 C84 204 62 170 56 148 C46 112 70 80 104 74 C124 70 134 78 146 80" fill="none" stroke="#000" stroke-opacity="0.5"
+    stroke-width="18" stroke-linecap="round" stroke-dasharray="0 27" transform="translate(3 4)"/>
+  <path d="M50 208 C84 204 62 170 56 148 C46 112 70 80 104 74 C124 70 134 78 146 80" fill="none" stroke="url(#gold)"
+    stroke-width="16" stroke-linecap="round" stroke-dasharray="0 27"/>
+  <circle cx="50" cy="208" r="14" fill="url(#gold)" stroke="#4a2c08" stroke-width="4"/>
+
+  <!-- destination: the quest diamond -->
+  <path d="M190 34 L226 80 L190 126 L154 80 Z" fill="#000" opacity="0.45" transform="translate(4 5)"/>
+  <path d="M190 34 L226 80 L190 126 L154 80 Z" fill="url(#gem)" stroke="#4a2c08" stroke-width="5"
+    stroke-linejoin="round"/>
+  <path d="M190 54 L210 80 L190 106 L170 80 Z" fill="none" stroke="#5a360c" stroke-width="4"
+    stroke-linejoin="round"/>
+  <path d="M190 44 L214 76 L166 76 Z" fill="url(#shine)"/>
+</svg>

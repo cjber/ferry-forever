@@ -161,7 +161,7 @@ local function GuideWaypoint(point)
 		end
 		-- These APIs may dispatch events synchronously. Only our own writes bypass ownership checks.
 		guide.writing = true
-		-- The native map pin marks the next bend; Ferry's destination diamond still marks the final goal.
+		-- The native map pin marks the next bend; our destination diamond still marks the final goal.
 		if waypoint and C_Map.SetUserWaypoint(waypoint) then
 			guide.waypoint = C_Map.GetUserWaypoint()
 			guide.expectedWaypoint = guide.waypoint
@@ -243,7 +243,7 @@ local function UpdateProgress()
 	ns.ClearJourney()
 end
 
--- Guide's waypoint only steers the native marker; Ferry's own pins already draw the route and destination.
+-- Guide's waypoint only steers the native marker; our own pins already draw the route and destination.
 local function HideGuideWaypointPin(provider)
 	if provider.pin and guide and (guide.writing or SameWaypoint(C_Map.GetUserWaypoint(), guide.expectedWaypoint)) then
 		provider.pin:Hide()
@@ -574,7 +574,7 @@ local function AddQuestMenuEntry(root, questID)
 end
 
 ns.Init(function()
-	driver = CreateFrame("Frame", "FerryForeverJourneyDriver", UIParent)
+	driver = CreateFrame("Frame", "ShortestPathForeverJourneyDriver", UIParent)
 	driver:SetScript("OnUpdate", Update)
 	driver:RegisterEvent("QUEST_TURNED_IN")
 	driver:RegisterEvent("QUEST_REMOVED")

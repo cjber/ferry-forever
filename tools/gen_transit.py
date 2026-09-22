@@ -42,7 +42,7 @@ def classicdb(refresh=False, offline=False):
     if refresh or not path.exists():
         if offline:
             raise ValueError(f"Missing cached source: {path}")
-        request = urllib.request.Request(DB_URL, headers={"User-Agent": "FerryForever/1.0"})
+        request = urllib.request.Request(DB_URL, headers={"User-Agent": "ShortestPathForever/1.0"})
         with urllib.request.urlopen(request, timeout=60) as response:
             data = response.read()
         gzip.decompress(data)  # Do not cache an HTTP error page.

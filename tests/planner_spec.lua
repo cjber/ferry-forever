@@ -1,6 +1,6 @@
 local ns = {}
-assert(loadfile("Model.lua"))("FerryForever", ns)
-assert(loadfile("Planner.lua"))("FerryForever", ns)
+assert(loadfile("Model.lua"))("ShortestPathForever", ns)
+assert(loadfile("Planner.lua"))("ShortestPathForever", ns)
 local Plan = ns.Planner.Plan
 local LegPoints = ns.Planner.LegPoints
 
@@ -289,7 +289,7 @@ near(ride.arrive, 100000)
 
 -- The shipped data can route between continents and tram stations using the same pure contract.
 for _, file in ipairs({ "Routes", "Transports", "Taxi", "Portals" }) do
-	assert(loadfile("Data/" .. file .. ".lua"))("FerryForever", ns)
+	assert(loadfile("Data/" .. file .. ".lua"))("ShortestPathForever", ns)
 end
 local real = options()
 real.from, real.to = ns.Docks[1101], ns.Docks[1102]

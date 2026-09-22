@@ -8,11 +8,11 @@ function ns.SetOption(key, value)
 end
 
 ns.Init(function()
-	local category = Settings.RegisterVerticalLayoutCategory("Ferry Forever")
+	local category = Settings.RegisterVerticalLayoutCategory("Shortest Path Forever")
 	local function Checkbox(key, name, tooltip, onChanged)
 		local setting = Settings.RegisterAddOnSetting(
 			category,
-			"FerryForever_" .. key,
+			"ShortestPathForever_" .. key,
 			key,
 			ns.db,
 			Settings.VarType.Boolean,
@@ -69,8 +69,9 @@ ns.Init(function()
 		"Sends and receives sighting times over guild, party and at the dock. No chat messages are shown."
 	)
 	Settings.RegisterAddOnCategory(category)
-	SLASH_FERRYFOREVER1 = "/ferry"
-	SlashCmdList.FERRYFOREVER = function(message)
+	SLASH_SHORTESTPATHFOREVER1 = "/path"
+	SLASH_SHORTESTPATHFOREVER2 = "/shortestpath"
+	SlashCmdList.SHORTESTPATHFOREVER = function(message)
 		if message == "debug" then
 			ns.db.debug = not ns.db.debug
 			ns.db.trace = ns.db.debug and {} or nil

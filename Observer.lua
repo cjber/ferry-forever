@@ -97,7 +97,7 @@ local function Sample()
 		Record()
 		ride = nil
 	end
-	-- `/ferry debug` also keeps the raw samples in the saved variables, to diagnose a ride that did not sync.
+	-- `/path debug` also keeps the raw samples in the saved variables, to diagnose a ride that did not sync.
 	if ns.db.debug then
 		-- Fitting is the costly part, so the trace refits on the same cadence as syncing.
 		if ride and (not ride.traceFits or ride.count % FIT_EVERY == 0) then
@@ -121,7 +121,7 @@ local function Sample()
 			table.remove(ns.db.trace, 1)
 		end
 	end
-	-- `/ferry debug`: whether the position reads on a transport, and what the ride has matched so far.
+	-- `/path debug`: whether the position reads on a transport, and what the ride has matched so far.
 	if ns.db.debug and GetTime() - lastDebug >= 5 then
 		lastDebug = GetTime()
 		local matched = {}

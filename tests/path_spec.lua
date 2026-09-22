@@ -1,13 +1,13 @@
--- The collision map is not in this repository (it ships as the FerryForever_Nav0 data addon), so point
--- FERRY_NAV0 at its Nav0.lua to run this spec.
-local data = os.getenv("FERRY_NAV0")
+-- The collision map is not in this repository (it ships as the ShortestPathForever_Nav0 data addon), so point
+-- NAV_DATA at its Nav0.lua to run this spec.
+local data = os.getenv("NAV_DATA")
 if not data then
-	print("path_spec: skipped, FERRY_NAV0 is not set")
+	print("path_spec: skipped, NAV_DATA is not set")
 	return
 end
 local ns = {}
 assert(loadfile(data))()
-assert(loadfile("Path.lua"))("FerryForever", ns)
+assert(loadfile("Path.lua"))("ShortestPathForever", ns)
 local Path = ns.Path
 
 local frames = {}

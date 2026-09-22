@@ -166,7 +166,7 @@ ns.Init(function()
 		ns.Print("The objective tracker is unavailable.")
 		return
 	end
-	module = CreateFrame("Frame", "FerryForeverObjectiveTracker", UIParent, "ObjectiveTrackerModuleTemplate")
+	module = CreateFrame("Frame", "ShortestPathForeverObjectiveTracker", UIParent, "ObjectiveTrackerModuleTemplate")
 	Mixin(module, ModuleMixin)
 	module.blocks = {}
 	module:SetHeader(ModuleMixin.headerText)

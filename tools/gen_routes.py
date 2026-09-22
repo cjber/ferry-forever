@@ -66,7 +66,7 @@ def download(url, filename, refresh=False, offline=False):
         return path.read_text(encoding="utf-8-sig")
     if offline:
         raise ValueError(f"Missing cached source: {path}")
-    request = urllib.request.Request(url, headers={"User-Agent": "FerryForever/1.0"})
+    request = urllib.request.Request(url, headers={"User-Agent": "ShortestPathForever/1.0"})
     with urllib.request.urlopen(request, timeout=60) as response:
         data = response.read()
     content = data.decode("utf-8-sig")

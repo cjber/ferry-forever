@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = ["pillow"]
 # ///
-"""Draw the zeppelin map icon (Media/zeppelin.tga).
+"""Draw the zeppelin map icon (media/zeppelin.tga).
 
 The game has no zeppelin map icon, only top-down vehicle sprites, so this draws one to sit beside the stock
 ferry (atlas flightmasterferry): a side view in its palette, with its soft black outline and tan rim. Drawn
@@ -15,7 +15,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
 SIZE = 512
-OUTPUT = Path(__file__).resolve().parent.parent / "Media" / "zeppelin.tga"
+OUTPUT = Path(__file__).resolve().parent.parent / "media" / "zeppelin.tga"
 
 TAN = (255, 214, 128)
 GOLD = (196, 140, 50)

@@ -1,6 +1,6 @@
 # Changelog
 
-What changed in each release, in the terms someone waiting at a dock would notice. Dates are UTC.
+What changed in each release, in the terms someone finding their way would notice. Dates are UTC.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The entries are prose rather than bare
@@ -11,7 +11,8 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
-The first release. Every boat and zeppelin, including the new Forever crossings to Southshore,
+The first release, a route finder for WoW: Forever: pick a spot on the map or a quest and it plans the
+fastest way there and walks you to it. Every boat and zeppelin, including the new Forever crossings to Southshore,
 Riverglades and Zephras Isle, has its dock marked on the world map, a ferry for boats and a zeppelin drawn
 to match it for zeppelins. Hovering a dock lists where each boat goes next, counts down to its arrival and
 departure, and lights up the docks it sails to. Docks that would overlap on a zoomed-out map share one
@@ -20,7 +21,7 @@ faction's routes. Near a dock, a Boats section above your quests shows the same 
 
 Each route's loop time comes from the game's own path data, so a single ride fixes a boat's schedule for
 hours. Ride once and it syncs, and the sighting is shared quietly with your guild, party and anyone at the
-dock, so other players' rides time your boats too. Sharing can be turned off in the settings (`/ferry`).
+dock, so other players' rides time your boats too. Sharing can be turned off in the settings (`/path`).
 
 The lifts at the Great Lift, Freewind Post, Thunder Bluff and Undercity, and both Deeprun Tram trains, are
 timed the same way: countdowns on the map and in the tracker, synced from a ride and shared. The tram is

@@ -3,13 +3,14 @@ max_line_length = 120
 exclude_files = { "tools/.cache/**", ".release/**" }
 ignore = { "212/_.*" } -- unused args prefixed with _
 globals = {
-	"FerryForeverCharDB",
-	"FerryForeverDB",
-	"FerryForeverDockPinMixin",
-	"FerryForeverGoalPinMixin",
-	"FerryForeverPortalPinMixin",
-	"FerryForeverRoutePinMixin",
-	"SLASH_FERRYFOREVER1",
+	"ShortestPathForeverCharDB",
+	"ShortestPathForeverDB",
+	"ShortestPathForeverDockPinMixin",
+	"ShortestPathForeverGoalPinMixin",
+	"ShortestPathForeverPortalPinMixin",
+	"ShortestPathForeverRoutePinMixin",
+	"SLASH_SHORTESTPATHFOREVER1",
+	"SLASH_SHORTESTPATHFOREVER2",
 	"SlashCmdList",
 }
 read_globals = {
@@ -83,8 +84,8 @@ read_globals = {
 files["tests/"] = { std = "+luajit", globals = { "arg" } }
 
 -- Round 3: native flight pins, tracker colours and context menus.
-globals[#globals + 1] = "FerryForeverFlightPinMixin"
-globals[#globals + 1] = "FerryForeverTransportPinMixin"
+globals[#globals + 1] = "ShortestPathForeverFlightPinMixin"
+globals[#globals + 1] = "ShortestPathForeverTransportPinMixin"
 read_globals[#read_globals + 1] = "FlightPointPinMixin"
 read_globals[#read_globals + 1] = "FlightPointDataProviderMixin"
 read_globals[#read_globals + 1] = "OBJECTIVE_TRACKER_COLOR"
@@ -101,7 +102,7 @@ read_globals[#read_globals + 1] = "MapCanvasMixin"
 read_globals[#read_globals + 1] = "POIButtonUtil"
 -- Path.lua: its per-frame CPU clock, and the per-continent walking-map addons it loads on demand.
 read_globals[#read_globals + 1] = "debugprofilestop"
-read_globals[#read_globals + 1] = "FerryForeverPathData"
+read_globals[#read_globals + 1] = "ShortestPathForeverPathData"
 read_globals[#read_globals + 1] = "C_AddOns"
 read_globals[#read_globals + 1] = "canaccessvalue"
 read_globals[#read_globals + 1] = "WaypointLocationDataProviderMixin"

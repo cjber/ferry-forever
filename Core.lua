@@ -15,7 +15,7 @@ local DEFAULTS = {
 }
 
 function ns.Print(message)
-	print(NORMAL_FONT_COLOR:WrapTextInColorCode("Ferry Forever:") .. " " .. message)
+	print(NORMAL_FONT_COLOR:WrapTextInColorCode("Shortest Path Forever:") .. " " .. message)
 end
 
 -- Each module starts on its own, so one that fails (reported as usual) does not stop the rest.
@@ -243,8 +243,8 @@ frame:SetScript("OnEvent", function(self, _, name)
 		return
 	end
 	self:UnregisterEvent("ADDON_LOADED")
-	FerryForeverDB = FerryForeverDB or {}
-	ns.db = FerryForeverDB
+	ShortestPathForeverDB = ShortestPathForeverDB or {}
+	ns.db = ShortestPathForeverDB
 	for key, value in pairs(DEFAULTS) do
 		if ns.db[key] == nil then
 			ns.db[key] = value
