@@ -19,7 +19,7 @@ local COLORS = {
 	passage = CreateColor(0.85, 0.35, 1),
 }
 local provider, goal, result, paths, minimap
-local transportProvider, transportPin, dockHover, highlightedRoutes
+local transportProvider, dockHover, highlightedRoutes
 
 -- Each map's world corners: { continent, x and y at the top left, x and y at the bottom right }.
 local corners = {}
@@ -354,7 +354,6 @@ function ShortestPathForeverTransportPinMixin:OnLoad()
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_FOG_OF_WAR")
 	self:EnableMouse(false)
 	self.hits = {}
-	self:SetScript("OnHide", self.OnReleased)
 end
 
 function ShortestPathForeverTransportPinMixin:UpdateAlpha()
@@ -370,23 +369,20 @@ function ns.HoverTransportRoutes(owner, routes)
 		return
 	end
 	dockHover, highlightedRoutes = routes and owner or nil, routes
-	if transportPin then
-		transportPin:UpdateAlpha()
+	-- Looked up rather than cached: a pin hidden with the map stays active and is not always re-acquired.
+	for pin in WorldMapFrame:EnumeratePinsByTemplate(TRANSPORT_TEMPLATE) do
+		pin:UpdateAlpha()
 	end
 end
 
 function ShortestPathForeverTransportPinMixin:OnAcquired(_, geometry)
 	self.paths = geometry
-	transportPin = self
 	self:Draw()
 end
 
 function ShortestPathForeverTransportPinMixin:OnReleased()
 	if not dockHover then
 		highlightedRoutes = nil
-	end
-	if transportPin == self then
-		transportPin = nil
 	end
 	MapCanvasPinMixin.OnReleased(self)
 end
