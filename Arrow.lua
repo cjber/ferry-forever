@@ -67,11 +67,6 @@ local function Create()
 	end)
 end
 
--- The walk still ahead for Trail.lua, and whether the native marker sits on path[index].
-function ns.GuideProgress()
-	return path, index, native
-end
-
 -- placeBend owns waypoint placement and returns whether native tracking is ours. Progress lives only here.
 function ns.PointGuideArrow(points, placeBend)
 	if points and #points == 0 then

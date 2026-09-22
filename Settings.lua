@@ -59,11 +59,6 @@ ns.Init(function()
 	Checkbox("alertSound", "Play a sound with arrival alerts", "Plays even with the game in the background.")
 	Checkbox("journey", "Plan journeys with Shift-click on the world map")
 	Checkbox(
-		"trail",
-		"Draw Guide's route on the ground ahead of you (experimental)",
-		"Faint arrows along the next 40 yards of the walk, placed using the game's navigation marker."
-	)
-	Checkbox(
 		"share",
 		"Share departure times with other players",
 		"Sends and receives sighting times over guild, party and at the dock. No chat messages are shown."
