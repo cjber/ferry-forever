@@ -80,6 +80,25 @@ local function SameTracking(state)
 		and state.expectedTrackingType == C_SuperTrack.GetHighestPrioritySuperTrackingType()
 end
 
+-- Blizzard gives user waypoints a plain ring (SuperTrackedFrame.lua:219); Guide's bends wear the quest diamond.
+local function GuideMarkerIcon(frame)
+	if
+		guide
+		and C_SuperTrack.GetHighestPrioritySuperTrackingType() == Enum.SuperTrackingType.UserWaypoint
+		and SameWaypoint(C_Map.GetUserWaypoint(), guide.expectedWaypoint)
+	then
+		frame.Icon:SetAtlas("Navigation-Tracked-Icon", true)
+		frame:UpdateIconSize()
+	end
+end
+
+-- Moving an already super-tracked waypoint fires no SUPER_TRACKING_CHANGED, so refresh the icon ourselves.
+local function RefreshMarkerIcon()
+	if SuperTrackedFrame then
+		SuperTrackedFrame:UpdateIcon()
+	end
+end
+
 local function StopGuide()
 	local previous = guide
 	guide = nil
@@ -103,6 +122,7 @@ local function StopGuide()
 			C_SuperTrack.SetSuperTrackedQuestID(previous.previousQuest or 0)
 		end
 	end
+	RefreshMarkerIcon()
 end
 
 local function OwnsWaypoint()
@@ -156,6 +176,7 @@ local function GuideWaypoint(point)
 		-- Deferred events from our own writes must also agree with the expected tracking state.
 		RememberTracking(guide)
 		guide.writing = nil
+		RefreshMarkerIcon()
 	end
 	return guide.waypoint ~= nil and C_SuperTrack.IsSuperTrackingUserWaypoint()
 end
@@ -584,6 +605,9 @@ ns.Init(function()
 		if provider.RefreshAllData == WaypointLocationDataProviderMixin.RefreshAllData then
 			hooksecurefunc(provider, "RefreshAllData", HideGuideWaypointPin)
 		end
+	end
+	if SuperTrackedFrame then
+		hooksecurefunc(SuperTrackedFrame, "UpdateIcon", GuideMarkerIcon)
 	end
 	WorldMapFrame:AddGlobalPinMouseActionHandler(OnPinClick)
 	Menu.ModifyMenu("MENU_QUEST_OBJECTIVE_TRACKER", function(owner, root)
