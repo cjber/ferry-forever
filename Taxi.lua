@@ -1,19 +1,11 @@
 local _, ns = ...
 
--- The flight points this character knows, for the journey planner. The world map's taxi query answers anywhere
--- (not only at a flight master), so every zone holding a node is asked at login and whenever one is learned.
+-- The flight points this character knows, for the journey planner and the map's flight master pins. Only a
+-- flight master's own map says which nodes a character can fly to: the world map's taxi query answers anywhere
+-- but reports every node as discovered on this client (the other faction's included), so it is not a source.
 
-local function ZoneMaps()
-	local maps, seen = {}, {}
-	for _, node in pairs(ns.TaxiNodes) do
-		local location = ns.Locate(node)
-		if location and not seen[location.uiMap] then
-			seen[location.uiMap] = true
-			maps[#maps + 1] = location.uiMap
-		end
-	end
-	return maps
-end
+-- Lists built from that query before it was dropped; they claim every node, so start again from empty.
+local KNOWN_VERSION = 2
 
 -- `/ferry debug`: what the game's taxi queries return, to check how this client reports known flight points.
 local function Log(key, uiMap, nodes)
@@ -38,23 +30,6 @@ local function Log(key, uiMap, nodes)
 	}
 end
 
-local zoneMaps
-local function Scan()
-	zoneMaps = zoneMaps or ZoneMaps()
-	local known, answered = ns.charDB.taxi, false
-	for _, uiMap in ipairs(zoneMaps) do
-		local nodes = C_TaxiMap.GetTaxiNodesForMap(uiMap) or {}
-		Log("zone", uiMap, nodes)
-		for _, node in ipairs(nodes) do
-			answered = true
-			if not node.isUndiscovered and ns.TaxiNodes[node.nodeID] then
-				known[node.nodeID] = true
-			end
-		end
-	end
-	ns.charDB.taxiScanned = ns.charDB.taxiScanned or answered
-end
-
 -- At a flight master, every node it can fly to is known (absence never unlearns one).
 local function ScanFlightMaster()
 	local uiMap = GetTaxiMapID and GetTaxiMapID()
@@ -69,26 +44,20 @@ local function ScanFlightMaster()
 	end
 end
 
--- Known nodes, or nil when this client never answered the query (the planner then assumes every node of the
--- player's faction).
+-- Empty until the character opens a flight master: the planner then walks rather than guessing at flights.
 function ns.KnownTaxiNodes()
-	return ns.charDB.taxiScanned and ns.charDB.taxi or nil
+	return ns.charDB.taxi
 end
 
 ns.Init(function()
 	FerryForeverCharDB = FerryForeverCharDB or {}
 	ns.charDB = FerryForeverCharDB
-	ns.charDB.taxi = ns.charDB.taxi or {}
+	if ns.charDB.taxiVersion ~= KNOWN_VERSION then
+		ns.charDB.taxi, ns.charDB.taxiScanned, ns.charDB.taxiVersion = {}, nil, KNOWN_VERSION
+	end
 	local frame = CreateFrame("Frame")
-	frame:RegisterEvent("TAXI_NODE_STATUS_CHANGED")
 	frame:RegisterEvent("TAXIMAP_OPENED")
-	frame:SetScript("OnEvent", function(_, event)
-		if event == "TAXIMAP_OPENED" then
-			ScanFlightMaster()
-		else
-			Scan()
-		end
-	end)
-	-- The map data is not ready the instant the addon loads.
-	C_Timer.After(5, Scan)
+	-- Learning a node fires this while the flight master's map is open.
+	frame:RegisterEvent("TAXI_NODE_STATUS_CHANGED")
+	frame:SetScript("OnEvent", ScanFlightMaster)
 end)
