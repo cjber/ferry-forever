@@ -33,44 +33,44 @@ local function passes(points, x, y)
 	return best
 end
 
-local GOLDSHIRE = { -9459, 43 }
-local NORTHSHIRE = { -8914, -135 }
-local STORMWIND_FM = { -8840.56, 489.7 } -- Data/Taxi.lua node 2
+local GOLDSHIRE = { x = -9459, y = 43 }
+local NORTHSHIRE = { x = -8914, y = -135 }
+local STORMWIND_FM = { x = -8840.56, y = 489.7 } -- Data/Taxi.lua node 2
 
 -- Goldshire to Stormwind goes round by the gate, not over the wall or through the moat.
-local pts, len = Path.FindSync(0, GOLDSHIRE[1], GOLDSHIRE[2], STORMWIND_FM[1], STORMWIND_FM[2])
+local pts, len = Path.FindSync(0, GOLDSHIRE, STORMWIND_FM)
 assert(pts, len)
-local straight = dist(GOLDSHIRE[1], GOLDSHIRE[2], STORMWIND_FM[1], STORMWIND_FM[2])
+local straight = dist(GOLDSHIRE.x, GOLDSHIRE.y, STORMWIND_FM.x, STORMWIND_FM.y)
 assert(len > straight * 1.3 and len < 1300, len)
 assert(passes(pts, -9068, 417) < 30, "misses the gate")
-assert(pts[1].x == GOLDSHIRE[1] and pts[#pts].y == STORMWIND_FM[2] and pts[1].map == 0)
+assert(pts[1].x == GOLDSHIRE.x and pts[#pts].y == STORMWIND_FM.y and pts[1].map == 0)
 
-pts, len = Path.FindSync(0, NORTHSHIRE[1], NORTHSHIRE[2], GOLDSHIRE[1], GOLDSHIRE[2])
+pts, len = Path.FindSync(0, NORTHSHIRE, GOLDSHIRE)
 assert(pts and len > 580 and len < 700, len)
 
 -- A rooftop endpoint moves to the street below instead of failing.
-assert(Path.FindSync(0, -9010, 870, STORMWIND_FM[1], STORMWIND_FM[2]))
+assert(Path.FindSync(0, { x = -9010, y = 870 }, STORMWIND_FM))
 
-local none, why = Path.FindSync(0, 0, 6000, GOLDSHIRE[1], GOLDSHIRE[2])
+local none, why = Path.FindSync(0, { x = 0, y = 6000 }, GOLDSHIRE)
 assert(none == nil and why == "outside", why)
-none, why = Path.FindSync(1, 0, 0, 1, 1)
+none, why = Path.FindSync(1, { x = 0, y = 0 }, { x = 1, y = 1 })
 assert(none == nil and why == "nodata", why)
 assert(Path.HasData(0) and not Path.HasData(1))
 
 -- The sliced search gives the sync result and spreads over frames.
 local got, gotLen, gotJob
-local job = Path.Find(0, GOLDSHIRE[1], GOLDSHIRE[2], STORMWIND_FM[1], STORMWIND_FM[2], function(p, l, j)
+local job = Path.Find(0, GOLDSHIRE, STORMWIND_FM, function(p, l, j)
 	got, gotLen, gotJob = p, l, j
 end)
 Path.budget = 0.05
 drain()
 Path.budget = 3
-local syncPts, syncLen = Path.FindSync(0, GOLDSHIRE[1], GOLDSHIRE[2], STORMWIND_FM[1], STORMWIND_FM[2])
+local syncPts, syncLen = Path.FindSync(0, GOLDSHIRE, STORMWIND_FM)
 assert(gotJob == job and job.frames > 1, job.frames)
 assert(math.abs(gotLen - syncLen) < 1e-6 and #got == #syncPts)
 
 local cancelled = false
-local first = Path.Find(0, NORTHSHIRE[1], NORTHSHIRE[2], GOLDSHIRE[1], GOLDSHIRE[2], function()
+local first = Path.Find(0, NORTHSHIRE, GOLDSHIRE, function()
 	cancelled = true
 end)
 Path.Cancel(first)
@@ -80,8 +80,27 @@ assert(not cancelled)
 -- Coordinates: the navmesh stands where the addon's pins stand (UnitPosition frame, x north, y west).
 -- Taxi.lua Stormwind flight master and Transports.lua tram pin, each with a nearby street point.
 for _, pin in ipairs({ { -8840.56, 489.7, 0, -20 }, { -8346.46, 514.031, 8, 0 } }) do
-	local p = Path.FindSync(0, pin[1], pin[2], pin[1] + pin[3], pin[2] + pin[4])
+	local p = Path.FindSync(0, { x = pin[1], y = pin[2] }, { x = pin[1] + pin[3], y = pin[2] + pin[4] })
 	assert(p, "no mesh at pin " .. pin[1] .. "," .. pin[2])
 end
+
+-- Levels: a road through a tunnel under walkable ground, and a city under a city.
+-- Ironforge to Menethil goes through Dun Algaz rather than round by Arathi (about 18,600 yards on one level).
+local IRONFORGE_FM = { x = -4821.78, y = -1155.44, z = 502.21 } -- Data/Taxi.lua node 6
+local MENETHIL_FM = { x = -3792.26, y = -783.29, z = 9.06 } -- node 7
+pts, len = Path.FindSync(0, IRONFORGE_FM, MENETHIL_FM)
+assert(pts and len < 8000, len)
+assert(passes(pts, -4220, -2464) < 30, "misses the Dun Algaz tunnel")
+assert(pts[1].z and pts[#pts].z, "points carry heights")
+
+-- Undercity: the flight master stands by the west lift's bottom landing, and its top is a long way round on foot.
+local UNDERCITY_FM = { x = 1568.62, y = 267.97, z = -43.1 } -- node 11
+local WEST_LIFT = { x = 1596.15, y = 291.8 } -- Data/Transports.lua docks 1009 (top) and 1010 (bottom)
+local _, near = Path.FindSync(0, UNDERCITY_FM, { x = WEST_LIFT.x, y = WEST_LIFT.y, z = -40.784 })
+local _, far = Path.FindSync(0, UNDERCITY_FM, { x = WEST_LIFT.x, y = WEST_LIFT.y, z = 55.718 })
+assert(type(near) == "number" and near < 150, near)
+assert(type(far) == "number" and far > 1000, far)
+-- From the top, the surface road leads on to Tarren Mill.
+assert(Path.FindSync(0, { x = WEST_LIFT.x, y = WEST_LIFT.y, z = 55.718 }, { x = -0.06, y = -859.91, z = 58.83 }))
 
 print("path_spec ok")

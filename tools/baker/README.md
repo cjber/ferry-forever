@@ -33,7 +33,10 @@ Steps, each reusable on its own:
    not depend on memory pressure. `ROWS="a b"` limits the rows.
 3. `NavBaker --region <install> <product> <map> <outDir> <row0> <row1> <col0> <col1> [threads]` bakes a rectangle.
 4. `NAV_MM=<outDir> gen_nav.py <out.lua> --map <map> --name <name> [--jobs n]` turns TrinityCore-layout `.mmtile`
-   files into the addon's HPA* graph and 8-yard grids. The output is deterministic.
+   files into the addon's HPA* graph and 8-yard grids. The output is deterministic. Each cell keeps one base surface
+   and its height (2-yard steps); where walkable surfaces overlap (a tunnel under a pass, a city under a city), the
+   others are kept as floors, each linked to the neighbouring surfaces it actually joins. Floors under water in the
+   same cell (lake and sea beds) are dropped.
 
 `NAV_DBD` points NavBaker at a directory holding `Map.dbd` and `LiquidType.dbd`. bake.sh fetches them from a pinned
 WoWDBDefs commit and checks their sha256.
