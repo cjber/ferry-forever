@@ -142,7 +142,13 @@ near(flying.wait, 3000)
 flight.taxiKnown = { [1] = true }
 only(Plan(flight), "walk")
 flight.taxiKnown = { [2] = true }
-only(Plan(flight), "walk")
+only(Plan(flight), "flight")
+flight.from = point(1, -70)
+result = Plan(flight)
+assert(#result.legs == 2 and result.legs[1].mode == "walk" and result.legs[1].to.undiscovered)
+assert(result.legs[2].mode == "flight" and result.legs[2].to.id == 2)
+near(result.arrive, 24000)
+flight.from = point(1)
 flight.taxiKnown = nil
 flight.taxiNodes[2].faction = "Horde"
 only(Plan(flight), "walk")
@@ -182,6 +188,31 @@ near(points[3].y, 200)
 near(points[6].x, 10500)
 near(points[6].y, -200)
 near(points[8].x, 14000)
+
+-- Unknown connections can be crossed, but cannot end a flight even with a zero-length walk to the goal.
+flight.taxiKnown = { [1] = true, [3] = true }
+flying = only(Plan(flight), "flight")
+assert(#flying.hops == 2 and flying.to.id == 3)
+flight.to = point(1, 7000)
+result = Plan(flight)
+for _, part in ipairs(result.legs) do
+	assert(part.mode ~= "flight" or flight.taxiKnown[part.to.id], "cannot land at an unknown connection")
+end
+flight.taxiKnown = {}
+only(Plan(flight), "walk")
+flight.taxiKnown = nil
+only(Plan(flight), "flight")
+
+-- All walking geometry goes through the replaceable point-list contract.
+local straight = ns.Planner.WalkPoints
+local detour = { point(1), point(1, 20, 10), point(1, 70) }
+ns.Planner.WalkPoints = function(from, to)
+	assert(from == walk.from and to == walk.to)
+	return detour
+end
+assert(LegPoints(walk, {}) == detour)
+ns.Planner.WalkPoints = straight
+assert(#LegPoints(walk, {}) == 2)
 
 -- A slightly later in-flight arrival beats an earlier ground arrival that must pay boarding again.
 local competing = options()

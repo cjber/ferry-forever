@@ -6,8 +6,16 @@ ns.Planner = Planner
 
 local BOARDING = 3000
 
+-- The drawing contract for future collision-map paths; for now walks remain straight.
+function Planner.WalkPoints(from, to)
+	return { { map = from.map, x = from.x, y = from.y }, { map = to.map, x = to.x, y = to.y } }
+end
+
 -- World points in travel order; jump marks a teleport to the next point. Keep this free of map APIs.
 function Planner.LegPoints(leg, routes)
+	if leg.mode == "walk" then
+		return Planner.WalkPoints(leg.from, leg.to)
+	end
 	local points = { { map = leg.from.map, x = leg.from.x, y = leg.from.y } }
 	if leg.mode == "flight" then
 		for _, hop in ipairs(leg.hops or {}) do
@@ -115,8 +123,9 @@ function Planner.Plan(options)
 	end
 	for _, id in ipairs(Keys(options.taxiNodes or {})) do
 		local node = options.taxiNodes[id]
-		if Eligible(node, options) and (not options.taxiKnown or options.taxiKnown[id]) then
+		if Eligible(node, options) then
 			taxis[id] = Add("taxi", id, node)
+			nodes[taxis[id]].undiscovered = options.taxiKnown ~= nil and not options.taxiKnown[id]
 		end
 	end
 	for id, portal in ipairs(options.portals or {}) do
@@ -204,6 +213,8 @@ function Planner.Plan(options)
 		visited[current] = true
 		local node = (current - 1) % count + 1
 		for _, edge in ipairs(edges[node]) do
+			-- Unknown nodes may be learned on foot or crossed in flight, but never used to land.
+			local canLeave = current <= count or not nodes[node].undiscovered or edge.mode == "flight"
 			local wait, estimated = 0, edge.estimated or false
 			if edge.route and not edge.aboard then
 				local route = options.routes[edge.route]
@@ -220,7 +231,7 @@ function Planner.Plan(options)
 			local depart = earliest + wait
 			local finish = depart + edge.duration
 			local target = edge.to + (edge.mode == "flight" and count or 0)
-			if not visited[target] and (not arrival[target] or finish < arrival[target]) then
+			if canLeave and not visited[target] and (not arrival[target] or finish < arrival[target]) then
 				arrival[target] = finish
 				previous[target] = {
 					index = current,
