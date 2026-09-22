@@ -36,7 +36,7 @@ moves the game's own waypoint marker along the route turn by turn (or only to wh
 and Zephras Isle, from walking maps that come in the same download. They take tunnels such as Dun Algaz and
 the Undercity's lower levels, ride a lift when the way round on foot is longer, and take the boat rather than
 a long swim. Walks keep out of water, unless you have Water Walking or Levitate, when the step asks you to
-cast it and the route crosses. Replanning on board
+cast it and the route crosses. Walks between docks, flight masters and portals are measured ahead of time and ship with the addon, so plans are right first time rather than settling over several searches. Replanning on board
 keeps you on the boat. Flight masters are marked on the world map, known and undiscovered, and hovering a
 dock draws its boat and zeppelin routes, curving across the loading-screen gap between continents.
 

@@ -51,6 +51,15 @@ WoWDBDefs commit and checks their sha256.
   `Program.cs` for the headless commands; and `ZezulaCasc.cs`, the P/Invoke `IFileSource` over Zezula's CascLib.
 - `gen_nav.py`.
 
+## Walks between fixed places
+
+After rebaking a walking map, or when docks, flight masters or portals change, rebake the walking costs between
+them from the repo root (about eight minutes; `tests/planner_spec.lua` fails on a stale key):
+
+```sh
+luajit tools/bake_walks.lua > Data/Walks.lua
+```
+
 ## Licences
 
 | Component | Licence | How it is used |

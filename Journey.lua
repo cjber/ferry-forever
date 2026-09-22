@@ -30,6 +30,8 @@ local REPLAN_SLACK = 1.1
 -- Walking along a measured path from where you stood, how far off it you may stray and still be on it.
 local ON_PATH = 15
 local SAME_WALK = 30
+-- How far from where a walk was found blocked it is still taken as blocked.
+local BLOCKED_REACH = 200
 -- A timed replan replaces the route you are following only when it arrives this much sooner: at least SWITCH_GAIN
 -- ms, or SWITCH_SHARE of the time left.
 local SWITCH_GAIN, SWITCH_SHARE = 20000, 0.1
@@ -388,9 +390,9 @@ local function NearPathEndpoint(a, b)
 		and not (a.z and b.z and math.abs(a.z - b.z) > PATH_REUSE_HEIGHT)
 end
 
-local function Apart(a, b)
+local function Apart(a, b, reach)
 	local dz = a.z and b.z and a.z - b.z or 0
-	return a.map ~= b.map or (a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 + dz ^ 2 > SAME_WALK ^ 2
+	return a.map ~= b.map or (a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 + dz ^ 2 > (reach or SAME_WALK) ^ 2
 end
 
 -- Walks from your position change as you move, so only the newest to each destination is kept.
@@ -419,6 +421,10 @@ local function Walks(here)
 		local rest = walk.from.kind == "start" and walk.points and Remaining(walk, here)
 		if rest then
 			walks[#walks + 1] = { from = here, to = walk.to, cost = rest }
+		elseif walk.from.kind == "start" and walk.cost == false and not Apart(walk.from, here, BLOCKED_REACH) then
+			-- Proving a place unreachable searches everything reachable, the dearest search there is; a few steps
+			-- on foot will not change the answer.
+			walks[#walks + 1] = { from = here, to = walk.to, cost = false }
 		end
 	end
 	return walks
@@ -477,7 +483,7 @@ local function FindWalks(planned, searches)
 			pending = pending - 1
 			entry.done, entry.points = true, points
 			if points or cost == "unreachable" then
-				Measure(from, to, points and cost, points)
+				Measure(from, to, points and cost or false, points)
 				-- The planner guessed a straight line; a walk that turns out blocked or longer may change the plan.
 				worse = worse or not points or cost > leg.yards * REPLAN_SLACK
 			end

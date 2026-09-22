@@ -389,4 +389,49 @@ for _, path in ipairs(ns.TaxiPaths) do
 	assert(#path.points >= 6 and #path.points % 3 == 0)
 end
 
+-- The baked walks name the planner's places: a key that no longer names one (places renumbered, added or moved
+-- without rerunning tools/bake_walks.lua) would silently fall back to straight-line guesses.
+assert(loadfile("Data/Portals.lua"))("ShortestPathForever", ns)
+assert(loadfile("Data/Walks.lua"))("ShortestPathForever", ns)
+local places = {}
+for id, dock in pairs(ns.Docks) do
+	places["dock" .. id] = dock
+end
+for id, node in pairs(ns.TaxiNodes) do
+	places["taxi" .. id] = node
+end
+for id, entry in ipairs(ns.Portals) do
+	places["portal" .. (id * 2 - 1)], places["portal" .. id * 2] = entry.from, entry.to
+end
+for map, walks in pairs(ns.Walks) do
+	for key in pairs(walks) do
+		local a, b = key:match("^(%S+) (%S+)$")
+		assert(a < b and places[a] and places[b], "stale baked walk " .. key)
+		assert(places[a].map == map and places[b].map == map, "baked walk on the wrong map " .. key)
+	end
+end
+-- Walking between two fixed places costs what was baked, not the straight line: with the direct way blocked, the
+-- walk goes by the docks at their baked cost.
+local baked = Plan({
+	from = ns.Docks[1009],
+	to = ns.Docks[1010],
+	now = 0,
+	walks = { { from = ns.Docks[1009], to = ns.Docks[1010], cost = false } },
+	docks = { [1009] = ns.Docks[1009], [1010] = ns.Docks[1010] },
+	baked = { [0] = { ["dock1009 dock1010"] = { 5000, 4000 } } },
+	landmasses = ns.Landmasses,
+})
+near(only(baked, "walk").yards, 5000)
+baked = Plan({
+	from = ns.Docks[1009],
+	to = ns.Docks[1010],
+	now = 0,
+	waterWalking = true,
+	walks = { { from = ns.Docks[1009], to = ns.Docks[1010], cost = false } },
+	docks = { [1009] = ns.Docks[1009], [1010] = ns.Docks[1010] },
+	baked = { [0] = { ["dock1009 dock1010"] = { 5000, 4000 } } },
+	landmasses = ns.Landmasses,
+})
+near(only(baked, "walk").yards, 4000)
+
 print("planner_spec: ok")
