@@ -5,8 +5,8 @@ local TRANSPORT_TEMPLATE = "FerryForeverTransportPinTemplate"
 local GOAL_TEMPLATE = "FerryForeverGoalPinTemplate"
 -- A solid colour line with a slim dark border, so it reads on parchment and minimap alike; the taxi line
 -- atlas is mostly transparent and turned into a thin core inside a heavy border. Walks are short breadcrumbs.
-local THICKNESS, DASH, GAP = 4, 8, 6
-local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 3, 0.5
+local THICKNESS, DASH, GAP = 3, 8, 6
+local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
 local COLORS = {
 	walk = NORMAL_FONT_COLOR,
 	flight = CreateColor(0.2, 1, 0.35),
