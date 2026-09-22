@@ -5,6 +5,8 @@ local Planner = {}
 ns.Planner = Planner
 
 local BOARDING = 3000
+-- A measured walk stands for any pair of points this close (3D where both heights are known) to its ends.
+local MATCH = 30
 
 local function QuestPointValid(point)
 	return point
@@ -133,6 +135,29 @@ local function Keys(values)
 	return keys
 end
 
+local function Gap(a, b)
+	local dz = a.z and b.z and a.z - b.z or 0
+	return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 + dz ^ 2)
+end
+
+local function Matches(walk, a, b)
+	return walk.from.map == a.map and Gap(walk.from, a) <= MATCH and Gap(walk.to, b) <= MATCH
+end
+
+-- options.walks are walks the pathfinder has measured: { from, to, cost } in running yards, or cost = false when
+-- there is no way through; a later record of a walk supersedes an earlier one. Anything unmeasured is estimated
+-- as a straight line, which never overstates a walk, so the caller can measure the walks a plan chooses and replan
+-- until the choice holds.
+local function WalkCost(walks, a, b)
+	for index = #walks, 1, -1 do
+		local walk = walks[index]
+		if Matches(walk, a, b) or Matches(walk, b, a) then
+			return walk.cost, false
+		end
+	end
+	return Gap(a, b), true
+end
+
 function Planner.Plan(options)
 	local nodes, edges, masses = {}, {}, {}
 	local docks, taxis = {}, {}
@@ -184,20 +209,18 @@ function Planner.Plan(options)
 	end
 	for _, id in ipairs(Keys(options.routes or {})) do
 		local route = options.routes[id]
-		if route.kind ~= "lift" then
-			for index, stop in ipairs(route.stops) do
-				if docks[stop.dock] then
-					for offset = 1, #route.stops - 1 do
-						local onward = route.stops[(index + offset - 1) % #route.stops + 1]
-						if docks[onward.dock] and onward.dock ~= stop.dock then
-							Edge(docks[stop.dock], docks[onward.dock], {
-								mode = route.kind,
-								route = id,
-								stop = stop,
-								alighting = onward,
-								duration = Model.RideTime(route, stop, onward),
-							})
-						end
+		for index, stop in ipairs(route.stops) do
+			if docks[stop.dock] then
+				for offset = 1, #route.stops - 1 do
+					local onward = route.stops[(index + offset - 1) % #route.stops + 1]
+					if docks[onward.dock] and onward.dock ~= stop.dock then
+						Edge(docks[stop.dock], docks[onward.dock], {
+							mode = route.kind,
+							route = id,
+							stop = stop,
+							alighting = onward,
+							duration = Model.RideTime(route, stop, onward),
+						})
 					end
 				end
 			end
@@ -223,9 +246,12 @@ function Planner.Plan(options)
 		for to = from + 1, #nodes do
 			local b = nodes[to]
 			if a.map == b.map and masses[from] == masses[to] and not (ride and from == start) then
-				local duration = math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2) / speed * 1000
-				Edge(from, to, { mode = "walk", duration = duration, estimated = true })
-				Edge(to, from, { mode = "walk", duration = duration, estimated = true })
+				local yards, estimated = WalkCost(options.walks or {}, a, b)
+				if yards then
+					local duration = yards / speed * 1000
+					Edge(from, to, { mode = "walk", duration = duration, yards = yards, estimated = estimated })
+					Edge(to, from, { mode = "walk", duration = duration, yards = yards, estimated = estimated })
+				end
 			end
 		end
 	end
@@ -284,6 +310,7 @@ function Planner.Plan(options)
 						boarding = edge.stop,
 						alighting = edge.alighting,
 						hops = edge.path and { edge.path } or nil,
+						yards = edge.yards,
 					},
 				}
 			end

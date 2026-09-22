@@ -102,13 +102,69 @@ near(points[3].x, 20)
 near(points[4].x, 0)
 boat.from, boat.to = boat.to, boat.from
 boat.routes[7].kind = "lift"
-assert(Plan(boat) == nil, "lifts are countdown-only")
+assert(only(Plan(boat), "lift").route == 7, "lifts ride like any other route")
 boat.routes[7].kind = "boat"
 boat.anchors = {}
 ride = only(Plan(boat), "boat")
 near(ride.wait, 30000)
 near(ride.arrive, 41000)
 assert(ride.estimated)
+
+-- A lift's landings share a spot on the map: only height and the measured walk between them tell them apart.
+do
+	local lift = options()
+	lift.from, lift.to = { map = 1, x = 0, y = 0, z = 0 }, { map = 1, x = 0, y = 0, z = 100 }
+	lift.docks = { [1] = { map = 1, x = 0, y = 0, z = 0 }, [2] = { map = 1, x = 0, y = 0, z = 100 } }
+	lift.routes = {
+		[9] = {
+			kind = "lift",
+			period = 40000,
+			stops = { { dock = 1, arrive = 0, depart = 5000 }, { dock = 2, arrive = 20000, depart = 25000 } },
+		},
+	}
+	lift.anchors = { [9] = { epoch = 0 } }
+	-- Unmeasured, the climb is a 100-yard straight line (14 s) and beats waiting for the car.
+	walk = only(Plan(lift), "walk")
+	near(walk.arrive - walk.depart, 100 / 7 * 1000)
+	assert(walk.estimated and walk.yards == 100)
+	-- Measured, the way up on foot is long, and the lift wins; measurements stand for nearby points too.
+	lift.walks = { { from = { map = 1, x = 10, y = 0, z = 0 }, to = { map = 1, x = 0, y = 5, z = 100 }, cost = 2000 } }
+	local result = Plan(lift)
+	assert(#result.legs == 1 and result.legs[1].mode == "lift" and result.legs[1].to.id == 2)
+	-- Heights keep the landings apart: the bottom's measurement does not stand for the top.
+	lift.from = { map = 1, x = 0, y = 0, z = 100 }
+	lift.to = { map = 1, x = 0, y = 0, z = 90 }
+	assert(only(Plan(lift), "walk").estimated)
+	-- The newest record of a walk wins: a later measurement from the same spot corrects an earlier one.
+	lift.from, lift.to = { map = 1, x = 0, y = 0, z = 0 }, { map = 1, x = 0, y = 0, z = 100 }
+	lift.walks[2] = { from = lift.from, to = lift.to, cost = 70 }
+	assert(only(Plan(lift), "walk").yards == 70)
+	lift.walks[2] = nil
+	-- A blocked walk is never planned; with no ride either, there is no way there.
+	lift.from, lift.to = { map = 1, x = 0, y = 0, z = 0 }, { map = 1, x = 0, y = 0, z = 100 }
+	lift.walks[1].cost = false
+	assert(only(Plan(lift), "lift"))
+	lift.routes = nil
+	assert(Plan(lift) == nil)
+end
+
+-- A long swim measured against a boat: the swim's cost already counts its slower pace.
+do
+	local swim = options()
+	swim.to = point(1, 100)
+	swim.docks = { [1] = point(1), [2] = point(1, 100) }
+	swim.routes = {
+		[3] = {
+			kind = "boat",
+			period = 20000,
+			stops = { { dock = 1, arrive = 0, depart = 2000 }, { dock = 2, arrive = 16000, depart = 18000 } },
+		},
+	}
+	swim.anchors = { [3] = { epoch = 0 } }
+	assert(only(Plan(swim), "walk"))
+	swim.walks = { { from = point(1), to = point(1, 100), cost = 149 } }
+	assert(only(Plan(swim), "boat"))
+end
 
 -- Replanning on deck must stay aboard to the known next arrival, even if walking looks faster.
 boat.ride = { route = 7, dock = 1001, arrive = 20000 }
