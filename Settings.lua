@@ -9,7 +9,7 @@ end
 
 ns.Init(function()
 	local category = Settings.RegisterVerticalLayoutCategory("Shortest Path Forever")
-	local function Checkbox(key, name, tooltip, onChanged)
+	local function Checkbox(key, name, tooltip, onChanged, default)
 		local setting = Settings.RegisterAddOnSetting(
 			category,
 			"ShortestPathForever_" .. key,
@@ -17,7 +17,7 @@ ns.Init(function()
 			ns.db,
 			Settings.VarType.Boolean,
 			name,
-			true
+			default ~= false
 		)
 		if onChanged then
 			setting:SetValueChangedCallback(onChanged)
@@ -58,6 +58,13 @@ ns.Init(function()
 	)
 	Checkbox("alertSound", "Play a sound with arrival alerts", "Plays even with the game in the background.")
 	Checkbox("journey", "Plan journeys with Shift-click on the world map or minimap")
+	Checkbox(
+		"guideStops",
+		"Guide marks only where each step ends",
+		"The next boat, lift, flight master or your destination, rather than each turn of the walk on the way.",
+		ns.RefreshGuideStops,
+		false
+	)
 	Checkbox(
 		"trail",
 		"Dot Guide's route on the ground ahead of you (experimental)",

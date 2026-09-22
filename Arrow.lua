@@ -102,6 +102,12 @@ local function Create()
 	end)
 end
 
+-- Guide leads bend by bend, or straight to the walk's end when set to mark only where each step ends.
+function ns.RefreshGuideStops()
+	path = source and (ns.db.guideStops and { source[#source] } or Simplify(source))
+	index, target = 1, path and path[1]
+end
+
 -- The whole walk for Trail.lua to dot, the bend Guide is leading to, and whether the native marker sits on it.
 function ns.GuideProgress()
 	return source, target, native
@@ -113,8 +119,8 @@ function ns.PointGuideArrow(points, placeBend)
 		points = nil
 	end
 	if points ~= source then
-		source, path = points, points and Simplify(points)
-		index, target = 1, path and path[1]
+		source = points
+		ns.RefreshGuideStops()
 	end
 	placeTarget = placeBend
 	if not points then

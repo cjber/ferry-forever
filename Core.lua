@@ -12,6 +12,7 @@ local DEFAULTS = {
 	journey = true,
 	share = true,
 	trail = true,
+	guideStops = false,
 }
 
 function ns.Print(message)

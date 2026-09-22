@@ -30,6 +30,9 @@ local REPLAN_SLACK = 1.1
 -- Walking along a measured path from where you stood, how far off it you may stray and still be on it.
 local ON_PATH = 15
 local SAME_WALK = 30
+-- A timed replan replaces the route you are following only when it arrives this much sooner: at least SWITCH_GAIN
+-- ms, or SWITCH_SHARE of the time left.
+local SWITCH_GAIN, SWITCH_SHARE = 20000, 0.1
 local measured = {}
 local Replan
 -- Water Walking, Levitate and the Elixir of Water Walking make water ground. A spell you know counts too: the step
@@ -528,11 +531,36 @@ local function Retime(planned)
 	end
 end
 
-local function Render(planned)
+-- Whether the plan you are following still works: you are on its walk, and have not missed a timed departure.
+local function StillValid(plan, now)
+	local leg = plan.legs[progress.index]
+	if not leg or plan.arrive < now then
+		return false
+	end
+	if leg.route and not progress.departed and leg.depart and leg.depart < now then
+		return false
+	end
+	local x, y, z, map = UnitPosition("player")
+	return not (leg.mode == "walk" and leg.measured)
+		or OnWalk(leg.walkPoints, { map = map, x = x, y = y, z = z }) ~= nil
+end
+
+-- A route only gives way to one clearly faster, as satnavs do, so near-ties cannot flip the route back and forth
+-- and restart its searches every few seconds.
+local function Better(planned)
+	local gain = math.max(SWITCH_GAIN, (result.arrive - planned.now) * SWITCH_SHARE)
+	return planned.arrive < result.arrive - gain
+end
+
+local function Render(planned, forced)
 	if SameJourney(planned, result) then
 		Retime(planned)
 		UpdateProgress()
 		Refresh()
+		return
+	end
+	if not forced and planned and result and StillValid(result, planned.now) and not Better(planned) then
+		UpdateProgress()
 		return
 	end
 	local searches
@@ -600,6 +628,8 @@ local function Plan()
 		portals = ns.Portals,
 		landmasses = ns.Landmasses,
 		walks = Walks({ map = map, x = x, y = y, z = z }),
+		baked = ns.Walks,
+		waterWalking = waterMode,
 	})
 	if planned then
 		planned.now = now
@@ -608,7 +638,7 @@ local function Plan()
 end
 
 Replan = function()
-	Render(Plan())
+	Render(Plan(), true)
 end
 
 local function Update(self, elapsed)
@@ -632,7 +662,7 @@ local function Update(self, elapsed)
 	self.riding, self.flying = riding, flying
 	if self.elapsed >= REPLAN_EVERY or changedRide then
 		self.elapsed = 0
-		Render(Plan())
+		Render(Plan(), changedRide)
 	elseif index ~= progress.index then
 		Refresh()
 	end

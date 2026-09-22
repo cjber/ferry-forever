@@ -158,6 +158,25 @@ local function WalkCost(walks, a, b)
 	return Gap(a, b), true
 end
 
+-- A fixed place's key in the baked walk table (Data/Walks.lua); nil for where you stand and where you are going.
+local function PlaceKey(node)
+	if node.kind ~= "start" and node.kind ~= "goal" then
+		return node.kind .. node.id
+	end
+end
+
+-- options.baked holds walks searched ahead of time between fixed places, per map; options.waterWalking picks
+-- which of their two costs applies.
+local function BakedCost(options, a, b)
+	local ka, kb = PlaceKey(a), PlaceKey(b)
+	local baked = ka and kb and options.baked and options.baked[a.map]
+	local pair = baked and baked[ka < kb and ka .. " " .. kb or kb .. " " .. ka]
+	if pair then
+		return true, pair[options.waterWalking and 2 or 1]
+	end
+	return false
+end
+
 function Planner.Plan(options)
 	local nodes, edges, masses = {}, {}, {}
 	local docks, taxis = {}, {}
@@ -246,7 +265,10 @@ function Planner.Plan(options)
 		for to = from + 1, #nodes do
 			local b = nodes[to]
 			if a.map == b.map and masses[from] == masses[to] and not (ride and from == start) then
-				local yards, estimated = WalkCost(options.walks or {}, a, b)
+				local baked, yards, estimated = BakedCost(options, a, b)
+				if not baked then
+					yards, estimated = WalkCost(options.walks or {}, a, b)
+				end
 				if yards then
 					local duration = yards / speed * 1000
 					Edge(from, to, { mode = "walk", duration = duration, yards = yards, estimated = estimated })

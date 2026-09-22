@@ -589,7 +589,8 @@ function ns.SetJourneyRoute(destination, route)
 	for _, leg in ipairs(route and route.legs or {}) do
 		paths[#paths + 1] = { mode = leg.mode, points = ns.Planner.LegPoints(leg, ns.Routes) }
 	end
-	if provider then
+	-- The map refreshes every provider when it opens, so a closed one is left until then.
+	if provider and WorldMapFrame:IsShown() then
 		provider:RefreshAllData()
 	end
 	if minimap then
