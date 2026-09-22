@@ -73,5 +73,10 @@ read_globals = {
 	"UnitPosition",
 	"UNKNOWN",
 	"WorldMapFrame",
+	"Minimap",
+	"GetPlayerFacing",
+	"GetCVar",
+	"GetMinimapShape",
+	"C_Minimap",
 }
 files["tests/"] = { std = "+luajit", globals = { "arg" } }
