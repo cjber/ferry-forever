@@ -124,6 +124,22 @@ local function HideUnused(owner)
 	end
 end
 
+-- Two pooled layers let a single alpha change animate every pending stroke, including its outline.
+local function LoadingLayer(owner)
+	owner.loading = CreateFrame("Frame", nil, owner)
+	owner.loading:SetAllPoints(owner)
+	owner.loading:EnableMouse(false)
+	owner.loading.lines, owner.loading.underlines, owner.loading.used = {}, {}, 0
+end
+
+local function Pulse(owner)
+	owner.loading:SetAlpha(0.575 + 0.225 * math.cos(GetTime() * 2 * math.pi / 1.2))
+end
+
+local function IsLoading(path)
+	return path.settling or (path.mode == "walk" and not path.measured and not path.walkError)
+end
+
 ShortestPathForeverRoutePinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function ShortestPathForeverRoutePinMixin:OnLoad()
@@ -131,15 +147,17 @@ function ShortestPathForeverRoutePinMixin:OnLoad()
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScaleStyle(AM_PIN_SCALE_STYLE_WITH_TERRAIN)
 	self.lines, self.underlines = {}, {}
+	LoadingLayer(self)
 end
 
 function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
+	self.loading.strokeAlpha = self.strokeAlpha
 	local low, high = ClipAxis(x1, x2 - x1, 0, 1, 0, 1)
 	if low then
 		low, high = ClipAxis(y1, y2 - y1, low, high, 0, 1)
 	end
 	Segment(
-		self,
+		self.loadingPath and self.loading or self,
 		x1 * self:GetWidth(),
 		-y1 * self:GetHeight(),
 		x2 * self:GetWidth(),
@@ -173,6 +191,27 @@ local function Curve(pin, ax, ay, bx, by, cx, cy, color, fade)
 		px, py = x, y
 	end
 	pin.strokeAlpha = nil
+end
+
+local function CrossingCurve(pin, ax, ay, bx, by, color, px, py)
+	local dx, dy = bx - ax, by - ay
+	local cx, cy = (ax + bx) / 2 - dy * 0.25, (ay + by) / 2 + dx * 0.25
+	if px then
+		local tx, ty = ax - px, ay - py
+		local length = math.sqrt(tx * tx + ty * ty)
+		if length > 0 then
+			local reach = math.sqrt(dx * dx + dy * dy) * 0.6 / length
+			cx, cy = ax + tx * reach, ay + ty * reach
+		end
+	else
+		-- Overview crossings arc toward open sea to the north, identically in either travel direction.
+		local side = dx < 0 and -1 or 1
+		cx, cy = (ax + bx) / 2 + dy * side * 0.6, (ay + by) / 2 - dx * side * 0.6
+	end
+	if math.abs((cx - ax) * dy - (cy - ay) * dx) < (dx * dx + dy * dy) * 0.1 then
+		cx, cy = (ax + bx) / 2 - dy * 0.25, (ay + by) / 2 + dx * 0.25
+	end
+	Curve(pin, ax, ay, bx, by, cx, cy, color)
 end
 
 local function EdgeCurve(pin, x, y, nx, ny, color)
@@ -220,26 +259,30 @@ local function Bridge(pin, points, index, ax, ay, bx, by, color)
 		nx, ny = MapPosition(after, mapID)
 	end
 	if ax and bx then
-		local dx, dy = bx - ax, by - ay
-		local cx, cy = (ax + bx) / 2 - dy * 0.25, (ay + by) / 2 + dx * 0.25
-		if px then
-			local tx, ty = ax - px, ay - py
-			local length = math.sqrt(tx * tx + ty * ty)
-			if length > 0 then
-				local reach = math.sqrt(dx * dx + dy * dy) * 0.6 / length
-				cx, cy = ax + tx * reach, ay + ty * reach
-			end
-		end
-		-- A tangent parallel to the chord would flatten the loading arc into a straight line.
-		if math.abs((cx - ax) * dy - (cy - ay) * dx) < (dx * dx + dy * dy) * 0.1 then
-			cx, cy = (ax + bx) / 2 - dy * 0.25, (ay + by) / 2 + dx * 0.25
-		end
-		Curve(pin, ax, ay, bx, by, cx, cy, color)
+		CrossingCurve(pin, ax, ay, bx, by, color, px, py)
 	elseif ax then
 		EdgeCurve(pin, ax, ay, px, py, color)
 	elseif bx then
 		EdgeCurve(pin, bx, by, nx, ny, color)
 	end
+end
+
+local function OverviewCrossing(pin, path, color)
+	if path.mode ~= "boat" and path.mode ~= "zeppelin" then
+		return false
+	end
+	local first, last = path.points[1], path.points[#path.points]
+	if not first or first.map == last.map then
+		return false
+	end
+	local mapID = pin:GetMap():GetMapID()
+	local ax, ay = MapPosition(first, mapID)
+	local bx, by = MapPosition(last, mapID)
+	if ax and bx then
+		CrossingCurve(pin, ax, ay, bx, by, color)
+		return true
+	end
+	return false
 end
 
 function ShortestPathForeverRoutePinMixin:Draw()
@@ -248,14 +291,19 @@ function ShortestPathForeverRoutePinMixin:Draw()
 	self:SetSize(canvas:GetWidth(), canvas:GetHeight())
 	self:SetPosition(0.5, 0.5)
 	self.used = 0
+	self.loading:SetSize(self:GetWidth(), self:GetHeight())
+	self.loading.used = 0
 	if self.hits then
 		self.hits = {}
 	end
 	for _, path in ipairs(self.paths) do
 		local color = COLORS[path.mode]
 		self.drawingRoute = path.route
+		self.loadingPath = IsLoading(path)
 		local previous, px, py
-		for index, point in ipairs(path.points) do
+		local crossing = OverviewCrossing(self, path, color)
+		for index = 1, crossing and 0 or #path.points do
+			local point = path.points[index]
 			local x, y = MapPosition(point, map:GetMapID())
 			if path.mode == "portal" or path.mode == "passage" then
 				self:Mark(x, y, color)
@@ -275,9 +323,17 @@ function ShortestPathForeverRoutePinMixin:Draw()
 		end
 	end
 	HideUnused(self)
+	HideUnused(self.loading)
+	self:SetScript("OnUpdate", self.loading.used > 0 and Pulse or nil)
+	Pulse(self)
 	if self.hits then
 		self:UpdateAlpha()
 	end
+end
+
+function ShortestPathForeverRoutePinMixin:OnReleased()
+	self:SetScript("OnUpdate", nil)
+	MapCanvasPinMixin.OnReleased(self)
 end
 
 function ShortestPathForeverRoutePinMixin:OnAcquired(geometry)
@@ -403,14 +459,19 @@ function TransportProviderMixin:RefreshAllData()
 	end
 	table.sort(ids)
 	for _, id in ipairs(ids) do
-		local route, points = ns.Routes[id], {}
-		for _, frame in ipairs(route.frames or {}) do
-			points[#points + 1] = { map = frame[3], x = frame[4], y = frame[5], jump = frame[6] }
-		end
-		if #points > 1 then
-			-- Close the loop with neighbours available on both sides of a wrapping loading gap.
-			points[#points + 1] = points[1]
-			geometry[#geometry + 1] = { mode = route.kind, route = id, points = points }
+		local route = ns.Routes[id]
+		-- Dock-to-dock legs preserve intermediate calls and give overview maps the actual crossing endpoints.
+		for index, stop in ipairs(route.stops) do
+			local onward = route.stops[index % #route.stops + 1]
+			local leg = {
+				mode = route.kind,
+				route = id,
+				from = ns.Docks[stop.dock],
+				to = ns.Docks[onward.dock],
+				boarding = stop,
+				alighting = onward,
+			}
+			geometry[#geometry + 1] = { mode = route.kind, route = id, points = ns.Planner.LegPoints(leg, ns.Routes) }
 		end
 	end
 	map:AcquirePin(TRANSPORT_TEMPLATE, geometry)
@@ -500,6 +561,8 @@ end
 
 local function DrawMinimap(self)
 	self.used = 0
+	self.loading.used = 0
+	self.loading:SetSize(self:GetWidth(), self:GetHeight())
 	local x, y, _, map = UnitPosition("player")
 	local radius, facing = MinimapView()
 	local width, height = self:GetWidth(), self:GetHeight()
@@ -511,6 +574,7 @@ local function DrawMinimap(self)
 		local square = GetMinimapShape and GetMinimapShape() == "SQUARE"
 		local inset = 1 - border / math.min(width, height)
 		for _, path in ipairs(paths) do
+			local owner = IsLoading(path) and self.loading or self
 			if path.mode ~= "portal" and path.mode ~= "passage" then
 				for index = 2, #path.points do
 					local a, b = path.points[index - 1], path.points[index]
@@ -519,7 +583,7 @@ local function DrawMinimap(self)
 						local bx, by = Project(b, x, y, radius, cosine, sine)
 						local low, high = ClipMinimap(ax, ay, bx - ax, by - ay, inset, square)
 						Segment(
-							self,
+							owner,
 							(ax + 1) * width / 2,
 							(ay - 1) * height / 2,
 							(bx + 1) * width / 2,
@@ -536,6 +600,8 @@ local function DrawMinimap(self)
 		end
 	end
 	HideUnused(self)
+	HideUnused(self.loading)
+	Pulse(self)
 end
 
 local function UpdateMinimap(self, elapsed)
@@ -544,6 +610,9 @@ local function UpdateMinimap(self, elapsed)
 		return
 	end
 	self.elapsed = self.elapsed + elapsed
+	if self.loading.used > 0 then
+		Pulse(self)
+	end
 	if self.elapsed >= 0.1 then
 		self.elapsed = 0
 		DrawMinimap(self)
@@ -554,7 +623,13 @@ function ns.SetJourneyRoute(destination, route)
 	goal, result = destination, route
 	paths = {}
 	for _, leg in ipairs(route and route.legs or {}) do
-		paths[#paths + 1] = { mode = leg.mode, points = ns.Planner.LegPoints(leg, ns.Routes) }
+		paths[#paths + 1] = {
+			mode = leg.mode,
+			points = ns.Planner.LegPoints(leg, ns.Routes),
+			measured = leg.measured,
+			walkError = leg.walkError,
+			settling = route.settling,
+		}
 	end
 	-- The map refreshes every provider when it opens, so a closed one is left until then.
 	if provider and WorldMapFrame:IsShown() then
@@ -582,5 +657,6 @@ ns.Init(function()
 	minimap:SetAllPoints(Minimap)
 	minimap:EnableMouse(false)
 	minimap.lines, minimap.underlines, minimap.used = {}, {}, 0
+	LoadingLayer(minimap)
 	minimap:Hide()
 end)

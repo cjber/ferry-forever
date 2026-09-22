@@ -10,6 +10,7 @@ local RADIUS = 36
 -- A bend this close counts as passed, and the arrow turns to the next one.
 local PASSED = 25
 local frame, source, path, index, target, placeTarget, native
+local stepEnd, destination
 
 -- Counter-clockwise from north, like GetPlayerFacing: UnitPosition's first value grows north, its second west.
 local function Bearing(x, y)
@@ -90,7 +91,7 @@ function ns.RefreshGuideStops()
 end
 
 -- placeBend owns waypoint placement and returns whether native tracking is ours. Progress lives only here.
-function ns.PointGuideArrow(points, placeBend)
+function ns.PointGuideArrow(points, placeBend, stop, goal)
 	if points and #points == 0 then
 		points = nil
 	end
@@ -99,6 +100,10 @@ function ns.PointGuideArrow(points, placeBend)
 		ns.RefreshGuideStops()
 	end
 	placeTarget = placeBend
+	stepEnd, destination = stop, goal
+	if ns.RefreshCompass then
+		ns.RefreshCompass()
+	end
 	if not points then
 		native = nil
 		if frame then
@@ -111,4 +116,11 @@ function ns.PointGuideArrow(points, placeBend)
 	end
 	frame:Show()
 	Update()
+end
+
+-- Read-only targets share Guide's passed bends, including its step-end-only setting.
+function ns.GuideTargets()
+	if path then
+		return target, path[index + 1], stepEnd, destination
+	end
 end

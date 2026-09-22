@@ -12,6 +12,7 @@ local DEFAULTS = {
 	journey = true,
 	share = true,
 	guideStops = false,
+	compass = false,
 }
 
 function ns.Print(message)
@@ -131,10 +132,10 @@ function ns.DockLabel(dockID)
 	return ns.Docks[dockID].name or ns.DockZone(dockID)
 end
 
--- A dock as a heading: "The Great Lift, Top", or the zone.
+-- A specific stop for walking directions and tracker headings; boat destinations still use DockLabel.
 function ns.DockTitle(dockID)
 	local dock = ns.Docks[dockID]
-	return dock.site and dock.site .. ", " .. dock.name or ns.DockZone(dockID)
+	return dock.site and dock.site .. ", " .. dock.name or ns.DockPierName(dockID)
 end
 
 function ns.NearestDock()

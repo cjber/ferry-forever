@@ -24,6 +24,7 @@ local ARRIVAL_HEIGHT = 30
 local lastRunSpeed = 7
 local PATH_REUSE, PATH_REUSE_HEIGHT = 3, 10
 local pathJobs, walkCache, pathVersion = {}, {}, 0
+local pendingWalks, settleRound, replanning = 0, 0, false
 -- Walks the pathfinder has measured on this journey, for the planner; the newest record of a walk replaces older
 -- ones. A walk turning out this much longer than planned, or blocked, replans once the plan's searches are in.
 local REPLAN_SLACK = 1.1
@@ -58,13 +59,14 @@ local function CancelPaths()
 		ns.Path.Cancel(job)
 	end
 	pathJobs = {}
+	pendingWalks = 0
 end
 
-local function NodeLabel(node)
+local function NodeLabel(node, mode)
 	if node.kind == "start" then
 		return "your position"
 	elseif node.kind == "dock" then
-		return ns.DockTitle(node.id)
+		return (mode == "boat" or mode == "zeppelin") and ns.DockLabel(node.id) or ns.DockTitle(node.id)
 	elseif node.kind == "taxi" then
 		return ns.TaxiNodes[node.id].name
 	elseif node.label then
@@ -215,11 +217,12 @@ local function GuideTo(node, points)
 	guide.points = points
 	guide.target = node
 	local point = node.kind == "dock" and ns.DockPoint(node.id) or node
-	ns.PointGuideArrow(points or { point }, GuideWaypoint)
+	ns.PointGuideArrow(points or { point }, GuideWaypoint, node, goal)
 end
 
 function ns.ClearJourney()
 	CancelPaths()
+	settleRound, replanning = 0, false
 	walkCache, measured = {}, {}
 	StopGuide()
 	goal, result = nil, nil
@@ -281,6 +284,10 @@ function ns.IsJourneyGuided()
 	return guide ~= nil
 end
 
+function ns.JourneyStatus()
+	return pendingWalks > 0 or replanning, settleRound, pendingWalks
+end
+
 local function StartGuide()
 	local previous = C_Map.HasUserWaypoint() and C_Map.GetUserWaypoint()
 	local saved = previous
@@ -317,10 +324,14 @@ function ns.JourneyInfo()
 	local title = "Journey to " .. NodeLabel(goal)
 	local rows = {}
 	if result then
-		title = title .. " · " .. ns.FormatCountdown(math.max(0, result.arrive - ns.NowMs()))
+		if ns.JourneyStatus() then
+			title = title .. " · finding the fastest way" .. string.rep(".", math.floor(GetTime()) % 3 + 1)
+		else
+			title = title .. " · " .. ns.FormatCountdown(math.max(0, result.arrive - ns.NowMs()))
+		end
 		for index = progress.index, #result.legs do
 			local leg = result.legs[index]
-			local text = string.format("%d. %s %s", index, VERB[leg.mode], NodeLabel(leg.to))
+			local text = string.format("%d. %s %s", index, VERB[leg.mode], NodeLabel(leg.to, leg.mode))
 			if leg.mode == "walk" and leg.to.undiscovered then
 				text = text .. " (new flight path)"
 			end
@@ -372,7 +383,7 @@ end
 local function Refresh()
 	local remaining
 	if result then
-		remaining = { now = result.now, arrive = result.arrive, legs = {} }
+		remaining = { now = result.now, arrive = result.arrive, legs = {}, settling = ns.JourneyStatus() }
 		for index = progress.index, #result.legs do
 			remaining.legs[#remaining.legs + 1] = result.legs[index]
 		end
@@ -455,6 +466,7 @@ local function PrepareWalks(planned)
 	local cache, searches = {}, {}
 	for _, leg in ipairs(planned and planned.legs or {}) do
 		if leg.mode == "walk" then
+			leg.measured, leg.walkError = false, nil
 			leg.walkPoints = ns.Planner.WalkPoints(leg.from, leg.to)
 			if ns.Path and leg.from.map == leg.to.map and ns.Path.HasData(leg.from.map) then
 				local found
@@ -482,7 +494,7 @@ local function PrepareWalks(planned)
 						end
 					end
 				end
-			elseif ns.Path then
+			else
 				leg.walkError = "nodata"
 			end
 		end
@@ -502,6 +514,7 @@ local function FindWalks(planned, searches)
 				return
 			end
 			pending = pending - 1
+			pendingWalks = pending
 			entry.done, entry.points = true, points
 			entry.reason = not points and cost or nil
 			entry.exact = cost == "offmesh" or cost == "outside"
@@ -518,6 +531,8 @@ local function FindWalks(planned, searches)
 				if guide and result.legs[progress.index] == leg then
 					guide.target = nil
 				end
+			else
+				leg.walkPoints = ns.Planner.WalkPoints(from, to)
 			end
 			-- A replan that keeps these legs only retimes them, so the points above still draw.
 			if pending == 0 and worse then
@@ -587,6 +602,7 @@ end
 local function Render(planned, forced)
 	if SameJourney(planned, result) then
 		Retime(planned)
+		replanning = false
 		UpdateProgress()
 		Refresh()
 		return
@@ -600,11 +616,16 @@ local function Render(planned, forced)
 		CancelPaths()
 		progress.index, progress.departed = 1, false
 		searches = PrepareWalks(planned)
+		pendingWalks = #searches
+		if not replanning then
+			settleRound = pendingWalks > 0 and 1 or 0
+		end
 		if guide then
 			guide.target = nil
 		end
 	end
 	result = planned
+	replanning = false
 	if not result then
 		StopGuide()
 	end
@@ -682,6 +703,8 @@ local function Plan()
 end
 
 Replan = function()
+	replanning = true
+	settleRound = settleRound + 1
 	Render(Plan(), true)
 end
 
@@ -714,6 +737,7 @@ end
 
 local function StartJourney(point)
 	CancelPaths()
+	settleRound, replanning = 0, false
 	walkCache, measured = {}, {}
 	if guide then
 		StopGuide()

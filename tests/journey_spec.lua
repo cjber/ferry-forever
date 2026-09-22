@@ -16,6 +16,9 @@ local env = setmetatable({
 	UnitPosition = function()
 		return here.x, here.y, here.z, here.map
 	end,
+	GetTime = function()
+		return now / 1000
+	end,
 	GetUnitSpeed = function()
 		return 0, 7
 	end,
@@ -124,7 +127,10 @@ end
 begin()
 local first = jobs[#jobs]
 local count = #jobs
-local _, waiting = ns.JourneyInfo()
+local title, waiting = ns.JourneyInfo()
+local settling, round, pending = ns.JourneyStatus()
+assert(settling and round == 1 and pending == 1 and shown.settling)
+assert(title:find("finding the fastest way", 1, true))
 assert(waiting[1].text:find("finding walking path", 1, true))
 update(5)
 update(5)
@@ -133,6 +139,9 @@ local points = { first.from, { map = 1, x = 600, y = 300 }, first.to }
 finish(first, points, 1400)
 assert(shown.legs[1].measured and shown.legs[1].walkPoints[2] == points[2])
 assert(not shown.legs[1].estimated, "the measured cost is replanned without discarding its geometry")
+settling, round, pending = ns.JourneyStatus()
+assert(not settling and round == 2 and pending == 0 and not shown.settling)
+assert(not ns.JourneyInfo():find("finding the fastest way", 1, true))
 
 -- A cleared or replaced plan cannot be resurrected by an already queued callback.
 begin()
@@ -141,15 +150,23 @@ begin({ map = 1, x = 1500, y = 0 })
 local current = jobs[#jobs]
 finish(stale, points, 1400)
 assert(stale.cancelled and not shown.legs[1].measured)
+settling, round, pending = ns.JourneyStatus()
+assert(settling and round == 1 and pending == 1, "stale callbacks cannot settle the replacement plan")
 ns.ClearJourney()
 finish(current, points, 1400)
 assert(not shown and not ns.JourneyInfo())
+assert(not ns.JourneyStatus())
 
 -- Hysteresis keeps the followed plan's pending callback, while a measured detour forces the new route to search.
 begin()
 first, count = jobs[#jobs], #jobs
 local plan = ns.Planner.Plan
 ns.Planner.Plan = function(options)
+	if #jobs == count and not first.cancelled then
+		local checking, rounds, left = ns.JourneyStatus()
+		assert(checking and rounds >= 1, "settling stays on during the forced planner call")
+		assert(left > 0 or rounds == 2, "a forced round stays settling even after the last callback")
+	end
 	local mid = { map = 1, x = 600, y = 100, kind = "portal", id = 1 }
 	return {
 		arrive = options.now + 165000,
@@ -179,9 +196,13 @@ update(5)
 assert(#jobs == count and not first.cancelled, "a near-tie must keep the pending search")
 finish(first, points, 2000)
 assert(#jobs == count + 2, "the forced replacement must start all its estimated walks")
+settling, round, pending = ns.JourneyStatus()
+assert(settling and round == 2 and pending == 2 and shown.settling)
 for index = count + 1, #jobs do
 	local job = jobs[index]
 	finish(job, { job.from, { map = 1, x = 600, y = 50 }, job.to }, 605)
+	local checking, _, left = ns.JourneyStatus()
+	assert(left == #jobs - index and checking == (left > 0))
 end
 for _, leg in ipairs(shown.legs) do
 	assert(leg.measured)
@@ -212,6 +233,7 @@ for _, reason in ipairs({ "nodata", "error" }) do
 	finish(jobs[#jobs], nil, reason)
 	local _, rows = ns.JourneyInfo()
 	assert(shown.legs[1].walkError == reason and rows[1].text:find("walking", 1, true))
+	assert(not ns.JourneyStatus() and not shown.settling, "failed searches also settle")
 	count = #jobs
 	update(5)
 	assert(#jobs == count and shown.legs[1].walkError == reason)
@@ -226,6 +248,7 @@ local dock = ns.Docks[ratchet.stops[1].dock]
 ns.DockTitle = function()
 	return "Dock"
 end
+ns.DockLabel = ns.DockTitle
 ns.DockPoint = function(id)
 	return ns.Docks[id]
 end

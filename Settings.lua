@@ -66,6 +66,13 @@ ns.Init(function()
 		false
 	)
 	Checkbox(
+		"compass",
+		"Show a compass while Guide is on",
+		"Your next turns, the next stop and your destination across the top of the screen.",
+		ns.RefreshCompass,
+		false
+	)
+	Checkbox(
 		"share",
 		"Share departure times with other players",
 		"Sends and receives sighting times over guild, party and at the dock. No chat messages are shown."

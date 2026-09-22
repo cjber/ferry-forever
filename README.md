@@ -15,10 +15,16 @@ load only when a route needs them.
   of every journey (click the tracker header to turn it off), moves the game's own waypoint marker along the route turn by turn, so it leads you round walls
   rather than straight at the stop (or, with *Guide marks only where each step ends* in `/path`, straight at the next boat, lift or flight master), and hands your tracked quest back when you finish. To head for a quest, pick **Plan journey** from its right-click menu in the objective
   tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
+- **Finding the fastest way.** The tracker says when a journey is still being checked, and its route pulses
+  softly on the map and minimap until the walks settle. Walk steps name the dock, pier, lift or flight master
+  you are heading for.
+- **An optional compass.** A slim strip at the top of the screen follows your facing and marks Guide's next
+  two turns, the next stop and your destination. Turn it on in `/path`.
 - **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower a matching
   zeppelin, on its zone and continent map. Hover one to see where each boat goes next, when it arrives and
   when it leaves; the docks it sails to light up. Docks too close to tell apart at the current zoom share
   one icon, and its tooltip names each pier by where it lies, and draws its routes on the map.
+  Crossings between continents curve from dock to dock on the Azeroth map; closer maps show the sailing path.
 - **Lifts, the Deeprun Tram and portals.** The Great Lift, Freewind Post, Thunder Bluff and Undercity
   lifts, and both tram trains, count down like the boats (each landing or station is its own stop). The
   tram shows at its Stormwind and Ironforge entrances. Portals are marked with where they go.

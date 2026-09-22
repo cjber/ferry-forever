@@ -38,7 +38,7 @@ end
 -- The stock ferry for boats. There is no zeppelin map icon in the game (only top-down vehicle sprites), so
 -- zeppelins use our own, drawn to match the ferry (tools/draw_zeppelin.py). Lifts and the tram take the stock
 -- map's floor-change arrows; portals its arcane door.
-local function SetIcon(texture, kind)
+function ns.SetTransportIcon(texture, kind)
 	if kind == "boat" then
 		texture:SetAtlas("flightmasterferry")
 	elseif kind == "zeppelin" then
@@ -55,6 +55,19 @@ local function SetIcon(texture, kind)
 	-- The floor arrows fill their square where the ferry has a margin, so they draw smaller to match.
 	local size = (kind == "lift" or kind == "tram") and ARROW_SIZE or PIN_SIZE
 	texture:SetSize(size, size)
+end
+
+local dockKinds
+function ns.DockKind(dockID)
+	if not dockKinds then
+		dockKinds = {}
+		for _, route in pairs(ns.Routes) do
+			for _, stop in ipairs(route.stops) do
+				dockKinds[stop.dock] = route.kind
+			end
+		end
+	end
+	return dockKinds[dockID]
 end
 
 local KIND = { boat = "Boat", zeppelin = "Zeppelin", lift = "Lift", tram = "Tram" }
@@ -93,9 +106,15 @@ end
 -- close to tell apart.
 function ShortestPathForeverDockPinMixin:OnAcquired(cluster)
 	self.cluster = cluster
-	SetIcon(self.Texture, cluster.kind)
-	SetIcon(self.HighlightTexture, cluster.kind)
+	ns.SetTransportIcon(self.Texture, cluster.kind)
+	ns.SetTransportIcon(self.HighlightTexture, cluster.kind)
 	self:SetPosition(cluster.x, cluster.y)
+end
+
+local function PierName(x, y, cx, cy, kind)
+	local angle = math.atan2(cy - y, x - cx)
+	local direction = COMPASS[math.floor(angle / (2 * math.pi) * 8 + 0.5) % 8 + 1]
+	return direction .. " " .. LANDING[kind]
 end
 
 -- Which of a cluster's docks this is: a lift's landing or tram station by name (with its site where sites
@@ -117,10 +136,37 @@ local function LandingName(cluster, dock, kind)
 	if not sharedZone then
 		return zone
 	end
-	local angle = math.atan2(cluster.y - dock.y, dock.x - cluster.x)
-	local direction = COMPASS[math.floor(angle / (2 * math.pi) * 8 + 0.5) % 8 + 1]
-	local name = direction .. " " .. LANDING[kind]
+	local name = PierName(dock.x, dock.y, cluster.x, cluster.y, kind)
 	return #cluster.docks > 2 and zone .. ", " .. name or (name:gsub("^%l", string.upper))
+end
+
+local dockNames = {}
+function ns.DockPierName(dockID)
+	if not dockNames[dockID] then
+		local dock, kind = ns.Docks[dockID], ns.DockKind(dockID)
+		local place, nearest = ns.DockZone(dockID), 1000 ^ 2
+		-- Flight points already name the harbour or town; use the zone only when no nearby town is known.
+		for _, taxi in pairs(ns.TaxiNodes) do
+			local distance = (taxi.x - dock.x) ^ 2 + (taxi.y - dock.y) ^ 2
+			if taxi.map == dock.map and distance < nearest then
+				place, nearest = taxi.name:match("^[^,]+"), distance
+			end
+		end
+		local x, y, count = 0, 0, 0
+		for id, other in pairs(ns.Docks) do
+			if
+				other.map == dock.map
+				and ns.DockKind(id) == kind
+				and (other.x - dock.x) ^ 2 + (other.y - dock.y) ^ 2 < 800 ^ 2
+			then
+				x, y, count = x - other.y, y - other.x, count + 1
+			end
+		end
+		local landing = count > 1 and PierName(-dock.y, -dock.x, x / count, y / count, kind)
+			or (kind == "boat" and "dock" or LANDING[kind])
+		dockNames[dockID] = place .. " " .. landing
+	end
+	return dockNames[dockID]
 end
 
 -- Titled by what the pin is, not where: the map already names the zone.
@@ -396,8 +442,8 @@ end
 
 function ShortestPathForeverPortalPinMixin:OnAcquired(portal, x, y)
 	self.portal = portal
-	SetIcon(self.Texture, "portal")
-	SetIcon(self.HighlightTexture, "portal")
+	ns.SetTransportIcon(self.Texture, "portal")
+	ns.SetTransportIcon(self.HighlightTexture, "portal")
 	self:SetPosition(x, y)
 end
 
