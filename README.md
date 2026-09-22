@@ -1,19 +1,19 @@
 # Shortest Path Forever
 
-The fastest way anywhere in WoW: Forever. Shift-click the world map or pick a quest, and it plans the route:
+The fastest way anywhere in WoW: Forever. Shift-click the world map or minimap, or pick a quest, and it plans the route:
 walking paths round walls and hills, the flight points you know, boats and zeppelins with their live
 departure times, lifts, the tram and portals. Then it walks you there with the game's own navigation marker.
 Walking routes cover Eastern Kingdoms, Kalimdor and Zephras Isle; their maps come in the same download and
 load only when a route needs them.
 
-- **Journey planner.** Shift-click anywhere on the world map for the fastest way there from where you
+- **Journey planner.** Shift-click anywhere on the world map or minimap for the fastest way there from where you
   stand: walking, the flight points you know, boats and zeppelins with their live waits, lifts, the tram and
   portals, including a flight master you haven't found yet if walking to it pays off. Walks go through
   tunnels and between a city's levels, such as Dun Algaz and the Undercity, and walks keep out of water, which is slow and risky, unless you have Water Walking or Levitate (the step asks you to cast it). The route is drawn
   on the map and minimap, walking legs dashed, and the steps sit in the objective tracker like a tracked
   quest. It replans as you move, and stays aboard if you are already riding. **Guide**, on from the start
   of every journey (click the tracker header to turn it off), moves the game's own waypoint marker along the route turn by turn, so it leads you round walls
-  rather than straight at the stop, and hands your tracked quest back when you finish. To head for a quest, pick **Plan journey** from its right-click menu in the objective
+  rather than straight at the stop, and dots the next 40 yards of the walk faintly on the ground (experimental, in `/path`), and hands your tracked quest back when you finish. To head for a quest, pick **Plan journey** from its right-click menu in the objective
   tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
 - **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower a matching
   zeppelin, on its zone and continent map. Hover one to see where each boat goes next, when it arrives and

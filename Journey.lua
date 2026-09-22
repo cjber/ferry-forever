@@ -714,6 +714,16 @@ local function OnCanvasClick(map, button)
 	return true
 end
 
+local function OnMinimapClick(_, button)
+	if not ns.db.journey or button ~= "LeftButton" or not IsShiftKeyDown() then
+		return
+	end
+	local point = ns.MinimapPoint()
+	if point then
+		StartJourney(point)
+	end
+end
+
 local function OnPinClick(map, action, button)
 	if
 		not ns.db.journey
@@ -775,6 +785,8 @@ ns.Init(function()
 		end
 	end
 	WorldMapFrame:AddGlobalPinMouseActionHandler(OnPinClick)
+	-- The stock handler still pings the spot, which marks where the journey goes for your group too.
+	Minimap:HookScript("OnMouseUp", OnMinimapClick)
 	Menu.ModifyMenu("MENU_QUEST_OBJECTIVE_TRACKER", function(owner, root)
 		-- The native menu owner is the tracker container, with no quest ID/context data.
 		-- Resolve the right-clicked HeaderButton's block; never reuse a previous hover's quest.

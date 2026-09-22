@@ -11,6 +11,7 @@ local DEFAULTS = {
 	alertSound = true,
 	journey = true,
 	share = true,
+	trail = true,
 }
 
 function ns.Print(message)

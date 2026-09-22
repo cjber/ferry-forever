@@ -504,16 +504,37 @@ local function Project(point, x, y, radius, cosine, sine)
 	return (east * cosine + north * sine) / radius, (north * cosine - east * sine) / radius
 end
 
-local function DrawMinimap(self)
-	self.used = 0
-	local x, y, _, map = UnitPosition("player")
-	local facing = 0
-	if GetCVar("rotateMinimap") == "1" then
-		facing = GetPlayerFacing()
-	end
+-- The minimap's view radius in yards, and how far it is turned from north-up.
+local function MinimapView()
 	local diameter = DIAMETERS[indoors or "outdoor"][Minimap:GetZoom()]
 	-- Blizzard_APIDocumentationGenerated/MinimapDocumentation.lua:127 (yards).
 	local radius = C_Minimap and C_Minimap.GetViewRadius and C_Minimap.GetViewRadius() or diameter and diameter / 2
+	if GetCVar("rotateMinimap") == "1" then
+		return radius, GetPlayerFacing()
+	end
+	return radius, 0
+end
+
+-- The world point under the cursor on the minimap, undoing Project; nil off its face.
+function ns.MinimapPoint()
+	local x, y, _, map = UnitPosition("player")
+	local radius, facing = MinimapView()
+	local scale = Minimap:GetEffectiveScale()
+	local cx, cy = Minimap:GetCenter()
+	local mx, my = GetCursorPosition()
+	local u, v = (mx / scale - cx) / (Minimap:GetWidth() / 2), (my / scale - cy) / (Minimap:GetHeight() / 2)
+	if not (x and radius and facing) or u * u + v * v > 1 then
+		return nil
+	end
+	local cosine, sine = math.cos(facing), math.sin(facing)
+	local east, north = radius * (u * cosine - v * sine), radius * (u * sine + v * cosine)
+	return { map = map, x = x + north, y = y + east }
+end
+
+local function DrawMinimap(self)
+	self.used = 0
+	local x, y, _, map = UnitPosition("player")
+	local radius, facing = MinimapView()
 	local width, height = self:GetWidth(), self:GetHeight()
 	local scale = self:GetEffectiveScale()
 	local border = UNDER_THICKNESS / scale

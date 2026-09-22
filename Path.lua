@@ -1077,6 +1077,40 @@ function Path.Cancel(job)
 	end
 end
 
+-- The walkable height at a global cell nearest height h, within ZTOL.
+local function cellHeight(st, gx, gy, h)
+	if gx < 0 or gy < 0 or gx >= st.GX or gy >= st.GY then
+		return nil
+	end
+	local C = st.C
+	local k = floor(gx / C) * st.ny + floor(gy / C)
+	local node, gap = standing(st, k, (gx % C) * C + gy % C, h)
+	return node and gap <= ZTOL and st.z[k][node + 1] or nil
+end
+
+-- The ground under a world point on the surface nearest height z, blended between the four cells around it, or
+-- nil off the data. For drawing on the ground; heights are stored every cell, to the data's zstep.
+function Path.Ground(map, x, y, z)
+	local st = State(map)
+	if not st then
+		return nil
+	end
+	local fx, fy = (x - st.x0) / st.cs - 0.5, (y - st.y0) / st.cs - 0.5
+	local gx, gy = floor(fx), floor(fy)
+	local tx, ty = fx - gx, fy - gy
+	local sum, weight = 0, 0
+	for dx = 0, 1 do
+		for dy = 0, 1 do
+			local height = cellHeight(st, gx + dx, gy + dy, z)
+			if height then
+				local w = (dx == 1 and tx or 1 - tx) * (dy == 1 and ty or 1 - ty)
+				sum, weight = sum + height * w, weight + w
+			end
+		end
+	end
+	return weight > 0 and sum / weight or nil
+end
+
 function Path.HasData(map)
 	return Data(map) ~= nil
 end

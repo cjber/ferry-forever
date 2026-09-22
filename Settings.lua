@@ -57,7 +57,12 @@ ns.Init(function()
 		"While you wait at a dock or ride a timed boat: a warning on screen and a flashing taskbar icon."
 	)
 	Checkbox("alertSound", "Play a sound with arrival alerts", "Plays even with the game in the background.")
-	Checkbox("journey", "Plan journeys with Shift-click on the world map")
+	Checkbox("journey", "Plan journeys with Shift-click on the world map or minimap")
+	Checkbox(
+		"trail",
+		"Dot Guide's route on the ground ahead of you (experimental)",
+		"Faint dots along the next 40 yards of the walk, placed using the game's navigation marker."
+	)
 	Checkbox(
 		"share",
 		"Share departure times with other players",
