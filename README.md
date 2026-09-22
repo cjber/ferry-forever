@@ -10,8 +10,8 @@ departure times, lifts, the tram and portals. Then it walks you there with the g
   on the map and minimap, walking legs dashed, and the steps sit in the objective tracker like a tracked
   quest. It replans as you move, and stays aboard if you are already riding. **Guide**, on from the start
   of every journey (click the tracker header to turn it off), moves the game's own navigation marker along the route bend by bend, so it leads you round walls
-  rather than straight at the stop, and hands your tracked quest back when you finish. A trail of dots on the ground
-  marks the next 40 yards of the walk (experimental; turn it off in the options). To head for a quest, pick **Plan journey** from its right-click menu in the objective
+  rather than straight at the stop, and hands your tracked quest back when you finish. Faint arrows on the ground
+  mark the next 40 yards of the walk (experimental; turn it off in the options). To head for a quest, pick **Plan journey** from its right-click menu in the objective
   tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
 - **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower a matching
   zeppelin, on its zone and continent map. Hover one to see where each boat goes next, when it arrives and

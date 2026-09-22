@@ -61,7 +61,7 @@ ns.Init(function()
 	Checkbox(
 		"trail",
 		"Draw Guide's route on the ground ahead of you (experimental)",
-		"Dots along the next 40 yards of the walk, placed using the game's navigation marker."
+		"Faint arrows along the next 40 yards of the walk, placed using the game's navigation marker."
 	)
 	Checkbox(
 		"share",
