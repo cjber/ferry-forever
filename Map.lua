@@ -545,30 +545,18 @@ function ns.RefreshMap()
 	end
 end
 
--- Works before the matching Settings.lua checkboxes are registered as well as afterwards.
-local function ToggleMapOption(key)
-	local value = not ns.db[key]
-	local setting = Settings.GetSetting("FerryForever_" .. key)
-	if setting then
-		setting:SetValue(value)
-	else
-		ns.db[key] = value
-	end
-	ns.RefreshMap()
-end
-
 -- The world map's Map Filter ("Show:") menu gets the same switches as the settings panel.
 local function AddFilters(_, rootDescription)
 	rootDescription:CreateDivider()
 	rootDescription:CreateCheckbox("Flight Masters", function()
 		return ns.db.mapFlightMasters
 	end, function()
-		ToggleMapOption("mapFlightMasters")
+		ns.SetOption("mapFlightMasters", not ns.db.mapFlightMasters)
 	end)
 	rootDescription:CreateCheckbox("Boat and Zeppelin Routes", function()
 		return ns.db.mapRoutes
 	end, function()
-		ToggleMapOption("mapRoutes")
+		ns.SetOption("mapRoutes", not ns.db.mapRoutes)
 	end)
 	rootDescription:CreateCheckbox("Boats & Zeppelins", function()
 		return ns.db.pins
@@ -593,11 +581,6 @@ local function AddFilters(_, rootDescription)
 end
 
 ns.Init(function()
-	for _, key in ipairs({ "mapFlightMasters", "mapRoutes" }) do
-		if ns.db[key] == nil then
-			ns.db[key] = true
-		end
-	end
 	-- Replace only this map's stock provider, avoiding duplicates if the native gate starts returning true.
 	for existing in pairs(WorldMapFrame.dataProviders) do
 		if existing.RefreshAllData == FlightPointDataProviderMixin.RefreshAllData then

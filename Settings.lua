@@ -29,6 +29,13 @@ ns.Init(function()
 	Checkbox("pins", "Show boats and zeppelins on the world map", nil, ns.RefreshMap)
 	Checkbox("transit", "Show lifts and the Deeprun Tram on the world map", nil, ns.RefreshMap)
 	Checkbox("portals", "Show portals on the world map", nil, ns.RefreshMap)
+	Checkbox("mapFlightMasters", "Show flight masters on the world map", nil, ns.RefreshMap)
+	Checkbox(
+		"mapRoutes",
+		"Show boat and zeppelin routes on the world map",
+		"Faint lines that brighten when you point at a route or its dock.",
+		ns.RefreshMap
+	)
 	Checkbox(
 		"otherFaction",
 		"Show the other faction's routes",
