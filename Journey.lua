@@ -18,6 +18,16 @@ local goal, guide, result
 local progress = { index = 1 }
 local driver
 local ARRIVAL = 15
+local PATH_REUSE = 3
+local pathJobs, walkCache, pathVersion = {}, {}, 0
+
+local function CancelPaths()
+	pathVersion = pathVersion + 1
+	for job in pairs(pathJobs) do
+		ns.Path.Cancel(job)
+	end
+	pathJobs = {}
+end
 
 local function NodeLabel(node)
 	if node.kind == "start" then
@@ -47,6 +57,9 @@ local function Near(node)
 end
 
 local function SameWaypoint(a, b)
+	if a == b then
+		return true
+	end
 	if not (a and b and a.uiMapID == b.uiMapID) then
 		return false
 	end
@@ -55,17 +68,45 @@ local function SameWaypoint(a, b)
 	return math.abs(ax - bx) < 0.000001 and math.abs(ay - by) < 0.000001
 end
 
+local function RememberTracking(state)
+	state.expectedQuest = C_SuperTrack.GetSuperTrackedQuestID()
+	state.expectedTrackedWaypoint = C_SuperTrack.IsSuperTrackingUserWaypoint()
+	state.expectedTrackingType = C_SuperTrack.GetHighestPrioritySuperTrackingType()
+end
+
+local function SameTracking(state)
+	return state.expectedQuest == C_SuperTrack.GetSuperTrackedQuestID()
+		and state.expectedTrackedWaypoint == C_SuperTrack.IsSuperTrackingUserWaypoint()
+		and state.expectedTrackingType == C_SuperTrack.GetHighestPrioritySuperTrackingType()
+end
+
 local function StopGuide()
-	if guide and SameWaypoint(C_Map.GetUserWaypoint(), guide.waypoint) then
-		C_Map.ClearUserWaypoint()
-		C_SuperTrack.SetSuperTrackedUserWaypoint(false)
-	end
+	local previous = guide
 	guide = nil
 	ns.PointGuideArrow(nil)
+	if
+		not previous
+		or not previous.hasDriven
+		or not SameWaypoint(C_Map.GetUserWaypoint(), previous.expectedWaypoint)
+	then
+		return
+	end
+	local ownsTracking = not previous.yielded and SameTracking(previous)
+	if previous.previousWaypoint then
+		C_Map.SetUserWaypoint(previous.previousWaypoint)
+	elseif previous.waypoint then
+		C_Map.ClearUserWaypoint()
+	end
+	if ownsTracking then
+		C_SuperTrack.SetSuperTrackedUserWaypoint(previous.previousTrackedWaypoint)
+		if not previous.previousTrackedWaypoint then
+			C_SuperTrack.SetSuperTrackedQuestID(previous.previousQuest or 0)
+		end
+	end
 end
 
 local function OwnsWaypoint()
-	if guide.waypoint and not SameWaypoint(C_Map.GetUserWaypoint(), guide.waypoint) then
+	if not SameWaypoint(C_Map.GetUserWaypoint(), guide.expectedWaypoint) then
 		-- A manual replacement or removal ends guidance; never reclaim the player's waypoint.
 		StopGuide()
 		return false
@@ -73,32 +114,65 @@ local function OwnsWaypoint()
 	return true
 end
 
-local function GuideTo(node, points)
-	if not guide or guide.target == node then
-		return
+local function GuideWaypoint(point)
+	if not guide or not OwnsWaypoint() then
+		return false
 	end
-	local point = node.kind == "dock" and ns.DockPoint(node.id) or node
-	local location = ns.Locate(point)
-	if not (location and C_Map.CanSetUserWaypointOnMap(location.uiMap)) then
-		ns.Print("that stop cannot hold a map waypoint.")
-		StopGuide()
-		return
+	if not SameTracking(guide) then
+		guide.yielded = true
 	end
-	local waypoint = UiMapPoint.CreateFromCoordinates(location.uiMap, location.x, location.y)
-	if not SameWaypoint(waypoint, guide.waypoint) then
-		-- WaypointLocationDataProvider.lua:100; SuperTrackedFrame.lua:219,289 supplies native navigation.
-		if not C_Map.SetUserWaypoint(waypoint) then
-			StopGuide()
-			return
+	if guide.yielded then
+		return false
+	end
+	local uiMap = C_Map.GetBestMapForUnit("player")
+	local bend = guide.bend
+	if not bend or point.map ~= bend.map or point.x ~= bend.x or point.y ~= bend.y or uiMap ~= guide.uiMap then
+		guide.bend, guide.uiMap = { map = point.map, x = point.x, y = point.y }, uiMap
+		local waypoint
+		if uiMap and C_Map.CanSetUserWaypointOnMap(uiMap) then
+			local projectedMap, position =
+				C_Map.GetMapPosFromWorldPos(point.map, CreateVector2D(point.x, point.y), uiMap)
+			if projectedMap == uiMap and position then
+				local x, y = position:GetXY()
+				if x >= 0 and x <= 1 and y >= 0 and y <= 1 then
+					waypoint = UiMapPoint.CreateFromVector2D(uiMap, position)
+				end
+			end
 		end
-		guide.waypoint = C_Map.GetUserWaypoint()
-		C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+		-- These APIs may dispatch events synchronously. Only our own writes bypass ownership checks.
+		guide.writing = true
+		-- The native map pin marks the next bend; Ferry's destination diamond still marks the final goal.
+		if waypoint and C_Map.SetUserWaypoint(waypoint) then
+			guide.waypoint = C_Map.GetUserWaypoint()
+			guide.expectedWaypoint = guide.waypoint
+			guide.hasDriven = true
+			C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+		elseif guide.waypoint then
+			-- Never leave a stale native marker pointing at the preceding bend when projection fails.
+			C_Map.ClearUserWaypoint()
+			C_SuperTrack.SetSuperTrackedUserWaypoint(false)
+			guide.waypoint, guide.expectedWaypoint = nil, nil
+		end
+		-- Deferred events from our own writes must also agree with the expected tracking state.
+		RememberTracking(guide)
+		guide.writing = nil
 	end
-	ns.PointGuideArrow(points or { point })
+	return guide.waypoint ~= nil and C_SuperTrack.IsSuperTrackingUserWaypoint()
+end
+
+local function GuideTo(node, points)
+	if not guide or (guide.target == node and guide.points == points) then
+		return
+	end
+	guide.points = points
 	guide.target = node
+	local point = node.kind == "dock" and ns.DockPoint(node.id) or node
+	ns.PointGuideArrow(points or { point }, GuideWaypoint)
 end
 
 function ns.ClearJourney()
+	CancelPaths()
+	walkCache = {}
 	StopGuide()
 	goal, result = nil, nil
 	progress.index, progress.departed = 1, false
@@ -156,7 +230,19 @@ function ns.ToggleJourneyGuide()
 	if guide then
 		StopGuide()
 	elseif result then
-		guide = {}
+		local previous = C_Map.HasUserWaypoint() and C_Map.GetUserWaypoint()
+		local saved
+		if previous then
+			local x, y = previous.position:GetXY()
+			saved = UiMapPoint.CreateFromCoordinates(previous.uiMapID, x, y, previous.z)
+		end
+		guide = {
+			previousQuest = C_SuperTrack.GetSuperTrackedQuestID(),
+			previousWaypoint = saved,
+			expectedWaypoint = previous or nil,
+			previousTrackedWaypoint = saved ~= nil and C_SuperTrack.IsSuperTrackingUserWaypoint(),
+		}
+		RememberTracking(guide)
 		UpdateProgress()
 	end
 	ns.RefreshTracker()
@@ -205,15 +291,69 @@ local function Refresh()
 	ns.RefreshTracker()
 end
 
-local function Render(planned)
-	if planned ~= result then
-		progress.index, progress.departed = 1, false
-		-- Resolve a walking path once per plan, shared by both maps and the bend-by-bend arrow.
-		for _, leg in ipairs(planned and planned.legs or {}) do
-			if leg.mode == "walk" then
-				leg.walkPoints = ns.Planner.WalkPoints(leg.from, leg.to)
+local function NearPathEndpoint(a, b)
+	return a.map == b.map and (a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 <= PATH_REUSE ^ 2
+end
+
+local function PrepareWalks(planned)
+	local cache, searches = {}, {}
+	for _, leg in ipairs(planned and planned.legs or {}) do
+		if leg.mode == "walk" then
+			leg.walkPoints = ns.Planner.WalkPoints(leg.from, leg.to)
+			if ns.Path and leg.from.map == leg.to.map and ns.Path.HasData(leg.from.map) then
+				local found
+				for _, entry in ipairs(walkCache) do
+					if entry.done and NearPathEndpoint(entry.from, leg.from) and NearPathEndpoint(entry.to, leg.to) then
+						found = entry
+						break
+					end
+				end
+				-- Compare with the original search endpoints, so small moves cannot drift the cache indefinitely.
+				local entry = found or { from = leg.from, to = leg.to }
+				cache[#cache + 1] = entry
+				if found then
+					leg.walkPoints = entry.points or leg.walkPoints
+				else
+					searches[#searches + 1] = { leg = leg, entry = entry }
+				end
 			end
 		end
+	end
+	walkCache = cache
+	return searches
+end
+
+local function FindWalks(planned, searches)
+	local version = pathVersion
+	for _, search in ipairs(searches) do
+		local leg, entry = search.leg, search.entry
+		local from, to = leg.from, leg.to
+		local job = ns.Path.Find(from.map, from.x, from.y, to.x, to.y, function(points, _, finished)
+			pathJobs[finished] = nil
+			if result ~= planned or version ~= pathVersion then
+				return
+			end
+			entry.done, entry.points = true, points
+			if points then
+				-- Geometry improves asynchronously; arrival times still use the planner's straight-line estimate.
+				leg.walkPoints = points
+				if guide and result.legs[progress.index] == leg then
+					guide.target = nil
+					UpdateProgress()
+				end
+				Refresh()
+			end
+		end)
+		pathJobs[job] = true
+	end
+end
+
+local function Render(planned)
+	local searches
+	if planned ~= result then
+		CancelPaths()
+		progress.index, progress.departed = 1, false
+		searches = PrepareWalks(planned)
 		if guide then
 			guide.target = nil
 		end
@@ -224,6 +364,9 @@ local function Render(planned)
 	end
 	UpdateProgress()
 	Refresh()
+	if result == planned and planned and searches then
+		FindWalks(planned, searches)
+	end
 end
 
 local function Plan()
@@ -295,6 +438,8 @@ local function Update(self, elapsed)
 end
 
 local function StartJourney(point)
+	CancelPaths()
+	walkCache = {}
 	if guide then
 		StopGuide()
 	end
@@ -395,9 +540,25 @@ ns.Init(function()
 	driver:SetScript("OnUpdate", Update)
 	driver:RegisterEvent("QUEST_TURNED_IN")
 	driver:RegisterEvent("QUEST_REMOVED")
+	driver:RegisterEvent("SUPER_TRACKING_CHANGED")
+	driver:RegisterEvent("USER_WAYPOINT_UPDATED")
 	driver:SetScript("OnEvent", function(_, event, questID)
+		if (event == "QUEST_TURNED_IN" or event == "QUEST_REMOVED") and guide and guide.previousQuest == questID then
+			guide.previousQuest = nil
+		end
 		if (event == "QUEST_TURNED_IN" or event == "QUEST_REMOVED") and goal and goal.questID == questID then
 			ns.ClearJourney()
+		elseif
+			guide
+			and not guide.writing
+			and (event == "SUPER_TRACKING_CHANGED" or event == "USER_WAYPOINT_UPDATED")
+		then
+			if not OwnsWaypoint() then
+				ns.RefreshTracker()
+			elseif event == "SUPER_TRACKING_CHANGED" and not SameTracking(guide) then
+				-- A quest/map-pin click belongs to the player. Keep the route arrow, but never retake tracking.
+				guide.yielded = true
+			end
 		end
 	end)
 	driver:Hide()

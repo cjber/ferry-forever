@@ -1,10 +1,8 @@
 local _, ns = ...
 
--- Guide's direction arrow, for clients where the game's own navigation marker never appears (WoW Forever drops
--- the "In-game navigation" option: Blizzard_SettingsDefinitions_Frame/Camelot/InterfaceOverrides.lua). It uses
--- the same art as that marker (Blizzard_QuestNavigation/SuperTrackedFrame.xml), turned toward the stop by the
--- player's facing. There is no way to place it in the world, so it sits near the top of the screen instead.
--- Given a walking path it leads bend by bend, so following it walks the path drawn on the map.
+-- Guide follows the map's walking path bend by bend. Journey places Blizzard's native navigation marker at
+-- this target; our screen arrow is the fallback when that marker is unavailable or the player owns tracking.
+-- Camelot omits the navigation setting, but its native super-tracked marker does work.
 
 local UPDATE_EVERY = 0.05
 -- The native marker's arrow sits this far from its icon.
@@ -12,7 +10,7 @@ local RADIUS = 36
 -- A bend this close counts as passed, and the arrow turns to the next one.
 local PASSED = 10
 
-local frame, path, index, target
+local frame, path, index, target, placeTarget
 
 -- Counter-clockwise from north, like GetPlayerFacing: UnitPosition's first value grows north, its second west.
 local function Bearing(x, y)
@@ -22,12 +20,16 @@ end
 local function Update()
 	local x, y, _, map = UnitPosition("player")
 	local facing = GetPlayerFacing()
-	-- The game's own marker, where it works, already shows the way.
-	while index < #path and map == target.map and (target.x - x) ^ 2 + (target.y - y) ^ 2 < PASSED ^ 2 do
+	while x and index < #path and map == target.map and (target.x - x) ^ 2 + (target.y - y) ^ 2 <= PASSED ^ 2 do
 		index = index + 1
 		target = path[index]
 	end
-	if not (x and facing and map == target.map) or C_Navigation.GetFrame() then
+	local native = placeTarget and placeTarget(target)
+	-- A manual waypoint replacement can stop Guide inside placeTarget.
+	if not path then
+		return
+	end
+	if not (x and facing and map == target.map) or (native and C_Navigation.GetFrame()) then
 		frame:SetAlpha(0)
 		return
 	end
@@ -65,9 +67,15 @@ local function Create()
 	end)
 end
 
--- Lead along `points` ({ x, y, map } in UnitPosition's frame, ending at the stop), or hide the arrow with nil.
-function ns.PointGuideArrow(points)
-	path, index, target = points, 1, points and points[1]
+-- placeBend owns waypoint placement and returns whether native tracking is ours. Progress lives only here.
+function ns.PointGuideArrow(points, placeBend)
+	if points and #points == 0 then
+		points = nil
+	end
+	if points ~= path then
+		index, target = 1, points and points[1]
+	end
+	path, placeTarget = points, placeBend
 	if not points then
 		if frame then
 			frame:Hide()
