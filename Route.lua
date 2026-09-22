@@ -21,10 +21,36 @@ local COLORS = {
 local provider, goal, result, paths, minimap
 local transportProvider, transportPin, dockHover, highlightedRoutes
 
+-- Each map's world corners: { continent, x and y at the top left, x and y at the bottom right }.
+local corners = {}
+
+local function Corners(mapID)
+	if corners[mapID] == nil then
+		local continent, topLeft = C_Map.GetWorldPosFromMapPos(mapID, CreateVector2D(0, 0))
+		local other, bottomRight = C_Map.GetWorldPosFromMapPos(mapID, CreateVector2D(1, 1))
+		corners[mapID] = false
+		if continent and continent == other and topLeft and bottomRight then
+			local x0, y0 = topLeft:GetXY()
+			local x1, y1 = bottomRight:GetXY()
+			if x0 ~= x1 and y0 ~= y1 then
+				corners[mapID] = { continent, x0, y0, x1, y1 }
+			end
+		end
+	end
+	return corners[mapID]
+end
+
+-- A world point on this map, in map fractions. Lines are clipped to the map, so a point past its edge still counts:
+-- the client projects only points it places on the map, and the rest follow from the map's corners.
 local function MapPosition(point, mapID)
 	local uiMap, position = C_Map.GetMapPosFromWorldPos(point.map, CreateVector2D(point.x, point.y), mapID)
 	if uiMap == mapID and position then
 		return position:GetXY()
+	end
+	local map = Corners(mapID)
+	if map and map[1] == point.map then
+		-- World x runs north and y west, so the map's x follows world y and its y follows world x.
+		return (point.y - map[3]) / (map[5] - map[3]), (point.x - map[2]) / (map[4] - map[2])
 	end
 end
 
