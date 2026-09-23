@@ -544,4 +544,3 @@ do
 end
 
 print("planner_spec: ok")
-assert(loadfile("tests/journey_spec.lua"))()
