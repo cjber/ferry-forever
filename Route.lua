@@ -8,6 +8,8 @@ local GOAL_TEMPLATE = "ShortestPathForeverGoalPinTemplate"
 -- atlas is mostly transparent and turned into a thin core inside a heavy border. Walks are round breadcrumbs, each
 -- a dot-textured line one diameter long over a slightly larger dark dot, spaced evenly across the walk's bends.
 local THICKNESS, DOT, RIM, SPACING = 2, 4, 1, 9
+-- How far a dot's rim reaches from its centre: callers clip walks this far inside their frame.
+local REACH = DOT / 2 + RIM
 local DOT_TEXTURE = "Interface\\AddOns\\ShortestPathForever\\media\\Dot"
 local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
 local GOAL_ATLAS, GOAL_SCALE = "Waypoint-MapPin-Tracked", 0.8
@@ -183,10 +185,11 @@ local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale, d
 	if not low then
 		return
 	end
-	-- Only dots whose rim fits inside the clipped span, so none overhangs the map's edge or the minimap's rim.
-	local half, reach = DOT / 2 / length, DOT / 2 + RIM
+	-- The caller clipped a walk REACH inside its frame, so every dot's rim fits and joints need no trim, which would
+	-- drop the dots at each bend. The far end is exclusive so a dot on a joint is drawn once.
+	local half = DOT / 2 / length
 	local spacing = dashLimit and math.max(SPACING, (high - low) * length / dashLimit) or SPACING
-	for distance = math.ceil((start + low * length + reach) / spacing) * spacing - start, high * length - reach, spacing do
+	for distance = math.ceil((start + low * length) / spacing) * spacing - start, high * length - 0.001, spacing do
 		local t = distance / length
 		Stroke(
 			owner,
@@ -278,9 +281,12 @@ function ShortestPathForeverRoutePinMixin:OnLoad()
 end
 
 function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed, dashLimit)
-	local low, high = ClipAxis(x1, x2 - x1, 0, 1, 0, 1)
+	local scale = self:GetEffectiveScale()
+	local mx = dashed and REACH / scale / self:GetWidth() or 0
+	local my = dashed and REACH / scale / self:GetHeight() or 0
+	local low, high = ClipAxis(x1, x2 - x1, 0, 1, mx, 1 - mx)
 	if low then
-		low, high = ClipAxis(y1, y2 - y1, low, high, 0, 1)
+		low, high = ClipAxis(y1, y2 - y1, low, high, my, 1 - my)
 	end
 	Segment(
 		self,
@@ -292,7 +298,7 @@ function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed, da
 		high,
 		color,
 		dashed,
-		self:GetEffectiveScale(),
+		scale,
 		dashLimit
 	)
 end
@@ -816,7 +822,9 @@ local function DrawMinimap(self)
 					if a.map == map and b.map == map and not a.jump then
 						local ax, ay = Project(a, x, y, radius, cosine, sine)
 						local bx, by = Project(b, x, y, radius, cosine, sine)
-						local low, high = ClipMinimap(ax, ay, bx - ax, by - ay, inset, square)
+						local walk = path.mode == "walk"
+						local within = walk and inset - 2 * REACH / scale / math.min(width, height) or inset
+						local low, high = ClipMinimap(ax, ay, bx - ax, by - ay, within, square)
 						Segment(
 							self,
 							(ax + 1) * width / 2,
@@ -826,7 +834,7 @@ local function DrawMinimap(self)
 							low,
 							high,
 							COLORS[path.mode],
-							path.mode == "walk",
+							walk,
 							scale
 						)
 					end
