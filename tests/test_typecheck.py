@@ -146,6 +146,53 @@ function object.method:call() return 1 end
                 LINT.lint(source)
 
 
+def write_strict_fixture(root, fixture):
+    config = json.loads((root / ".luarc.json").read_text())
+    config["workspace.library"] = [str(root / library) for library in config["workspace.library"]]
+    # Real namespace exports and generated headers must keep their type information too.
+    for source in root.glob("*.lua"):
+        shutil.copy2(source, fixture / source.name)
+    for source in [root / "types", root / "Data", *root.glob("ShortestPathForever_Nav*")]:
+        shutil.copytree(source, fixture / source.name)
+    for name, mistake in (("Data/Routes.lua", "ns.Routes[241].period = false"),):
+        with (fixture / name).open("a") as output:
+            output.write("\n" + mistake + "\n")
+    for map_id in (0, 1, 2991):
+        path = fixture / f"ShortestPathForever_Nav{map_id}/Nav{map_id}.lua"
+        path.write_text(path.read_text().replace("\tcells = 67,", '\tcells = "bad",'))
+    path = fixture / "ShortestPathForever_Nav1/Nav1_floor.lua"
+    path.write_text(path.read_text().replace(".floor = {", ".floor = { false,", 1))
+    (fixture / ".luarc.json").write_text(json.dumps(config))
+    (fixture / "probe.lua").write_text("""
+C_ClassColor.GetClassColor("MAGE", 1)
+C_ClassColor.GetClassColor(false)
+C_ClassColor.GetClassColor()
+MissingForeverGlobal()
+---@class ProbeFrame : Frame
+local frame = CreateFrame("Frame")
+frame.MissingField()
+---@type Frame?
+local maybe
+maybe:Show()
+---@type number
+local value = "bad"
+---@return number
+local function badReturn() return "bad" end
+---@return number
+local function noReturn() print("missing") end
+---@return number
+local function extraReturn() return 1, 2 end
+local changing = 1
+changing = "bad"
+local unused = 1
+print(value, badReturn(), noReturn(), extraReturn(), changing)
+---@class SPFNamespace
+local ns = select(2, ...)
+ns.Model.FormatCountdown("bad")
+ns.NoSuchExport()
+""")
+
+
 class LuaLSGateTests(unittest.TestCase):
     def test_clean_report_and_information_diagnostic(self):
         reporter = Path(__file__).parents[1] / "tools/typecheck_report.py"
@@ -184,52 +231,9 @@ class LuaLSGateTests(unittest.TestCase):
 
     def test_strict_diagnostics_are_active(self):
         root = Path(__file__).parents[1]
-        config = json.loads((root / ".luarc.json").read_text())
-        config["workspace.library"] = [str(root / library) for library in config["workspace.library"]]
         with tempfile.TemporaryDirectory(prefix="spf-typecheck-") as directory:
             fixture = Path(directory)
-            # Real namespace exports and generated headers must keep their type information too.
-            for source in root.glob("*.lua"):
-                shutil.copy2(source, fixture / source.name)
-            for source in [root / "types", root / "Data", *root.glob("ShortestPathForever_Nav*")]:
-                shutil.copytree(source, fixture / source.name)
-            for name, mistake in (("Data/Routes.lua", "ns.Routes[241].period = false"),):
-                with (fixture / name).open("a") as output:
-                    output.write("\n" + mistake + "\n")
-            for map_id in (0, 1, 2991):
-                path = fixture / f"ShortestPathForever_Nav{map_id}/Nav{map_id}.lua"
-                path.write_text(path.read_text().replace("\tcells = 67,", '\tcells = "bad",'))
-            path = fixture / "ShortestPathForever_Nav1/Nav1_floor.lua"
-            path.write_text(path.read_text().replace(".floor = {", ".floor = { false,", 1))
-            (fixture / ".luarc.json").write_text(json.dumps(config))
-            (fixture / "probe.lua").write_text("""
-C_ClassColor.GetClassColor("MAGE", 1)
-C_ClassColor.GetClassColor(false)
-C_ClassColor.GetClassColor()
-MissingForeverGlobal()
----@class ProbeFrame : Frame
-local frame = CreateFrame("Frame")
-frame.MissingField()
----@type Frame?
-local maybe
-maybe:Show()
----@type number
-local value = "bad"
----@return number
-local function badReturn() return "bad" end
----@return number
-local function noReturn() print("missing") end
----@return number
-local function extraReturn() return 1, 2 end
-local changing = 1
-changing = "bad"
-local unused = 1
-print(value, badReturn(), noReturn(), extraReturn(), changing)
----@class SPFNamespace
-local ns = select(2, ...)
-ns.Model.FormatCountdown("bad")
-ns.NoSuchExport()
-""")
+            write_strict_fixture(root, fixture)
             report = fixture / "diagnostics.json"
             result = subprocess.run(
                 [

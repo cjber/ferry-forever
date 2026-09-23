@@ -946,8 +946,8 @@ local function Plan(preview, bounded)
 	return planned
 end
 
--- Only the two most recent endpoint searches are retained. Goal costs survive a repeated destination;
--- a start can be reused within three yards only if the pathfinder confirms the same snapped grid node.
+-- Reuse only the last two endpoint searches, with starts confirmed by the pathfinder as the same snapped node.
+-- sift: long-function - one search owns the callbacks' shared revision, preview and probe budget across resumes
 local function RefreshCosts(includeGoal, forced)
 	local here = Here()
 	if not (here and goal) then
@@ -1098,6 +1098,7 @@ local function RefreshCosts(includeGoal, forced)
 		end
 	end
 	local consider
+	-- sift: long-function - bounded search callback; splitting adds calls and upvalues on every frontier update
 	consider = function(final)
 		if version ~= pathVersion or not goal then
 			return
@@ -1132,8 +1133,7 @@ local function RefreshCosts(includeGoal, forced)
 		if goalError and goalError ~= "nodata" then
 			startCosts[#startCosts + 1] = { from = here, to = goal, cost = false }
 		end
-		-- The initial bounded preview can choose probes while endpoint validation runs. Reuse that
-		-- choice once, but always plan with current exact costs before committing a route.
+		-- Reuse the bounded preview once for probes; commit only after planning with current exact costs.
 		local previewed = preview and not startBatch.reason and not goalBatch.reason
 		local planned = previewed and preview or Plan(false, true)
 		preview = nil
@@ -1233,9 +1233,9 @@ local function RefreshCosts(includeGoal, forced)
 		consider(true)
 	end
 end
-
 ---@param self SPFJourneyDriver
 ---@param elapsed number
+-- sift: long-function - one throttled frame step; keeping its gates together preserves the search/draw cadence
 local function Update(self, elapsed)
 	if InCombatLockdown() then
 		return

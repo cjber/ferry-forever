@@ -21,6 +21,7 @@ import subprocess
 import sys
 from functools import cache, lru_cache
 from pathlib import Path
+from typing import cast
 
 from PIL import Image, ImageDraw
 
@@ -288,7 +289,7 @@ def map_landmarks(canvas, map_id, rect):
     for portal in ordered(data()["portals"]):
         p = point(portal["from"])
         if p and portal["kind"] == "portal" and portal.get("faction", "Alliance") == "Alliance":
-            icon(canvas, "map-icon-suramardoor.tga", *p, 20)
+            icon(canvas, "map-icon-suramardoor.tga", *p, size=20)
 
 
 @cache
@@ -298,6 +299,58 @@ def map_base(ui, map_id):
         draw_overlay(ui, art, overlay.offset_x, overlay.offset_y, overlay.width, overlay.height, overlay.tiles)
     names = {947: ("World",), 1414: ("World", "Kalimdor"), 1439: ("World", "Kalimdor", "Darkshore")}
     return world_map_frame(ui, art, names[map_id], arrows=names[map_id][1:])
+
+
+def route_curve(route, a, b, control, color, alpha, fade=False):
+    mw, mh = route.width, route.height
+    previous = (a[0] * mw, a[1] * mh)
+    for step in range(1, 13):
+        t = step / 12
+        p = tuple(
+            ((1 - t) ** 2 * a[i] + 2 * (1 - t) * t * control[i] + t * t * b[i]) * size
+            for i, size in enumerate((mw, mh))
+        )
+        segment(route, previous, p, color, alpha=alpha * (1 - (step - 0.5) / 12 if fade else 1))
+        previous = p
+
+
+def route_crossing(route, a, b, color, alpha, previous=None):
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    control = ((a[0] + b[0]) / 2 - dy * 0.25, (a[1] + b[1]) / 2 + dx * 0.25)
+    if previous:
+        tx, ty = a[0] - previous[0], a[1] - previous[1]
+        length = math.hypot(tx, ty)
+        if length > 0:
+            reach = math.hypot(dx, dy) * 0.6 / length
+            control = (a[0] + tx * reach, a[1] + ty * reach)
+    else:
+        side = -1 if dx < 0 else 1
+        control = ((a[0] + b[0]) / 2 + dy * side * 0.6, (a[1] + b[1]) / 2 - dx * side * 0.6)
+    if abs((control[0] - a[0]) * dy - (control[1] - a[1]) * dx) < (dx * dx + dy * dy) * 0.1:
+        control = ((a[0] + b[0]) / 2 - dy * 0.25, (a[1] + b[1]) / 2 + dx * 0.25)
+    route_curve(route, a, b, control, color, alpha)
+
+
+def map_dock_pins(canvas, map_id, rect, hover):
+    ui = canvas.ui
+    mx, my, mw, mh = rect
+    clusters = map_docks(ui, map_id, mw, mh)
+    hover_point = None
+    for x, y, ids, kind in clusters:
+        x, y = x + mx, y + my
+        if hover and set(ids) & {7, 9, 17, 25}:
+            canvas.draw(ui.atlas("UI-QuestPoi-OuterGlow"), x - 28, y - 28, 56, 56)
+        if kind == "zeppelin":
+            canvas.draw(Image.open(ROOT / "media/zeppelin.tga").convert("RGBA"), x - 10, y - 10, 20, 20)
+        else:
+            size = 15 if kind in ("lift", "tram") else 20
+            atlas = {"boat": "flightmasterferry", "lift": "poi-door-arrow-up", "tram": "poi-door-arrow-down"}[kind]
+            canvas.draw(ui.atlas(atlas), x - size / 2, y - size / 2, size, size)
+            if hover and 10 in ids:
+                canvas.draw(ui.atlas(atlas), x - 10, y - 10, 20, 20, blend="ADD")
+        if 10 in ids:
+            hover_point = (x, y)
+    return hover_point
 
 
 def map_canvas(ui, map_id=947, alpha=1, hover=False):
@@ -311,33 +364,6 @@ def map_canvas(ui, map_id=947, alpha=1, hover=False):
         normal = projection(ui, p, map_id)
         return (normal[0] * mw, normal[1] * mh) if normal else None
 
-    def curve(a, b, control, color, fade=False):
-        previous = (a[0] * mw, a[1] * mh)
-        for step in range(1, 13):
-            t = step / 12
-            p = tuple(
-                ((1 - t) ** 2 * a[i] + 2 * (1 - t) * t * control[i] + t * t * b[i]) * size
-                for i, size in enumerate((mw, mh))
-            )
-            segment(route, previous, p, color, alpha=alpha * (1 - (step - 0.5) / 12 if fade else 1))
-            previous = p
-
-    def crossing(a, b, color, previous=None):
-        dx, dy = b[0] - a[0], b[1] - a[1]
-        control = ((a[0] + b[0]) / 2 - dy * 0.25, (a[1] + b[1]) / 2 + dx * 0.25)
-        if previous:
-            tx, ty = a[0] - previous[0], a[1] - previous[1]
-            length = math.hypot(tx, ty)
-            if length > 0:
-                reach = math.hypot(dx, dy) * 0.6 / length
-                control = (a[0] + tx * reach, a[1] + ty * reach)
-        else:
-            side = -1 if dx < 0 else 1
-            control = ((a[0] + b[0]) / 2 + dy * side * 0.6, (a[1] + b[1]) / 2 - dx * side * 0.6)
-        if abs((control[0] - a[0]) * dy - (control[1] - a[1]) * dx) < (dx * dx + dy * dy) * 0.1:
-            control = ((a[0] + b[0]) / 2 - dy * 0.25, (a[1] + b[1]) / 2 + dx * 0.25)
-        curve(a, b, control, color)
-
     def path(points, color, dashed):
         for index, (a, b) in enumerate(zip(points, points[1:], strict=False)):
             if a["map"] == b["map"] and not a.get("jump"):
@@ -349,7 +375,14 @@ def map_canvas(ui, map_id=947, alpha=1, hover=False):
                 before = points[index - 1] if index else points[-2]
                 if pa and pb:
                     # Same-continent teleports retain both ends; only a hidden end fades to the map edge.
-                    crossing(pa, pb, color, projection(ui, before, map_id) if before["map"] == a["map"] else None)
+                    route_crossing(
+                        route,
+                        pa,
+                        pb,
+                        color,
+                        alpha,
+                        projection(ui, before, map_id) if before["map"] == a["map"] else None,
+                    )
                     continue
                 # Route.lua EdgeCurve carries a loading-screen crossing out to sea, fading at the edge.
                 for end, neighbor in ((a, before), (b, points[index + 2] if index + 2 < len(points) else points[1])):
@@ -370,7 +403,7 @@ def map_canvas(ui, map_id=947, alpha=1, hover=False):
                     if distance > 0:
                         end = (p[0] + ex * distance, p[1] + ey * distance)
                         control = (p[0] + dx * distance * 0.55, p[1] + dy * distance * 0.55)
-                        curve(p, end, control, color, fade=True)
+                        route_curve(route, p, end, control, color, alpha, fade=True)
 
     if not hover:
         for name in (
@@ -383,28 +416,13 @@ def map_canvas(ui, map_id=947, alpha=1, hover=False):
     for boat_data in boats if map_id != 1439 else []:
         boat = ordered(boat_data)
         if map_id == 947 and boat[0]["map"] != boat[-1]["map"]:
-            crossing(projection(ui, boat[0], map_id), projection(ui, boat[-1], map_id), BOAT_COLOR)
+            route_crossing(route, projection(ui, boat[0], map_id), projection(ui, boat[-1], map_id), BOAT_COLOR, alpha)
         else:
             path(boat, BOAT_COLOR, False)
     flush_strokes(route)
     canvas.paste(route, mx, my)
     map_landmarks(canvas, map_id, rects["map"])
-    clusters = map_docks(ui, map_id, mw, mh)
-    hover_point = None
-    for x, y, ids, kind in clusters:
-        x, y = x + mx, y + my
-        if hover and set(ids) & {7, 9, 17, 25}:
-            canvas.draw(ui.atlas("UI-QuestPoi-OuterGlow"), x - 28, y - 28, 56, 56)
-        if kind == "zeppelin":
-            canvas.draw(Image.open(ROOT / "media/zeppelin.tga").convert("RGBA"), x - 10, y - 10, 20, 20)
-        else:
-            size = 15 if kind in ("lift", "tram") else 20
-            atlas = {"boat": "flightmasterferry", "lift": "poi-door-arrow-up", "tram": "poi-door-arrow-down"}[kind]
-            canvas.draw(ui.atlas(atlas), x - size / 2, y - size / 2, size, size)
-            if hover and 10 in ids:
-                canvas.draw(ui.atlas(atlas), x - 10, y - 10, 20, 20, blend="ADD")
-        if 10 in ids:
-            hover_point = (x, y)
+    hover_point = map_dock_pins(canvas, map_id, rects["map"], hover)
     if not hover:
         goal = DARKSHORE_GOAL if map_id == 1439 else data()["taxis"]["73"] if map_id == 1414 else GOAL
         gp = point(goal)
@@ -605,7 +623,8 @@ def render_demo(ui):
     palette = palette_source.quantize(colors=240, method=Image.Quantize.MEDIANCUT)
     reserved = [(255, 255, 255), (204, 204, 204), (191, 156, 0), (255, 210, 0), (0, 191, 255), (10, 10, 10)]
     palette.putpalette(
-        palette.getpalette()[:720] + [channel for color in reserved + [(0, 0, 0)] * 10 for channel in color]
+        cast(list[int], palette.getpalette())[:720]
+        + [channel for color in reserved + [(0, 0, 0)] * 10 for channel in color]
     )
     indexed = [frame.quantize(palette=palette, dither=Image.Dither.NONE) for frame in frames]
     buffer = io.BytesIO()
@@ -655,21 +674,7 @@ def enlarged(image, factor=2):
     return image.resize((round(image.width * factor), round(image.height * factor)), Image.Resampling.NEAREST)
 
 
-def compare_references(refs, tooltip_ref=None):
-    """Keep reference pixels out of product media; this sheet is a review artifact only."""
-    ui, art = Art(scale=1.2), Art(scale=2)
-    # Reuse the cached 2x atlas at the capture's UI scale; never switch the art set for this comparison.
-    ui.atlas = art.atlas
-    panel = tracker_canvas(ui)
-    ground = backdrop(ui, panel.width, panel.height)
-    ground.paste(panel, 0, 0)
-    reference = Image.open(refs / "21.png").convert("RGB").crop((5, 14, 325, 213))
-    mock = ground.image.convert("RGB").crop((4, 8, 324, 207))
-    comparison_sheet(
-        "tracker",
-        [("Owner 21 (2x)", enlarged(reference), "Current source: totals in section header (2x)", enlarged(mock))],
-    )
-
+def compare_map_references(ui, refs):
     def map_image(map_id, hover=False):
         canvas, _ = map_canvas(ui, map_id, hover=hover)
         x, y, w, h = map_base(ui, map_id)[1]["map"]
@@ -724,6 +729,24 @@ def compare_references(refs, tooltip_ref=None):
             ),
         ],
     )
+
+
+def compare_references(refs, tooltip_ref=None):
+    """Keep reference pixels out of product media; this sheet is a review artifact only."""
+    ui, art = Art(scale=1.2), Art(scale=2)
+    # Reuse the cached 2x atlas at the capture's UI scale; never switch the art set for this comparison.
+    ui.atlas = art.atlas
+    panel = tracker_canvas(ui)
+    ground = backdrop(ui, panel.width, panel.height)
+    ground.paste(panel, 0, 0)
+    reference = Image.open(refs / "21.png").convert("RGB").crop((5, 14, 325, 213))
+    mock = ground.image.convert("RGB").crop((4, 8, 324, 207))
+    comparison_sheet(
+        "tracker",
+        [("Owner 21 (2x)", enlarged(reference), "Current source: totals in section header (2x)", enlarged(mock))],
+    )
+
+    compare_map_references(ui, refs)
 
     reference = Image.open(refs / "19.png").crop((94, 28, 422, 383))
     mock = render_minimap(art).image.crop((48, 82, 478, 538)).resize((323, 342), Image.Resampling.LANCZOS)

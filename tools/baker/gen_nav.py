@@ -27,6 +27,7 @@ import sys
 from array import array
 from collections import defaultdict
 from textwrap import wrap
+from typing import cast
 
 MM = os.environ.get("NAV_MM", "mm")
 T = 1600 / 3
@@ -228,7 +229,7 @@ def components():
 def load_window(tiles):
     """Kept polys of some tiles keyed by gid, with their adjacency and portals (world coordinates)."""
     polys, adj, portal, border = {}, defaultdict(set), {}, defaultdict(list)
-    for rc in sorted(tiles, key=ORD.get):
+    for rc in sorted(tiles, key=ORD.__getitem__):
         tp, links, edges = read_tile(rc)
         base, k = BASE[rc], cluster_of_tile(*rc)
         kept = set()
@@ -291,26 +292,13 @@ def seg_in_box(a, b, box):
     return True
 
 
-def rasterize_tile(rc):
-    """Pass 2 for one tile: its cells' surfaces (0 blocked, 1 ground, 2 water), heights, floors and step codes.
+def rasterize_layers(polys, adj, portal, bounds):
+    """Prefer the largest component, then its highest surface, so roofs cannot displace the city below.
 
-    A cell's base surface is the one of the larger navmesh component and, within one component, the highest: a
-    bridge is ground and a lake (a water surface over a walkable lake bed) is water, while a city under a walkable
-    roof (Ironforge under its mountain top) stays the city. Every other surface at least CLIMB above or below it is
-    kept as a floor of its own, so a tunnel under a mountain, the ground under a bridge and both ends of a lift are
-    all on the map; a lake or sea bed under the water is not. A step between neighbouring cells is cut unless a 2D
-    ray along the navmesh surface from one cell's anchor reaches the other's surface poly, so the grid cannot climb
-    a cliff, pass a fence or wall, or drop off a bridge; floors link to neighbouring surfaces by the same test.
-    Surfaces are computed two cells beyond the tile and steps one cell beyond, which is all the tile's own steps and
-    diagonals read; everything comes from the 3x3 tiles around it.
+    Keep other surfaces at least CLIMB apart as floors; omit lake beds under water. Narrow passages anchor on
+    centroids because their cells may have no centre inside the mesh.
     """
-    rr, cc = rc
-    window = [(rr + dr, cc + dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1) if (rr + dr, cc + dc) in TILES]
-    polys, adj, portal = load_window(window)
-    k = cluster_of_tile(rr, cc)
-    kx, ky = divmod(k, NY)
-    tx0, tx1, ty0, ty1 = kx * CELLS, kx * CELLS + CELLS - 1, ky * CELLS, ky * CELLS + CELLS - 1
-    ax0, ax1, ay0, ay1 = max(0, tx0 - 2), min(GW - 1, tx1 + 2), max(0, ty0 - 2), min(GH - 1, ty1 + 2)
+    ax0, ax1, ay0, ay1 = bounds
     surf = defaultdict(list)  # cell -> [(component size, height, value, poly, point on it, late)]
 
     def at(x, y):
@@ -357,6 +345,27 @@ def rasterize_tile(rc):
         chosen[1:] = sorted(chosen[1:], key=lambda s: s[1])
         layers[i] = [(s[1], s[2], (s[3], s[4])) for s in chosen]
 
+    return layers
+
+
+def rasterize_tile(rc):
+    """Pass 2 for one tile: its cells' surfaces (0 blocked, 1 ground, 2 water), heights, floors and step codes.
+
+    A step between neighbouring cells is cut unless a 2D ray along the navmesh surface from one cell's anchor reaches
+    the other's surface poly, so the grid cannot climb a cliff, pass a fence or wall, or drop off a bridge. Floors
+    link to neighbouring surfaces by the same test.
+    Surfaces are computed two cells beyond the tile and steps one cell beyond, which is all the tile's own steps and
+    diagonals read; everything comes from the 3x3 tiles around it.
+    """
+    rr, cc = rc
+    window = [(rr + dr, cc + dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1) if (rr + dr, cc + dc) in TILES]
+    polys, adj, portal = load_window(window)
+    k = cluster_of_tile(rr, cc)
+    kx, ky = divmod(k, NY)
+    tx0, tx1, ty0, ty1 = kx * CELLS, kx * CELLS + CELLS - 1, ky * CELLS, ky * CELLS + CELLS - 1
+    ax0, ax1, ay0, ay1 = max(0, tx0 - 2), min(GW - 1, tx1 + 2), max(0, ty0 - 2), min(GH - 1, ty1 + 2)
+    layers = rasterize_layers(polys, adj, portal, (ax0, ax1, ay0, ay1))
+
     def linked(i, la, j, lb):
         """Is there a navmesh path from cell i's surface la to cell j's surface lb inside the two cells (+ MARGIN)?"""
         (pa, _), (pb, b) = layers[i][la][2], layers[j][lb][2]
@@ -374,7 +383,7 @@ def rasterize_tile(rc):
         while stack:
             u = stack.pop()
             for v in adj.get(u, ()):
-                if v in seen or not seg_in_box(*portal[(u, v)], box):
+                if v in seen or not seg_in_box(*portal[(u, v)], box=box):
                     continue
                 if v == pb or (point_in_convex(b[0], b[1], polys[v]["pts"]) and abs(height(polys[v], *b) - hb) < CLIMB):
                     return True
@@ -608,6 +617,7 @@ def grid_hpa(grid, cuts):
                 ds = [dist.get((a, b)) for dist in dists]
                 if ds[0] is None:
                     continue
+                ds = cast(list[float], ds)
                 if all(
                     any(dist.get((a, x), 1e18) + dist.get((x, b), 1e18) <= d * PRUNE for x in el if x not in (a, b))
                     for dist, d in zip(dists, ds, strict=False)
@@ -618,7 +628,7 @@ def grid_hpa(grid, cuts):
     return nodes, edges
 
 
-def emit(nodes, edges, grid, cuts, out, name):
+def encode_map(nodes, edges, grid, cuts):
     cells = sorted(c for cs in nodes.values() for c in cs)
     parent = {c: c for c in cells}
 
@@ -696,6 +706,11 @@ def emit(nodes, edges, grid, cuts, out, name):
             heights[k] = encode_heights(grid, k)
         if FLOORS_OF.get(k) or LINKED_OF.get(k):
             floors[k] = encode_floors(grid, k, lcell)
+    return graph, grids, heights, floors, len(roots)
+
+
+def emit(nodes, edges, grid, cuts, out, name):
+    graph, grids, heights, floors, components = encode_map(nodes, edges, grid, cuts)
     lines = [
         "-- Generated by tools/baker/gen_nav.py — do not edit.",
         f"-- Source: {SOURCE}.",
@@ -713,7 +728,7 @@ def emit(nodes, edges, grid, cuts, out, name):
         "--   neighbour (else its -x neighbour, else the previous cell): symbols 0-46 add -23..23, 47 is followed by",
         "--   an absolute value + 2048 (2), a symbol >= 48 repeats the previous difference (symbol - 47) more times.",
         "-- floor[k + 1]: surfaces above or below the base one, numbered from cells * cells in order.",
-        *("--   " + line for line in wrap(" ".join(encode_floors.__doc__.split(": ", 1)[1].split()), 110)),
+        *("--   " + line for line in wrap(" ".join(cast(str, encode_floors.__doc__).split(": ", 1)[1].split()), 110)),
         "ShortestPathForeverPathData = ShortestPathForeverPathData or {}",
         "",
         "---@type SPFNavData",
@@ -740,7 +755,7 @@ def emit(nodes, edges, grid, cuts, out, name):
     zb, fb = sum(map(len, heights.values())), sum(map(len, floors.values()))
     print(f"emit: heights {zb / 1e3:.1f} KB, floors {fb / 1e3:.1f} KB", flush=True)
     print(
-        f"emit: components {len(roots)}, graph {gb / 1e3:.1f} KB, grids+cuts {rb / 1e3:.1f} KB "
+        f"emit: components {components}, graph {gb / 1e3:.1f} KB, grids+cuts {rb / 1e3:.1f} KB "
         f"({len(grids)} clusters, cuts {len(cuts)}), file {len(src) / 1e3:.1f} KB",
         flush=True,
     )
@@ -900,7 +915,7 @@ def main():
     grid, cuts = bytearray(GW * GH), set()
     BASE_Z.frombytes(bytes(4 * GW * GH))
     floors, links = [], []
-    order = sorted(TILES, key=ORD.get)
+    order = sorted(TILES, key=ORD.__getitem__)
     with multiprocessing.get_context("fork").Pool(jobs) as pool:  # workers inherit the pass-1 globals
         for n, (rc, vals, zs, tf, tl, own) in enumerate(pool.imap(rasterize_tile, order, chunksize=2)):
             kx, ky = divmod(cluster_of_tile(*rc), NY)
