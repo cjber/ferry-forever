@@ -22,8 +22,44 @@
 	<Frame name="ShortestPathForeverRoutePinTemplate" mixin="ShortestPathForeverRoutePinMixin" virtual="true"/>
 	<Frame name="ShortestPathForeverGoalPinTemplate" mixin="ShortestPathForeverGoalPinMixin" enableMouse="true" virtual="true">
 		<Layers>
+			<!-- A numbered stop of a multi-stop journey: the Adventure Guide's ring over a dark disc (cut round with the
+			     stock portrait mask), Blizzard's gold numeral in it, and the quest POI's glow on hover. -->
+			<Layer level="BACKGROUND">
+				<Texture parentKey="Disc" hidden="true">
+					<Size x="22" y="22"/>
+					<Anchors>
+						<Anchor point="CENTER"/>
+					</Anchors>
+					<Color r="0" g="0" b="0" a="0.75"/>
+				</Texture>
+				<MaskTexture parentKey="DiscMask" file="Interface\CharacterFrame\TempPortraitAlphaMask" hWrapMode="CLAMPTOBLACKADDITIVE" vWrapMode="CLAMPTOBLACKADDITIVE">
+					<Anchors>
+						<Anchor point="TOPLEFT" relativeKey="$parent.Disc"/>
+						<Anchor point="BOTTOMRIGHT" relativeKey="$parent.Disc"/>
+					</Anchors>
+					<MaskedTextures>
+						<MaskedTexture childKey="Disc"/>
+					</MaskedTextures>
+				</MaskTexture>
+			</Layer>
 			<Layer level="ARTWORK">
 				<Texture parentKey="Texture" setAllPoints="true"/>
+			</Layer>
+			<Layer level="ARTWORK" textureSubLevel="1">
+				<Texture parentKey="Glow" atlas="UI-QuestPoi-InnerGlow" alphaMode="ADD" hidden="true">
+					<Size x="30" y="30"/>
+					<Anchors>
+						<Anchor point="CENTER"/>
+					</Anchors>
+				</Texture>
+			</Layer>
+			<Layer level="OVERLAY">
+				<Texture parentKey="Numeral" hidden="true">
+					<Size x="22" y="25"/>
+					<Anchors>
+						<Anchor point="CENTER"/>
+					</Anchors>
+				</Texture>
 			</Layer>
 		</Layers>
 	</Frame>
