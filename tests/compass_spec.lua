@@ -133,6 +133,9 @@ local env = setmetatable({
 	GetPlayerFacing = function()
 		return facing
 	end,
+	canaccessvalue = function()
+		return true
+	end,
 	C_Texture = {
 		GetAtlasInfo = function(atlas)
 			calls.info = calls.info + 1
