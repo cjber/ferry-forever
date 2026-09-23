@@ -106,7 +106,7 @@ walk.walkPoints = {point(0), point(0, 400), point(300, 400), point(300)}
 assert(refresh(true) == "Journey  44:47 · 1.1k yd", "measured geometry invalidates cached distance")
 settling = true
 refresh(true)
-assert(block.HeaderText:GetText() == "Journey to Silithus" and tracker.Spinner.animation:IsPlaying())
+assert(block.HeaderText:GetText() == "Journey to Silithus" and tracker.Spinner.Anim:IsPlaying())
 assert(tracker.Header.text == "Journey", "loading suppresses totals")
 combat = true
 marks, texts = dirty, headers

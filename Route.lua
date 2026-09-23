@@ -21,6 +21,7 @@ local COLORS = {
 local provider, goal, result, paths, minimap
 local transportProvider, dockHover, highlightedRoutes
 local geometryRevision = 0
+local loading = false
 
 -- Each map's world corners: { continent, x and y at the top left, x and y at the bottom right }.
 local corners = {}
@@ -79,9 +80,10 @@ local function Stroke(owner, x1, y1, x2, y2, color, scale)
 	local line = owner.lines[owner.used]
 	local underline = owner.underlines[owner.used]
 	if not line then
-		underline = owner:CreateLine(nil, "ARTWORK", nil, -1)
+		local layer = owner.strokeLayer or owner
+		underline = layer:CreateLine(nil, "ARTWORK", nil, -1)
 		underline:SetColorTexture(0.04, 0.04, 0.04, 1)
-		line = owner:CreateLine(nil, "ARTWORK")
+		line = layer:CreateLine(nil, "ARTWORK")
 		line:SetColorTexture(1, 1, 1, 1)
 		owner.lines[owner.used] = line
 		owner.underlines[owner.used] = underline
@@ -132,6 +134,59 @@ local function HideUnused(owner)
 	for index = owner.used + 1, #owner.lines do
 		owner.lines[index]:Hide()
 		owner.underlines[index]:Hide()
+	end
+end
+
+local function StopPulse(layer)
+	layer.animation:Stop()
+	layer:SetAlpha(1)
+end
+
+local function Pulse(owner)
+	local layer = owner.strokeLayer
+	if not layer then
+		return
+	end
+	if loading and owner.used > 0 and owner:IsVisible() then
+		if not layer.animation:IsPlaying() then
+			layer.animation:Play()
+		end
+	else
+		StopPulse(layer)
+	end
+end
+
+-- One alpha animation covers all strokes and outlines, beneath the minimap's separate arrival fade.
+local function StrokeLayer(owner)
+	local layer = CreateFrame("Frame", nil, owner)
+	owner.strokeLayer = layer
+	layer:SetAllPoints(owner)
+	layer:EnableMouse(false)
+	local animation = layer:CreateAnimationGroup()
+	animation:SetLooping("BOUNCE")
+	local alpha = animation:CreateAnimation("Alpha")
+	alpha:SetFromAlpha(0.8)
+	alpha:SetToAlpha(0.35)
+	alpha:SetDuration(0.6)
+	alpha:SetSmoothing("IN_OUT")
+	layer.animation = animation
+	layer:SetScript("OnShow", function()
+		Pulse(owner)
+	end)
+	layer:SetScript("OnHide", StopPulse)
+end
+
+-- JourneyInfo's loading flag drives both the header spinner and the route, even when geometry is kept.
+function ns.RefreshJourneyPulse(shown)
+	if loading == shown then
+		return
+	end
+	loading = shown
+	for pin in WorldMapFrame:EnumeratePinsByTemplate(LINE_TEMPLATE) do
+		Pulse(pin)
+	end
+	if minimap then
+		Pulse(minimap)
 	end
 end
 
@@ -315,18 +370,25 @@ function ShortestPathForeverRoutePinMixin:Draw()
 		end
 	end
 	HideUnused(self)
+	Pulse(self)
 	if self.hits then
 		self:UpdateAlpha()
 	end
 end
 
 function ShortestPathForeverRoutePinMixin:OnReleased()
+	if self.strokeLayer then
+		StopPulse(self.strokeLayer)
+	end
 	-- Released journey pins must not keep the last route alive through the client's pin pool.
 	self.paths = nil
 	MapCanvasPinMixin.OnReleased(self)
 end
 
 function ShortestPathForeverRoutePinMixin:OnAcquired(geometry)
+	if not self.hits and not self.strokeLayer then
+		StrokeLayer(self)
+	end
 	local same = self.hits and self.paths and #self.paths == #geometry
 	if same then
 		for i, path in ipairs(geometry) do
@@ -664,6 +726,7 @@ local function DrawMinimap(self)
 		end
 	end
 	HideUnused(self)
+	Pulse(self)
 end
 
 local function UpdateMinimap(self, elapsed)
@@ -716,6 +779,7 @@ ns.Init(function()
 	minimap:SetAllPoints(Minimap)
 	minimap:EnableMouse(false)
 	minimap.lines, minimap.underlines, minimap.used = {}, {}, 0
+	StrokeLayer(minimap)
 	minimap.Goal = Minimap:CreateTexture(nil, "OVERLAY")
 	minimap.Goal:SetAtlas(GOAL_ATLAS)
 	minimap.Goal:SetSize(16, 16)
