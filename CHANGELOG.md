@@ -11,6 +11,10 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+Clicking a dock, station or portal on the world map opens the map at the other end of the crossing and pings
+where it comes in. A dock with boats or zeppelins to several places asks which one with a small menu. The
+tooltip says when a click will take you somewhere.
+
 ## [1.1.0] - 2026-09-23
 
 A new icon across the addon and its walking maps, settings in the minimap's addon compartment, and a fixed place in the objective tracker.

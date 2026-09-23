@@ -7,8 +7,8 @@ Shortest Path Forever finds the fastest way across WoW: Forever. Shift-click a d
 - **A journey from where you stand.** Walking paths go around walls, hills and water, and through tunnels. The planner uses the flight points you know and can walk you to an undiscovered flight master when that saves time. Boat waits count towards the arrival time.
 - **Directions on the map and minimap.** Walking legs are dashed, transport legs have their own colours, and a waypoint pin marks your destination. The route pulses while the fastest way is still being checked.
 - **Guide, on with every journey.** The game's own waypoint marker leads you around each turn. Click the Journey header to toggle Guide, or right-click it to show the destination on the map or clear the journey. An optional compass marks your next turns, stop and destination.
-- **Live departures.** Hover a dock to see where its boats go, when they arrive and when they leave. Destination docks light up. Nearby departures appear in the objective tracker; aboard a timed boat, it shows the next stop.
-- **Lifts, trams and portals.** Landings and stations have their own countdowns. Portals show where they lead, and all three can be part of a journey.
+- **Live departures.** Hover a dock to see where its boats go, when they arrive and when they leave. Destination docks light up; click one to open the map at the other end. Nearby departures appear in the objective tracker; aboard a timed boat, it shows the next stop.
+- **Lifts, trams and portals.** Landings and stations have their own countdowns. Portals show where they lead, and clicking one opens that map. All three can be part of a journey.
 - **Schedules learned from real rides.** Ride once to sync a transport. Sightings are shared quietly with your guild, party and nearby players. Unsynced services say “no sighting yet”; journey estimates are labelled.
 - **Arrival alerts.** A banner, sound and flashing taskbar icon warn when your boat is due, including when you are waiting away from the keyboard.
 
