@@ -4,3 +4,5 @@ __pycache__/
 .release/
 .release-notes.md
 docs/verification/
+
+.sift/runs/
