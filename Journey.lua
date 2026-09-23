@@ -5,6 +5,8 @@ local ns = select(2, ...)
 -- with the boats' live waits. Search candidates stay private until costs and geometry settle, with a grace
 -- period for longer searches. The tracker owns the list; closing the map leaves the journey running.
 local REPLAN_EVERY, REFRESH_EVERY = 5, 60
+-- The frames around a timed replan, which Itinerary.lua leaves to it.
+local REPLAN_MARGIN = 0.5
 local DRAW_EVERY, SEARCH_GRACE = 0.5, 3
 local PROBE_BUDGET = 60 -- ms before switching from candidate costs to shared endpoint searches
 
@@ -17,6 +19,7 @@ local WALK_CACHE_LIMIT = 64
 local progress = { index = 1 }
 ---@class SPFJourneyDriver : Frame
 ---@field elapsed number
+---@field replannedAt? number GetTime of the last timed replan
 ---@field progressElapsed number
 ---@field riding? number
 ---@field flying? boolean
@@ -1211,6 +1214,13 @@ local function RefreshCosts(includeGoal, forced)
 		consider(true)
 	end
 end
+-- The timed replan in Update plans in the frame; Itinerary.lua keeps its own planning and drawing off that frame. A
+-- frame's GetTime is fixed, and the margin covers the frame the replan will take whichever handler runs first.
+---@return boolean
+function ns.JourneyReplanning()
+	return driver ~= nil and (driver.elapsed >= REPLAN_EVERY - REPLAN_MARGIN or driver.replannedAt == GetTime())
+end
+
 ---@param self SPFJourneyDriver
 ---@param elapsed number
 -- sift: long-function - one throttled frame step; keeping its gates together preserves the search/draw cadence
@@ -1278,7 +1288,7 @@ local function Update(self, elapsed)
 	local changedRide = riding ~= self.riding or flying ~= self.flying
 	self.riding, self.flying = riding, flying
 	if self.elapsed >= REPLAN_EVERY or changedRide then
-		self.elapsed = 0
+		self.elapsed, self.replannedAt = 0, GetTime()
 		local mode = WaterWalking()
 		if mode ~= waterMode then
 			waterMode, walkCache, walkOrder, startCosts, goalCosts = mode, {}, {}, {}, {}

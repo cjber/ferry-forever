@@ -243,6 +243,21 @@ boats, straight = count(ns.JourneyPreview())
 check(refreshed == 1 and #frames == 0, "an unreachable crossing is not planned again")
 check(boats == 0 and straight == 1, "an unreachable crossing keeps its two-point hop")
 ns.Planner.Plan = reachable
+
+-- A later hop is never planned in, or just before, a frame the journey's timed replan plans in.
+check(API.NavigateRoute("Spec", { stops[1], stops[2], stop(auberdine, 200, 30) }), "a route near a timed replan")
+plans = #planned
+driver.update(4.8)
+for _ = 1, 50 do
+	step()
+end
+check(not ns.JourneyStatus() and #planned == plans, "no hop planned as the timed replan comes due")
+driver.update(0.3)
+step()
+check(#planned == plans, "nor in the replan's frame")
+driver.update(0.1)
+drain()
+check(#planned > plans, "the hops are planned after it")
 print(
 	string.format(
 		"route_preview_spec: %d checks passed; hop plans %s ms, slowest frame %.2f ms",
