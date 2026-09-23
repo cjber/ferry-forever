@@ -528,15 +528,26 @@ def render_compass(ui):
 def render_minimap(ui):
     canvas = ui.canvas(300, 285)
     cx, cy, size, radius = 150, 155, 198, 233 + 1 / 3
-    terrain = minimap_art(ui, START["map"], START["x"], START["y"], radius)
+    walk = ordered(data()["walk"])
+    pier = data()["docks"]["10"]
+    # On the walk's last stretch, 60 yards short of the south pier: Guide's waypoint covers its ferry pin, and the
+    # Teldrassil pier's shows at the top (MinimapPins.lua). The route is drawn from where you stand.
+    last = walk[-2]
+    t = 1 - 60 / math.hypot(pier["x"] - last["x"], pier["y"] - last["y"])
+    here = {
+        "map": START["map"],
+        "x": last["x"] + t * (pier["x"] - last["x"]),
+        "y": last["y"] + t * (pier["y"] - last["y"]),
+    }
+    points = [here, pier]
+    terrain = minimap_art(ui, START["map"], here["x"], here["y"], radius)
     face = ui.canvas(size, size)
     face.draw(terrain, 0, 0, size, size)
-    points = ordered(data()["walk"])
 
     def project(p):
         return (
-            size / 2 + (START["y"] - p["y"]) * size / (2 * radius),
-            size / 2 - (p["x"] - START["x"]) * size / (2 * radius),
+            size / 2 + (here["y"] - p["y"]) * size / (2 * radius),
+            size / 2 - (p["x"] - here["x"]) * size / (2 * radius),
         )
 
     for a, b in zip(points, points[1:], strict=False):
@@ -544,12 +555,18 @@ def render_minimap(ui):
     flush_strokes(face)
     face.mask(ui.atlas("ui-hud-minimap-frame-generic-mask").image, 0, 0, size, size)
     canvas.paste(face, cx - size / 2, cy - size / 2)
+    # MinimapPins.lua: 16-unit icons, hidden unless wholly inside the rim.
+    reach = (1 - 16 / size) * radius
+    for _, dock in sorted(data()["docks"].items(), key=lambda item: int(item[0])):
+        if dock["map"] == START["map"] and math.hypot(dock["x"] - here["x"], dock["y"] - here["y"]) <= reach:
+            x, y = project(dock)
+            icon(canvas, "flightmasterferry", cx - size / 2 + x, cy - size / 2 + y, 16)
     icon(canvas, "UI-HUD-Minimap-Frame", cx, cy)
     # Camelot Diel.lua: indicator is 63 right and 72 up from the cluster center.
     icon(canvas, "UI-HUD-Minimap-NightCycle", cx + 63, cy - 72)
     icon(canvas, "UI-HUD-Minimap-Frame-Cycle", cx + 63, cy - 72)
     icon(canvas, "MinimapArrow", cx, cy, 16)
-    bend = next(p for p in points[1:] if math.hypot(p["x"] - START["x"], p["y"] - START["y"]) > 25)
+    bend = next(p for p in points[1:] if math.hypot(p["x"] - here["x"], p["y"] - here["y"]) > 25)
     x, y = project(bend)
     icon(canvas, "Waypoint-MapPin-Minimap-Tracked", cx - size / 2 + x, cy - size / 2 + y, 16)
     canvas.text(0, 13, dock_name(10), FONTS["GameFontNormal"], justify="CENTER", width=300)

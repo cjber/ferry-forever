@@ -13,7 +13,7 @@ The detail behind each feature in the [README](../README.md).
   tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
   ![Journey steps from Auberdine to Silithus with time and distance remaining](screenshots/tracker.png)
 
-  ![Dashed minimap route and Guide’s native waypoint at Auberdine](screenshots/minimap.png)
+  ![Auberdine’s piers on the minimap, with the dashed route and Guide’s native waypoint](screenshots/minimap.png)
 
 - **Finding the fastest way.** While a new journey is checked, the map shows only its destination pin and the
   tracker the Group Finder spinner; the route, steps and totals then appear together. A search that takes more than
@@ -38,6 +38,9 @@ The detail behind each feature in the [README](../README.md).
   when it leaves; the docks it sails to light up. Docks too close to tell apart at the current zoom share
   one icon, and its tooltip names each pier by where it lies, and draws its routes on the map.
   Crossings between continents curve from dock to dock on the Azeroth map; closer maps show the sailing path.
+- **On the minimap as well.** Docks, lifts, tram stations and portals appear on the minimap with the same icons
+  and tooltips, and vanish at its rim like the game's own tracking icons. *Transport* in the minimap's tracking
+  menu (or `/path`) turns them off.
   ![Hovering Auberdine’s piers shows departures and lights destination docks](screenshots/docks.png)
 
 - **Lifts, the Deeprun Tram and portals.** The Great Lift, Freewind Post, Thunder Bluff and Undercity

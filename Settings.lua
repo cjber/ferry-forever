@@ -75,6 +75,12 @@ ns.Init(function()
 	Checkbox("portals", "Show portals on the world map", nil, ns.RefreshMap)
 	Checkbox("mapFlightMasters", "Show flight masters on the world map", nil, ns.RefreshMap)
 	Checkbox(
+		"minimapPins",
+		"Show docks, lifts, the tram and portals on the minimap",
+		"Also under Transport in the minimap's tracking menu.",
+		ns.RefreshMinimapPins
+	)
+	Checkbox(
 		"mapRoutes",
 		"Show boat and zeppelin routes on the world map",
 		"Drawn while you point at a dock.",

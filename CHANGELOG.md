@@ -11,6 +11,11 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+Docks, lifts, tram stations and portals now show on the minimap with the world map's icons, and hovering one
+gives the same departures tooltip. They vanish at the minimap's rim like the game's own tracking icons, and
+cost nothing away from them. *Transport* in the minimap's tracking menu, or the new setting in `/path`, turns
+them off.
+
 A journey step on a boat, lift or tram that nobody has timed yet no longer says “no sighting yet” beside a
 wait it cannot know. Its wait reads *wait about 2:45* instead: half the loop, the average wait. Timed
 crossings show their real wait as before.
