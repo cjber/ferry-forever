@@ -13,6 +13,7 @@ local REACH = DOT / 2 + RIM
 local DOT_TEXTURE = "Interface\\AddOns\\ShortestPathForever\\media\\Dot"
 local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
 local GOAL_ATLAS, GOAL_SCALE = "Waypoint-MapPin-Tracked", 0.8
+local STOP_ATLAS, STOP_SIZE, MAX_NUMERAL = "adventureguide-ring", 26, 9
 local COLORS = {
 	walk = NORMAL_FONT_COLOR,
 	flight = CreateColor(0.2, 1, 0.35),
@@ -516,6 +517,9 @@ end
 
 ---@class SPFGoalPin : SPFMapPin
 ---@field Texture Texture
+---@field Disc Texture
+---@field Glow Texture
+---@field Numeral Texture
 ---@field Number FontString
 ---@field stopTitle? string
 ShortestPathForeverGoalPinMixin = CreateFromMixins(MapCanvasPinMixin)
@@ -525,18 +529,31 @@ function ShortestPathForeverGoalPinMixin:OnLoad()
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScalingLimits(1, 1, 1)
 	-- The native waypoint pin (SuperTrackedFrame.lua:219) that Guide's marker wears, so map and marker agree.
-	local atlas = C_Texture.GetAtlasInfo(GOAL_ATLAS)
-	self:SetSize(atlas.width * GOAL_SCALE, atlas.height * GOAL_SCALE)
-	self.Texture:SetAtlas(GOAL_ATLAS)
-	self.Number = self:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-	self.Number:SetPoint("CENTER", self, "CENTER", 0, 2)
+	self.Number = self:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	self.Number:SetPoint("CENTER")
 	self:SetScript("OnHide", self.OnMouseLeave)
 end
 
+-- A lone destination wears the waypoint pin; a numbered stop wears the ring the Adventure Guide draws for the same
+-- step. Blizzard's numerals (centred in their atlas boxes, unlike font digits) stop at 9; later stops use the font.
 function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, number, title)
 	self:SetPosition(x, y)
-	self.Number:SetText(number or "")
 	self.stopTitle = title
+	local numeral = number and number <= MAX_NUMERAL
+	self.Disc:SetShown(number ~= nil)
+	self.Numeral:SetShown(numeral == true)
+	self.Number:SetText(number and not numeral and tostring(number) or "")
+	if number then
+		self:SetSize(STOP_SIZE, STOP_SIZE)
+		self.Texture:SetAtlas(STOP_ATLAS)
+		if numeral then
+			self.Numeral:SetAtlas("services-number-" .. number)
+		end
+	else
+		local atlas = C_Texture.GetAtlasInfo(GOAL_ATLAS)
+		self:SetSize(atlas.width * GOAL_SCALE, atlas.height * GOAL_SCALE)
+		self.Texture:SetAtlas(GOAL_ATLAS)
+	end
 end
 
 function ShortestPathForeverGoalPinMixin:OnMouseEnter()
@@ -544,6 +561,7 @@ function ShortestPathForeverGoalPinMixin:OnMouseEnter()
 	if not title or not rows then
 		return
 	end
+	self.Glow:SetShown(self.Disc:IsShown())
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 	GameTooltip_SetTitle(GameTooltip, self.stopTitle or title)
 	for _, row in ipairs(not self.stopTitle and rows or {}) do
@@ -554,6 +572,7 @@ function ShortestPathForeverGoalPinMixin:OnMouseEnter()
 end
 
 function ShortestPathForeverGoalPinMixin:OnMouseLeave()
+	self.Glow:Hide()
 	if GameTooltip:IsOwned(self) then
 		GameTooltip:Hide()
 	end
