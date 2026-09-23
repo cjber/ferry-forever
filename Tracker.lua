@@ -309,7 +309,7 @@ ns.Init(function()
 	module.Spinner:Hide()
 	module.section = ModuleMixin.headerText
 	module:SetHeader(ModuleMixin.headerText)
-	-- Above quests, below SkillUp Forever (-2) and Legacy Here (0, -1): each needs its own slot.
+	-- Above quests, below SkillUp Forever (-2) and Legacy Forever (0, -1): each needs its own slot.
 	module.uiOrder = -3
 	module.Header:EnableMouse(true)
 	module.Header:SetScript("OnMouseUp", function(_, button)
