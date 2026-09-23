@@ -34,6 +34,8 @@ jobs:
           args: --check .
       - run: pipx run ruff==0.16.8 check .
       - run: pipx run ruff==0.16.8 format --check .
+      - run: pipx run --spec shellcheck-py==0.11.0.1 shellcheck tools/baker/bake.sh
+      - run: pipx run --spec shfmt-py==4.2.0 shfmt -d tools/baker/bake.sh
 
   workflows:
     runs-on: ubuntu-latest
