@@ -451,7 +451,11 @@ function ShortestPathForeverRoutePinMixin:Draw()
 				self:Mark(x, y, color)
 			elseif previous then
 				if path.preview then
-					if px and x then
+					-- An unplanned crossing has no geometry to draw; a straight line would cross the sea.
+					if previous.map ~= point.map then
+						self:Mark(px, py, color)
+						self:Mark(x, y, color)
+					elseif px and x then
 						self:Line(px, py, x, y, color, true)
 					end
 				elseif previous.jump or previous.map ~= point.map then
