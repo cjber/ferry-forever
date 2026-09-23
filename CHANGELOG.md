@@ -11,6 +11,10 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-23
+
+A new icon across the addon and its walking maps, settings in the minimap's addon compartment, and a fixed place in the objective tracker.
+
 - **Open the settings from the addon compartment** on the minimap, as with `/path`.
 - **The Journey and Boats section keeps its place in the objective tracker** beside SkillUp Forever's shopping list: the two shared one slot, so their order could change; each now has its own, above your quests.
 - **A new icon**, drawn to match the other WoW: Forever addons, now also on the three walking maps in the addon list.
