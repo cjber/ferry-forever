@@ -192,15 +192,19 @@ def dock_title(dock_id):
 
 
 def segment(canvas, a, b, color, dashed=False, alpha=1):
-    """Route.lua Segment/Stroke: dimensions are physical pixels, independent of UI scale."""
+    """Route.lua Segment/Stroke: lengths in UI units at an effective scale of 1, whatever the frame's own scale."""
     ax, ay = (n * canvas.ui.scale for n in a)
     bx, by = (n * canvas.ui.scale for n in b)
     dx, dy = bx - ax, by - ay
     length = math.hypot(dx, dy)
     if length == 0:
         return
+    # Route.lua's DASH and GAP, in the same units as the thickness.
+    dash, gap = round(6 * canvas.ui.scale), round(5 * canvas.ui.scale)
     intervals = (
-        [(d / length, min(d + 6, length) / length) for d in range(0, math.ceil(length), 11)] if dashed else [(0, 1)]
+        [(d / length, min(d + dash, length) / length) for d in range(0, math.ceil(length), dash + gap)]
+        if dashed
+        else [(0, 1)]
     )
     if not hasattr(canvas, "strokes"):
         canvas.strokes = []
@@ -210,12 +214,14 @@ def segment(canvas, a, b, color, dashed=False, alpha=1):
 
 def flush_strokes(canvas):
     # ARTWORK sublevel -1 puts every outline beneath every core, including at bends and crossings.
+    # THICKNESS / scale UI units draws at THICKNESS units' worth of pixels at every UI scale, so it widens with the
+    # render scale like everything else.
     for width in (4, 2):
         layer = Image.new("RGBA", canvas.image.size)
         draw = ImageDraw.Draw(layer)
         for line, color, alpha in getattr(canvas, "strokes", []):
             rgba = (0.04, 0.04, 0.04, alpha * 0.5) if width == 4 else (*color, alpha)
-            draw.line(line, fill=rgba255(rgba), width=width)
+            draw.line(line, fill=rgba255(rgba), width=round(width * canvas.ui.scale))
         canvas.image.alpha_composite(layer)
     canvas.strokes = []
 
