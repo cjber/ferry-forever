@@ -6,6 +6,8 @@ departure times, lifts, the tram and portals. Then it walks you there with the g
 Walking routes cover Eastern Kingdoms, Kalimdor and Zephras Isle; their maps come in the same download and
 load only when a route needs them.
 
+![A journey from Auberdine through Menethil and Theramore to Silithus](docs/screenshots/kalimdor.png)
+
 - **Journey planner.** Shift-click anywhere on the world map or minimap for the fastest way there from where you
   stand: walking, the flight points you know, boats and zeppelins with their live waits, lifts, the tram and
   portals, including a flight master you haven't found yet if walking to it pays off. Walks go through
@@ -15,6 +17,10 @@ load only when a route needs them.
   of every journey (click the tracker header to turn it off), moves the game's own waypoint marker along the route turn by turn, so it leads you round walls
   rather than straight at the stop (or, with *Guide marks only where each step ends* in `/path`, straight at the next boat, lift or flight master), and hands your tracked quest back when you finish. To head for a quest, pick **Plan journey** from its right-click menu in the objective
   tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
+  ![Journey steps from Auberdine to Silithus with time and distance remaining](docs/screenshots/tracker.png)
+
+  ![Dashed minimap route and Guide’s native waypoint at Auberdine](docs/screenshots/minimap.png)
+
 - **Finding the fastest way.** The tracker says when a journey is still being checked, and its route pulses
   softly on the map and minimap while the fastest route is being proved. Nearby walks can settle immediately;
   longer searches stop as soon as no unchecked alternative can beat the chosen route. Only that route gets
@@ -22,13 +28,23 @@ load only when a route needs them.
   the path or once a minute. Repeating a destination reuses its costs; standing still or moving within the same
   walking-map cell by at most three yards also reuses your position's costs. Walk steps name the dock, pier, lift
   or flight master you are heading for.
+  ![A walking route around the terrain south of Auberdine](docs/screenshots/darkshore.png)
+
+  ![Eight-second demo of a route settling, the countdown and the optional compass](docs/screenshots/demo.gif)
+
 - **An optional compass.** A slim strip at the top of the screen follows your facing and marks Guide's next
   two turns, the next stop and your destination. Turn it on in `/path`.
+  ![The optional compass strip with the next turns and destination](docs/screenshots/compass.png)
+
 - **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower a matching
   zeppelin, on its zone and continent map. Hover one to see where each boat goes next, when it arrives and
   when it leaves; the docks it sails to light up. Docks too close to tell apart at the current zoom share
   one icon, and its tooltip names each pier by where it lies, and draws its routes on the map.
   Crossings between continents curve from dock to dock on the Azeroth map; closer maps show the sailing path.
+  ![Auberdine to Menethil, then a walk into the Wetlands](docs/screenshots/world-map.png)
+
+  ![Hovering Auberdine’s piers shows departures and lights destination docks](docs/screenshots/docks.png)
+
 - **Lifts, the Deeprun Tram and portals.** The Great Lift, Freewind Post, Thunder Bluff and Undercity
   lifts, and both tram trains, count down like the boats (each landing or station is its own stop). The
   tram shows at its Stormwind and Ironforge entrances. Portals are marked with where they go.
@@ -39,6 +55,9 @@ load only when a route needs them.
 - **The next departures in the objective tracker.** Walk up to a dock, lift or tram station and a section
   appears above your quests, counting down to the next arrival and departure of everything that calls there.
   On board, it shows where the boat calls next and when it arrives.
+
+  ![Next arrival and departure at Auberdine northeast pier](docs/screenshots/boats.png)
+
 - **A heads-up when your boat is due.** A raid-warning banner, a sound and a flashing taskbar icon, half a
   minute before a timed boat reaches your dock and just before your own boat docks, for anyone waiting AFK.
 - **Times from real rides.** Each route's loop time comes from the game's own path data, so one ride tells
