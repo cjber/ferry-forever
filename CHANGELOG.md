@@ -11,6 +11,10 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+The Journey section in the objective tracker shows the time and yards remaining across every leg,
+following measured walking paths and transport routes. The destination stays on its own line, and the
+totals update as you travel without rebuilding the tracker layout.
+
 Background polling now sleeps when you are stationary away from travel activity. Docks and passive boat
 or lift rides still wake the countdowns and observation; unchanged tracker content is reused, and shared
 sightings no longer rebuild unrelated map layers. Walking searches and tracker updates wait through

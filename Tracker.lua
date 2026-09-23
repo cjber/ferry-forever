@@ -69,6 +69,78 @@ local function RideRows(routeID)
 	return { { key = routeID, text = text } }, kind, dockID
 end
 
+local function JourneyDistance(result, index)
+	local cache = module.distance
+	if not cache or cache.result ~= result or cache.version ~= ns.journeyVersion then
+		cache = { result = result, version = ns.journeyVersion, legs = {} }
+		local total = 0
+		for legIndex = #result.legs, index, -1 do
+			local leg = result.legs[legIndex]
+			local points = ns.Planner.LegPoints(leg, ns.Routes)
+			local after, lengths = {}, {}
+			local yards = 0
+			for pointIndex = #points, 1, -1 do
+				local a, b = points[pointIndex], points[pointIndex + 1]
+				local length = 0
+				-- Loading screens and portals connect unrelated world coordinates, not walkable yards.
+				if b and a.map == b.map and not a.jump and leg.mode ~= "portal" then
+					length = math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2)
+				end
+				yards = yards + length
+				after[pointIndex], lengths[pointIndex] = yards, length
+			end
+			cache.legs[legIndex] = { points = points, after = after, lengths = lengths, yards = yards, later = total }
+			total = total + yards
+		end
+		module.distance = cache
+	end
+	local leg, path = result.legs[index], cache.legs[index]
+	if not path then
+		return 0
+	end
+	local yards = path.yards
+	local active = leg.mode == "walk"
+		or leg.aboard
+		or (leg.route and ns.CurrentRide() == leg.route)
+		or (leg.mode == "flight" and UnitOnTaxi("player"))
+	if active and leg.mode ~= "portal" then
+		local x, y, z, map = UnitPosition("player")
+		local nearest
+		for pointIndex, a in ipairs(path.points) do
+			if x and map == a.map then
+				local b, length = path.points[pointIndex + 1], path.lengths[pointIndex]
+				local t, px, py, pz = 0, a.x, a.y, a.z
+				if length > 0 then
+					local dx, dy = b.x - a.x, b.y - a.y
+					t = math.max(0, math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length ^ 2))
+					px, py = a.x + t * dx, a.y + t * dy
+					pz = a.z and b.z and a.z + t * (b.z - a.z)
+				end
+				local off = (x - px) ^ 2 + (y - py) ^ 2
+				if not (z and pz and math.abs(z - pz) > 30) and (not nearest or off < nearest) then
+					nearest = off
+					yards = path.after[pointIndex] - t * length
+					if leg.mode == "walk" then
+						yards = yards + math.sqrt(off)
+					end
+				end
+			end
+		end
+	end
+	return math.max(0, yards + path.later)
+end
+
+local function JourneyHeader(result, index)
+	if not result then
+		module.distance = nil
+		return "Journey"
+	end
+	local yards = JourneyDistance(result, index)
+	local distance = yards >= 999.5 and string.format("%.1fk yd", yards / 1000)
+		or string.format("%d yd", math.floor(yards + 0.5))
+	return "Journey  " .. ns.FormatCountdown(result.arrive - ns.NowMs()) .. " · " .. distance
+end
+
 local function RefreshTracker(dockID, yards)
 	if not module or InCombatLockdown() then
 		return
@@ -111,8 +183,9 @@ local function RefreshTracker(dockID, yards)
 		end
 	end
 	local blocks = {}
-	local journeyTitle, journeyRows = ns.JourneyInfo()
+	local journeyTitle, journeyRows, journeyResult, journeyIndex = ns.JourneyInfo()
 	if journeyTitle then
+		journeyTitle = journeyTitle:gsub(" · %d+:%d+$", "")
 		blocks[#blocks + 1] = { key = "journey", title = journeyTitle, rows = journeyRows }
 	end
 	if blockKey then
@@ -120,8 +193,14 @@ local function RefreshTracker(dockID, yards)
 	end
 	module.dockID, module.mapDock = dockID, mapDock
 	module.hasDisplayPriority = journeyTitle ~= nil
-	local header = journeyTitle and "Journey" or kind and HEADER[kind] or ModuleMixin.headerText
-	local changed = #blocks ~= #module.blocks or header ~= module.headerText
+	local section = journeyTitle and "Journey" or kind and HEADER[kind] or ModuleMixin.headerText
+	local header = journeyTitle and JourneyHeader(journeyResult, journeyIndex) or section
+	if not journeyTitle then
+		module.distance = nil
+	end
+	-- The section's identity affects layout; its live totals only change the header's single text line.
+	local changed = #blocks ~= #module.blocks or section ~= module.section
+	module.section = section
 	for index, entry in ipairs(blocks) do
 		local previous = module.blocks[index]
 		if not previous or entry.key ~= previous.key or #entry.rows ~= #previous.rows then
@@ -193,6 +272,7 @@ ns.Init(function()
 	module = CreateFrame("Frame", "ShortestPathForeverObjectiveTracker", UIParent, "ObjectiveTrackerModuleTemplate")
 	Mixin(module, ModuleMixin)
 	module.blocks = {}
+	module.section = ModuleMixin.headerText
 	module:SetHeader(ModuleMixin.headerText)
 	module.uiOrder = -2
 	module.Header:EnableMouse(true)

@@ -119,7 +119,7 @@ Client source was read from `~/drive/proj/wow-handoff/blizzard-ui/Interface/AddO
 ## Verification and reproduction
 
 The UI fixture gained cancellable tickers, unit-filtered events, movement/combat/height stubs and proper
-ADDON_LOADED dispatch. `activity_spec.lua` asserts sleep/wake, unrelated events, countdown line reuse,
+ADDON_LOADED dispatch. `activity_ui.lua` asserts sleep/wake, unrelated events, countdown line reuse,
 wrapping, combat recovery, passive boat/lift sync, external pin release, sighting scope, suspended search
 recovery, and profiler present/absent behavior. `nav_compare.lua` can compare both old and packed link formats.
 

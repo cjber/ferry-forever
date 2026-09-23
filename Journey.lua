@@ -361,7 +361,7 @@ function ns.JourneyInfo()
 	else
 		rows[1] = { key = "unreachable", text = costError and WALK_FAILURE[costError] or "No way there from here." }
 	end
-	return title, rows
+	return title, rows, result, progress.index
 end
 
 -- Where here falls on a walk: the segment ending at points[index], how far along it (t), and the yards still to walk

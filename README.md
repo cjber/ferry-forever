@@ -77,6 +77,6 @@ luajit tests/path_many_spec.lua      # exact costs, frontier bounds, interleavin
 luajit tests/journey_optimal_spec.lua # 30 seeded full-search comparisons and cache invalidation
 luajit -joff tests/journey_bench.lua  # searches, rounds and frames at the 3 ms budget
 luajit tests/walk_sim.lua            # follow four real routes; assert zero route flips
-luajit tests/activity_spec.lua       # idle sleep, passive rides, combat, tracker and profiler
+luajit tests/activity_ui.lua       # idle sleep, passive rides, combat, tracker and profiler
 luajit -joff tests/activity_bench.lua idle # offline CPU/allocation and login cost (also dock/walking/ride/panel/combat)
 ```
