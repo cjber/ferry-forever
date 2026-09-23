@@ -1,77 +1,66 @@
-# Shortest Path Forever
+<p align="center"><img src="https://raw.githubusercontent.com/cjber/shortest-path-forever/main/media/icon-400.png" width="96" alt=""></p>
 
-The fastest way anywhere in WoW: Forever. Shift-click the world map or minimap, or pick a quest, and it plans the route:
-walking paths round walls and hills, the flight points you know, boats and zeppelins with their live
-departure times, lifts, the tram and portals. Then it walks you there with the game's own navigation marker.
-Walking routes cover Eastern Kingdoms, Kalimdor and Zephras Isle; their maps come in the same download and
-load only when a route needs them.
+<h1 align="center">Shortest Path Forever</h1>
+
+<p align="center">
+The fastest way anywhere in WoW: Forever, on foot, by air, by sea and through portals.<br>
+<a href="https://github.com/cjber/shortest-path-forever/actions/workflows/ci.yml"><img src="https://github.com/cjber/shortest-path-forever/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<a href="https://github.com/cjber/shortest-path-forever/releases/latest"><img src="https://img.shields.io/github/v/release/cjber/shortest-path-forever" alt="Latest release"></a>
+</p>
+
+Shift-click the world map or minimap, or pick a quest, and it plans the route: walking paths round walls and hills,
+the flight points you know, boats and zeppelins with their live departure times, lifts, the tram and portals. Then it
+walks you there with the game's own navigation marker. Walking maps cover Eastern Kingdoms, Kalimdor and Zephras Isle;
+they come in the same download and load only when a route needs them.
 
 ![A journey from Auberdine through Menethil and Theramore to Silithus](docs/screenshots/kalimdor.png)
 
-- **Journey planner.** Shift-click anywhere on the world map or minimap for the fastest way there from where you
-  stand: walking, the flight points you know, boats and zeppelins with their live waits, lifts, the tram and
-  portals, including a flight master you haven't found yet if walking to it pays off. Walks go through
-  tunnels and between a city's levels, such as Dun Algaz and the Undercity, and walks keep out of water, which is slow and risky, unless you have Water Walking or Levitate (the step asks you to cast it). The route is drawn
-  on the map and minimap, walking legs dashed, and the steps sit in the objective tracker like a tracked
-  quest. It replans as you move but only switches to a clearly faster way (at least 20 seconds or a tenth of the time left), and stays aboard if you are already riding. **Guide**, on from the start
-  of every journey (click the tracker header to turn it off), moves the game's own waypoint marker along the route turn by turn, so it leads you round walls
-  rather than straight at the stop (or, with *Guide marks only where each step ends* in `/path`, straight at the next boat, lift or flight master), and hands your tracked quest back when you finish. To head for a quest, pick **Plan journey** from its right-click menu in the objective
-  tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
+## Features
+
+Each feature has more detail in [docs/features.md](docs/features.md).
+
+- **Journey planner.** Shift-click the map or minimap, or choose *Plan journey* on a quest, for the fastest way there:
+  walking through tunnels and city levels, known flight points, boats, zeppelins, lifts, the tram and portals. The
+  route is drawn on both maps and its steps sit in the objective tracker. It replans as you move, switching only for a
+  clearly faster way.
   ![Journey steps from Auberdine to Silithus with time and distance remaining](docs/screenshots/tracker.png)
-
+- **Guide.** The game's own waypoint marker leads you along the route turn by turn, round walls rather than straight at
+  the stop, and hands your tracked quest back when you arrive. Click the tracker header to turn it off.
   ![Dashed minimap route and Guide’s native waypoint at Auberdine](docs/screenshots/minimap.png)
-
-- **Finding the fastest way.** The tracker says when a journey is still being checked, and its route pulses
-  softly on the map and minimap while the fastest route is being proved. Nearby walks can settle immediately;
-  longer searches stop as soon as no unchecked alternative can beat the chosen route. Only that route gets
-  walking geometry, and drawn paths stay visible during refreshes. Your position's costs refresh when you leave
-  the path or once a minute. Repeating a destination reuses its costs; standing still or moving within the same
-  walking-map cell by at most three yards also reuses your position's costs. Walk steps name the dock, pier, lift
-  or flight master you are heading for.
-  ![A walking route around the terrain south of Auberdine](docs/screenshots/darkshore.png)
-
-  ![Eight-second demo of a route settling, the countdown and the optional compass](docs/screenshots/demo.gif)
-
-- **An optional compass.** A slim strip at the top of the screen follows your facing and marks Guide's next
-  two turns, the next stop and your destination. Turn it on in `/path`.
+- **Optional compass.** A slim strip at the top of the screen marks Guide's next two turns, the next stop and your
+  destination. Turn it on in `/path`.
   ![The optional compass strip with the next turns and destination](docs/screenshots/compass.png)
-
-- **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower a matching
-  zeppelin, on its zone and continent map. Hover one to see where each boat goes next, when it arrives and
-  when it leaves; the docks it sails to light up. Docks too close to tell apart at the current zoom share
-  one icon, and its tooltip names each pier by where it lies, and draws its routes on the map.
-  Crossings between continents curve from dock to dock on the Azeroth map; closer maps show the sailing path.
-  ![Auberdine to Menethil, then a walk into the Wetlands](docs/screenshots/world-map.png)
-
+- **Docks on the world map.** Piers and zeppelin towers get the stock ferry icon and a matching zeppelin. Hover one for
+  where each boat goes next and when; the docks it sails to light up and its routes are drawn.
   ![Hovering Auberdine’s piers shows departures and lights destination docks](docs/screenshots/docks.png)
-
-- **Lifts, the Deeprun Tram and portals.** The Great Lift, Freewind Post, Thunder Bluff and Undercity
-  lifts, and both tram trains, count down like the boats (each landing or station is its own stop). The
-  tram shows at its Stormwind and Ironforge entrances. Portals are marked with where they go.
-- **Flight masters on the world map**, known and undiscovered, with the game's own flight point icons.
-- **In the map's filter menu.** *Flight Masters*, *Boat and Zeppelin Routes*, *Boats & Zeppelins*, *Lifts &
-  Tram* and *Portals* turn each layer off; *Other Faction's Routes* hides the
-  boats and zeppelins run by the other faction (anyone can ride them, so they show by default).
-- **The next departures in the objective tracker.** Walk up to a dock, lift or tram station and a section
-  appears above your quests, counting down to the next arrival and departure of everything that calls there.
-  On board, it shows where the boat calls next and when it arrives.
-
+- **Lifts, the Deeprun Tram and portals** count down like the boats; portals are marked with where they go. Flight
+  masters, known and undiscovered, use the game's own icons. Each layer has a switch in the map's filter menu.
+- **Next departures.** At a dock, lift or tram station, a tracker section above your quests counts down to every
+  arrival and departure; on board, it shows the next call.
   ![Next arrival and departure at Auberdine northeast pier](docs/screenshots/boats.png)
+- **Arrival alerts.** A raid-warning banner, a sound and a flashing taskbar icon half a minute before your boat
+  arrives, for anyone waiting AFK.
+- **Times from real rides, shared.** One ride, yours or another player's, times a boat for hours. Sightings pass
+  quietly over guild, party and yell at the docks; turn sharing off in the settings.
 
-- **A heads-up when your boat is due.** A raid-warning banner, a sound and a flashing taskbar icon, half a
-  minute before a timed boat reaches your dock and just before your own boat docks, for anyone waiting AFK.
-- **Times from real rides.** Each route's loop time comes from the game's own path data, so one ride tells
-  the addon where that boat is for hours. Ride a boat, lift or tram once and its schedule syncs.
-- **Shared between players.** Sightings are passed on quietly over guild, party and yell at the docks, so
-  someone else's ride can time your boat. No chat messages are shown; turn it off in the settings.
+![Eight-second demo of a route settling, the countdown and the optional compass](docs/screenshots/demo.gif)
 
-Settings: `/path`, or *Options → AddOns → Shortest Path Forever*. Every feature above has its own switch there.
-`/path debug` keeps a trace of your position and ride matching in the saved variables, for reporting a ride
-that did not sync.
-`/path perf` prints this addon's recent/session CPU averages, last tick, session peak and ticks over 5 ms
-from the client's `C_AddOnProfiler`, plus memory for the addon and its walking maps. It reports when
-profiling is unavailable. Compare readings while idle, opening panels and following a journey; memory
-accounting runs only when you request it. Searches and tracker updates wait until combat ends.
+## Install
+
+Install it from [CurseForge](https://www.curseforge.com/wow/addons/shortest-path-forever) or
+[Wago Addons](https://addons.wago.io/addons/shortest-path-forever), or download the zip from
+[Releases](https://github.com/cjber/shortest-path-forever/releases). To install the zip by hand, extract it into
+`_classic_beta_/Interface/AddOns/` so you end up with `AddOns/ShortestPathForever/ShortestPathForever.toc`.
+
+## Usage
+
+| Command | What it does |
+|---|---|
+| `/path` | Open the settings (also in Settings → AddOns, or from the addon compartment on the minimap) |
+| `/path perf` | Print this addon's CPU averages, peaks and memory from the client's profiler |
+| `/path debug` | Keep a trace of your position and ride matching, for reporting a ride that did not sync |
+
+Every feature has its own switch in the settings. Searches and tracker updates wait until combat ends.
 
 ## How the times work
 
@@ -86,6 +75,8 @@ paths from `TaxiNodes`/`TaxiPath` (with InFlight's recorded flight times where i
 from CMaNGOS's teleport triggers; `tools/gen_transit.py` builds all three. The planner uses discovered flight
 points, and may walk to an undiscovered flight master when learning it makes the journey faster.
 
+## Development
+
 ```sh
 python3 tools/gen_routes.py          # regenerate Data/Routes.lua for the pinned build
 python3 tools/gen_transit.py         # regenerate Data/Transports.lua, Data/Taxi.lua and Data/Portals.lua
@@ -99,3 +90,18 @@ luajit tests/walk_sim.lua            # follow four real routes; assert zero rout
 luajit tests/activity_ui.lua       # idle sleep, passive rides, combat, tracker and profiler
 luajit -joff tests/activity_bench.lua idle # offline CPU/allocation and login cost (also dock/walking/ride/panel/combat)
 ```
+
+CI runs luacheck, the specs, lua-language-server, StyLua, ruff, shellcheck, actionlint, zizmor and gitleaks on every
+push.
+
+**Releasing:** move the `[Unreleased]` notes in `CHANGELOG.md` under `## [X.Y.Z] - YYYY-MM-DD`, then
+`git tag -s vX.Y.Z && git push --tags`. The [BigWigs packager](https://github.com/BigWigsMods/packager) builds the zip
+and uploads it to GitHub Releases, CurseForge and Wago.
+
+## Licence
+
+GPL-3.0-or-later. Routes, lifts, the tram and flight paths come from the game's data via
+[wago.tools](https://wago.tools); transport timing and portals from [CMaNGOS](https://github.com/cmangos); recorded
+flight times from [InFlight](https://github.com/LudiusMaximus/InFlight) (MIT).
+
+Made by Cillian Berragan · [cillian.dev](https://cillian.dev) · [GitHub](https://github.com/cjber) · [Twitter](https://twitter.com/cjberragan)
