@@ -109,6 +109,13 @@ local function NodeLabel(node, mode)
 	error("unknown journey node kind " .. tostring(node.kind))
 end
 
+-- The place a leg ends, as the tracker names it. The public API's EstimateDetail shares it, so both read alike.
+---@param leg SPFLeg
+---@return string
+function ns.LegLabel(leg)
+	return NodeLabel(leg.to, leg.mode)
+end
+
 -- Whether walks may cross water, and the spell to cast first when none is up.
 local function WaterWalking()
 	for _, id in ipairs(WATER_AURAS) do
@@ -484,7 +491,7 @@ function ns.JourneyInfo()
 		local _, spell = WaterWalking()
 		for index = progress.index, #result.legs do
 			local leg = result.legs[index]
-			local text = string.format("%d. %s %s", index, VERB[leg.mode], NodeLabel(leg.to, leg.mode))
+			local text = string.format("%d. %s %s", index, VERB[leg.mode], ns.LegLabel(leg))
 			if leg.mode == "walk" and leg.to.undiscovered then
 				text = text .. " (new flight path)"
 			end
