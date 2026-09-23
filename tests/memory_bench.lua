@@ -12,7 +12,7 @@ local function collected()
 end
 local base = collected()
 for _, map in ipairs({ 0, 1, 2991 }) do
-	assert(loadfile("ShortestPathForever_Nav" .. map .. "/Nav" .. map .. ".lua"))()
+	assert(loadfile("tools/load_nav.lua"))(map)
 end
 local packed = collected() - base
 local cases = { tanaris = { 26, 39 }, cross = { 26, 67 }, thunder = { 25, 22 }, menethil = { 6, 7 } }

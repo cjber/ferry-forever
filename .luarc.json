@@ -1,6 +1,45 @@
 {
 	"$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
-	"runtime.version": "LuaJIT",
-	"diagnostics.disable": ["undefined-global"],
-	"workspace.ignoreDir": [".sift", "tools/.cache", ".release"]
+	"runtime.version": "Lua 5.1",
+	"workspace.library": [
+		".types/vscode-wow-api/Annotations/Core",
+		".types/vscode-wow-api/Annotations/FrameXML"
+	],
+	"workspace.ignoreDir": [
+		".git",
+		".types",
+		".sift",
+		"tests",
+		"tools",
+		".release"
+	],
+	"workspace.checkThirdParty": false,
+	"workspace.maxPreload": 10000,
+	"workspace.preloadFileSize": 30000,
+	"diagnostics.libraryFiles": "Disable",
+	"diagnostics.groupFileStatus": {
+		"type-check": "Any",
+		"unbalanced": "Any",
+		"unused": "Any"
+	},
+	"diagnostics.severity": {
+		"unused-local": "Warning",
+		"unused-function": "Warning",
+		"unused-vararg": "Warning"
+	},
+	"workspace.useGitIgnore": false,
+	"diagnostics.neededFileStatus": {
+		"param-type-mismatch": "Any",
+		"redundant-parameter": "Any",
+		"missing-parameter": "Any",
+		"undefined-field": "Any",
+		"undefined-global": "Any",
+		"need-check-nil": "Any",
+		"assign-type-mismatch": "Any",
+		"return-type-mismatch": "Any",
+		"cast-local-type": "Any",
+		"redundant-return-value": "Any",
+		"missing-return": "Any",
+		"unused-local": "Any"
+	}
 }

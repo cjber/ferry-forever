@@ -118,7 +118,7 @@ for _, case in ipairs({ { 300, 275, false }, { 600, 560, false }, { 200, 175, fa
 	driver.update(0.1)
 	local committed = assert(driver.shown()).legs[1].to
 	assert(select(5, ns.JourneyInfo()), "grace commit retains the spinner")
-	for _, row in ipairs(select(2, ns.JourneyInfo())) do
+	for _, row in ipairs((select(2, ns.JourneyInfo()))) do
 		assert(not row.text:find("finding walking", 1, true) and not row.text:find("   ", 1, true))
 	end
 	local count = #draws

@@ -1,6 +1,21 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
+---@type SPFTracker
 local module
+---@class SPFTracker : SPFTrackerModule
+---@field distance? SPFDistanceCache
+---@field riding? number|false
+---@field second number
+---@field journeyVersion? number
+---@field sightingVersion? number
+---@field tracker? boolean
+---@field otherFaction? boolean
+---@field dockID? number
+---@field section string
+---@field Spinner Frame
+---@field mapDock? number
+---@field blocks {key: number|string, title: string, rows: SPFRow[]}[]
 local ModuleMixin = { headerText = "Boats" }
 local HEADER = { boat = "Boats", zeppelin = "Boats", lift = "Lifts", tram = "Deeprun Tram" }
 
@@ -63,7 +78,7 @@ end
 -- On board, out of sight of any dock: where the boat calls next.
 local function RideRows(routeID)
 	local dockID, arriveIn = ns.NextStop(routeID)
-	if not dockID then
+	if not dockID or not arriveIn then
 		return nil
 	end
 	local kind = ns.Routes[routeID].kind
@@ -180,7 +195,7 @@ local function RefreshTracker(dockID, yards)
 		title, blockKey, mapDock = ns.DockTitle(dockID), "dock" .. dockID, dockID
 	elseif riding then
 		rows, kind, mapDock = RideRows(riding)
-		if rows then
+		if rows and mapDock then
 			title, blockKey = "On board to " .. ns.DockTitle(mapDock), "ride" .. mapDock
 		end
 	end
@@ -276,11 +291,16 @@ ns.Init(function()
 		ns.Print("The objective tracker is unavailable.")
 		return
 	end
-	module = CreateFrame("Frame", "ShortestPathForeverObjectiveTracker", UIParent, "ObjectiveTrackerModuleTemplate")
-	Mixin(module, ModuleMixin)
+	local tracker =
+		CreateFrame("Frame", "ShortestPathForeverObjectiveTracker", UIParent, "ObjectiveTrackerModuleTemplate")
+	Mixin(tracker, ModuleMixin)
+	---@cast tracker SPFTracker
+	module = tracker
 	module.blocks = {}
 	-- SharedXML loads Group Finder's ring and sparks, with animation tied to the frame's visibility.
-	module.Spinner = CreateFrame("Frame", nil, module.Header, "SpinnerTemplate")
+	local spinner = CreateFrame("Frame", nil, module.Header, "SpinnerTemplate")
+	---@cast spinner Frame
+	module.Spinner = spinner
 	module.Spinner:SetSize(16, 16)
 	module.Spinner:Hide()
 	module.section = ModuleMixin.headerText

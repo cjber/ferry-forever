@@ -716,6 +716,7 @@ def emit(nodes, edges, grid, cuts, out, name):
         *("--   " + line for line in wrap(" ".join(encode_floors.__doc__.split(": ", 1)[1].split()), 110)),
         "ShortestPathForeverPathData = ShortestPathForeverPathData or {}",
         "",
+        "---@type SPFNavData",
         "-- stylua: ignore",
         f"ShortestPathForeverPathData[{MAP}] = {{",
         f"\tcx0 = {CX0},",

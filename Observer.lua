@@ -1,4 +1,5 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 local Model = ns.Model
 -- A ride ends once the boat has not moved for this long: it docked (a minute), or the player got off. A
@@ -66,10 +67,12 @@ local function Speed(now, x, y, z, map)
 end
 
 -- The route the player is riding, once the ride has shown which.
+---@return number?
 function ns.CurrentRide()
 	return ride and ride.announced
 end
 
+---@return boolean
 function ns.IsObservingRide()
 	return ride ~= nil
 end

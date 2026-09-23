@@ -1,7 +1,7 @@
 # Shortest Path Forever baker
 
 Bakes the walkable ground of a WoW map from a local client install and packages it as the load-on-demand addon
-`ShortestPathForever_Nav<map>`, whose `Nav<map>.lua` sets `ShortestPathForeverPathData[map]` for `Path.lua`.
+`ShortestPathForever_Nav<map>`, whose TOC-ordered Lua files set `ShortestPathForeverPathData[map]` for `Path.lua`.
 
 ## Usage
 
@@ -41,7 +41,10 @@ Steps, each reusable on its own:
 
 Each cluster field is emitted as one base64 string. `Path.lua` reads this format directly. When the original
 `.mmtile` inputs are unavailable, `python3 tools/pack_nav.py` from the repo root converts older shipped chunk
-tables deterministically, without rebaking or reading a client install. Running it again leaves the data unchanged.
+tables deterministically, without rebaking or reading a client install. It also splits large maps by field into
+files under 8 MiB and updates their TOCs, because LuaLS silently skips files over 10 MiB. `bake.sh` runs this
+packaging step automatically; offline tools use `tools/load_nav.lua` to follow the same TOC load order.
+Running the packer again leaves the data unchanged.
 
 `NAV_DBD` points NavBaker at a directory holding `Map.dbd` and `LiquidType.dbd`. bake.sh fetches them from a pinned
 WoWDBDefs commit and checks their sha256.

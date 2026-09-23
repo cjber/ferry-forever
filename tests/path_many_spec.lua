@@ -2,7 +2,7 @@ local ns = {}
 assert(loadfile("Path.lua"))("ShortestPathForever", ns)
 assert(loadfile("Data/Taxi.lua"))("ShortestPathForever", ns)
 for _, map in ipairs({ 0, 1, 2991 }) do
-	assert(loadfile("ShortestPathForever_Nav" .. map .. "/Nav" .. map .. ".lua"))()
+	assert(loadfile("tools/load_nav.lua"))(map)
 end
 local Path = ns.Path
 

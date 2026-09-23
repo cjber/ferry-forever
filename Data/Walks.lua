@@ -1,3 +1,4 @@
+---@type string, SPFNamespace
 local _, ns = ...
 
 -- Fixed place coordinates rounded to yards, so tests can detect stale walking costs.

@@ -1,4 +1,5 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 -- A heads-up for anyone waiting away from the keyboard: the stock raid-warning banner, its sound on the Master
 -- channel (heard with the game in the background) and a flashing taskbar icon, once per boat.
@@ -35,7 +36,7 @@ local function Check(dockID, yards)
 	local riding = ns.CurrentRide()
 	if riding then
 		local nextDock, arriveIn = ns.NextStop(riding)
-		if nextDock and Due(arriveIn, ON_BOARD) then
+		if nextDock and arriveIn and Due(arriveIn, ON_BOARD) then
 			Alert(
 				riding .. ":" .. nextDock,
 				"Arriving at " .. ns.DockLabel(nextDock) .. " in " .. ns.FormatCountdown(arriveIn)

@@ -81,6 +81,7 @@ points, and may walk to an undiscovered flight master when learning it makes the
 ## Development
 
 ```sh
+tools/typecheck.sh                  # strict LuaLS + multi-value lint (requires LuaLS 3.19.1, git, Python 3)
 python3 tools/gen_routes.py          # regenerate Data/Routes.lua for the pinned build
 python3 tools/gen_transit.py         # regenerate Data/Transports.lua, Data/Taxi.lua and Data/Portals.lua
 tools/draw_zeppelin.py               # redraw media/zeppelin.tga (the game has no zeppelin map icon)
@@ -95,8 +96,11 @@ luajit tests/activity_ui.lua       # idle sleep, passive rides, combat, tracker 
 luajit -joff tests/activity_bench.lua idle # offline CPU/allocation and login cost (also dock/walking/ride/panel/combat)
 ```
 
-CI runs luacheck, the specs, lua-language-server, StyLua, ruff, shellcheck, actionlint, zizmor and gitleaks on every
-push.
+CI runs luacheck, the specs, strict LuaLS type checking, multi-value lint, StyLua, ruff, shellcheck, shfmt,
+actionlint, zizmor and gitleaks on every push and pull request. `tools/typecheck.sh` fetches pinned Ketho WoW
+API annotations into the ignored `.types/` directory on its first run. It checks every addon's runtime Lua,
+including generated data, and fails on every diagnostic. [Type-checking notes](types/README.md) describe
+the local declarations and intentional multi-value calls.
 
 **Releasing:** move the `[Unreleased]` notes in `CHANGELOG.md` under `## [X.Y.Z] - YYYY-MM-DD`, then
 `git tag -s vX.Y.Z && git push --tags`. The [BigWigs packager](https://github.com/BigWigsMods/packager) builds the zip

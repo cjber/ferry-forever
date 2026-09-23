@@ -76,7 +76,7 @@ local env = setmetatable({
 -- Lua 5.1 locals enter scope after their initializer.
 env.C_AddOns.LoadAddOn = function()
 	loaded = loaded + 1
-	setfenv(assert(loadfile("ShortestPathForever_Nav0/Nav0.lua")), env)()
+	assert(loadfile("tools/load_nav.lua"))(0, nil, env)
 end
 setfenv(assert(loadfile("Path.lua")), env)("ShortestPathForever", ns)
 local path = ns.Path

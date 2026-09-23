@@ -297,7 +297,7 @@ for _, destination in ipairs({ { map = 1, x = 6400, y = 100 }, { map = 0, x = 22
 		live.load(file)
 	end
 	for _, mapID in ipairs({ 0, 1, 2991 }) do
-		assert(loadfile("ShortestPathForever_Nav" .. mapID .. "/Nav" .. mapID .. ".lua"))()
+		assert(loadfile("tools/load_nav.lua"))(mapID)
 	end
 	local nextFrame, searches = nil, 0
 	addon.Path.after = function(fn)

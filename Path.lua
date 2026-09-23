@@ -1,4 +1,5 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 -- Walking routes over a continent's collision map: HPA* between ADT-tile clusters, an 8 yd grid inside them,
 -- then string-pulling so the drawn line is not jagged. FindMany resolves costs in one abstract Dijkstra.
@@ -6,6 +7,7 @@ local _, ns = ...
 -- Coordinates are UnitPosition's frame (x north, y west).
 -- A cell holds its base surface and, where surfaces overlap (a tunnel under a mountain, a city under ruins, both
 -- ends of a lift), floors above or below it. A node is a local cell (the base surface) or C * C + a floor's index.
+---@class SPFPath
 local Path = {}
 ns.Path = Path
 
@@ -109,6 +111,8 @@ end
 -- Collision maps ship as one load-on-demand addon per continent (ShortestPathForever_Nav<map>), so only players who
 -- walk there pay for them. A separate addon cannot share `ns`, hence the global.
 local tried = {}
+---@param map number
+---@return SPFNavData?
 local function Data(map)
 	if not (ShortestPathForeverPathData and ShortestPathForeverPathData[map]) and not tried[map] and C_AddOns then
 		-- LoadAddOn itself is atomic in the client. Give it its own frame before the first decode.
@@ -448,7 +452,7 @@ local function trim(st, size)
 				end
 			end
 		end
-		if not owner then
+		if not owner or not oldest then
 			break
 		end
 		evict(owner, oldest)
@@ -500,7 +504,7 @@ local function trimGraphs()
 				end
 			end
 		end
-		if not owner then
+		if not owner or not oldest then
 			break
 		end
 		for _, id in ipairs(owner.nodes[oldest]) do
@@ -660,6 +664,8 @@ end
 
 local function search(st, k, swim, source, tree, goal, targets, left)
 	local val = grid(st, k)
+	-- Search only enters populated grids, through snapped endpoints or decoded entrances.
+	---@cast val number[]
 	-- A paused search retains these arrays even if another job evicts its cluster.
 	local m, z, at, links = st.moves[k], st.z[k], st.at[k], st.links[k]
 	local C, cs = st.C, st.cs
@@ -677,6 +683,7 @@ local function search(st, k, swim, source, tree, goal, targets, left)
 	g[source + 1], par[source + 1], stamp[source + 1] = 0, -1, gen
 	push(0, source)
 
+	---@type number, number, number, number
 	local u, ux, uy, gu
 	local function relax(v, length)
 		local i = v + 1
@@ -1435,7 +1442,12 @@ end
 -- and round each abstract edge to yards. Each endpoint can snap
 -- SNAP cells and then move SNAP more off a ledge; each nonzero grid step is at least cs before rounding.
 -- This bound is in running yards for both water modes, before the planner divides by walkSpeed.
+---@param map number
+---@param from SPFPoint
+---@param to SPFPoint
+---@return number
 function Path.LowerBound(map, from, to)
+	---@type SPFNavData?
 	local D = ShortestPathForeverPathData and ShortestPathForeverPathData[map]
 	-- Unloaded maps need no synchronous addon load just to publish an admissible preview.
 	if not D then
@@ -1447,6 +1459,9 @@ function Path.LowerBound(map, from, to)
 	return max(0, gap - (4 * SNAP + 1) * SQRT2 * cs) * max(0, 1 - 0.5 / cs)
 end
 
+---@param job SPFPathJob?
+---@param point SPFPoint
+---@return boolean
 function Path.ReuseMany(job, point)
 	if not job or job.map ~= point.map or not job.sourceNode then
 		return false
@@ -1494,6 +1509,10 @@ local function scratch(saved)
 end
 
 -- Synchronous search, for tests and tools. Returns points, cost (or nil, reason) and the expansion count.
+---@param map number
+---@param from SPFPoint
+---@param to SPFPoint
+---@param waterWalking? boolean
 function Path.FindSync(map, from, to, waterWalking)
 	deadline, ops = huge, 0
 	local job = { map = map, from = from, to = to, waterWalking = waterWalking }
@@ -1509,6 +1528,11 @@ end
 
 -- Costs indexed like targets, false for unreachable/off-mesh points; no geometry is built. reverse returns
 -- target -> from costs, including the directed same-cluster water step. The shipped abstract edges are symmetric.
+---@param map number
+---@param from SPFPoint
+---@param targets SPFPoint[]
+---@param waterWalking? boolean
+---@param reverse? boolean
 function Path.FindManySync(map, from, targets, waterWalking, reverse)
 	deadline, ops, expansions = huge, 0, 0
 	local saved = scratch()
@@ -1616,6 +1640,7 @@ pump = function()
 end
 
 -- Next-frame scheduling; tests replace it.
+---@param fn fun()
 function Path.after(fn)
 	C_Timer.After(0, fn)
 end
@@ -1626,6 +1651,12 @@ end
 -- polyline length; a swum grid yard counts as the
 -- data's swim (so routes keep out of water) unless waterWalking, when water is ground. reason is "nodata",
 -- "outside", "offmesh", "unreachable" or "error". Returns a handle for Path.Cancel.
+---@param map number
+---@param from SPFPoint
+---@param to SPFPoint
+---@param callback fun(points: SPFWalkPoints?, cost: number|string, job: SPFPathJob)
+---@param waterWalking? boolean
+---@return SPFPathJob
 function Path.Find(map, from, to, callback, waterWalking)
 	local job = {
 		map = map,
@@ -1644,6 +1675,12 @@ end
 
 -- A candidate can be ruled in or out without refining all its intermediate clusters into drawing points.
 -- callback(cost, reason, job) uses the same exact graph cost as Find and FindMany.
+---@param map number
+---@param from SPFPoint
+---@param to SPFPoint
+---@param callback fun(cost: number?, reason: string?, job: SPFPathJob)
+---@param waterWalking? boolean
+---@return SPFPathJob
 function Path.FindCost(map, from, to, callback, waterWalking)
 	local job = Path.Find(map, from, to, callback, waterWalking)
 	job.costOnly = true
@@ -1654,6 +1691,14 @@ end
 -- costs[i] is nil until settled, an exact running-yard cost afterwards, or false when unreachable. job.radius
 -- bounds every unsettled target, including a popped entrance whose expansion has not finished. Pause/Resume
 -- retain the frontier. Missing data or an invalid source completes with all false plus a reason.
+---@param map number
+---@param from SPFPoint
+---@param targets SPFPoint[]
+---@param callback fun(costs: (number|false)[], reason: string?, job: SPFPathJob)
+---@param waterWalking? boolean
+---@param reverse? boolean
+---@param progress? fun(costs: (number|false)[], reason: nil, job: SPFPathJob)
+---@return SPFPathJob
 function Path.FindMany(map, from, targets, callback, waterWalking, reverse, progress)
 	local job = {
 		map = map,
@@ -1676,6 +1721,7 @@ function Path.FindMany(map, from, targets, callback, waterWalking, reverse, prog
 end
 
 -- Paused batches retain their settled costs and frontier for later replans, without consuming frames.
+---@param job SPFPathJob
 function Path.Pause(job)
 	job.paused = true
 	for i = #queue, 1, -1 do
@@ -1686,6 +1732,7 @@ function Path.Pause(job)
 	end
 end
 
+---@param job SPFPathJob
 function Path.Resume(job)
 	if job.paused and not job.done and not job.cancelled then
 		job.paused = false
@@ -1697,6 +1744,7 @@ end
 
 -- A proved journey needs the exact costs and validity/bounds, not a suspended Dijkstra stack.
 -- If a later timetable exposes another alternative, Resume rebuilds only the missing frontier.
+---@param job SPFPathJob
 function Path.ReleaseMany(job)
 	Path.Pause(job)
 	job.co, job.scratch, job.callback, job.progress = nil, nil, nil, nil
@@ -1711,12 +1759,15 @@ function Path.ClearCaches()
 	decodedKB, decodedCount, graphKB = 0, 0, 0
 end
 
+---@param job SPFPathJob
 function Path.Cancel(job)
 	Path.Pause(job)
 	job.cancelled, job.scratch, job.co = true, nil, nil
 end
 
 -- The walkable height at a global cell nearest height h, within ZTOL.
+---@param map number
+---@return boolean
 function Path.HasData(map)
 	if ShortestPathForeverPathData and ShortestPathForeverPathData[map] then
 		return true

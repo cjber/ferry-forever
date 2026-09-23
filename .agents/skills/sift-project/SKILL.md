@@ -12,7 +12,7 @@ A World of Warcraft: Forever (Classic, `## Interface: 16001`) addon that plans j
 boats, lifts, tram, portals) and draws them on the map. Runtime is the WoW client's Lua 5.1 sandbox; files
 load in `.toc` order and share one namespace table (`local addonName, ns = ...`). It ships through
 BigWigs packager (`.pkgmeta`) to CurseForge/Wago/GitHub as one zip that also carries three load-on-demand
-walking-map addons. The specs run headless under LuaJIT with stubbed WoW APIs. Python, one shell script and
+walking-map addons. The specs run headless under LuaJIT with stubbed WoW APIs. Python, shell scripts and
 C# under `tools/` generate the data offline; `.pkgmeta` keeps `tools/` and `tests/` out of the zip.
 
 ## Gate
@@ -23,11 +23,11 @@ Run in order from the repository root. All must pass before and after any audit 
 |---|---|---|
 | Format (Lua) | `stylua --check .` | exit 0 (StyLua 2.5.2) |
 | Format (Python) | `ruff format --check .` | exit 0 (ruff 0.16.8, `ruff.toml`) |
-| Format (shell) | `shfmt -d tools/baker/bake.sh` | no diff |
+| Format (shell) | `shfmt -d tools/baker/bake.sh tools/typecheck.sh` | no diff |
 | Lint (Lua) | `luacheck .` | `0 warnings / 0 errors` |
 | Lint (Python) | `ruff check .` | `All checks passed!` |
-| Lint (shell) | `shellcheck tools/baker/bake.sh` | exit 0 |
-| Types (Lua) | `lua-language-server --check=. --checklevel=Error --logpath=.sift/runs/luals` | `no problems found`, exit 0 |
+| Lint (shell) | `shellcheck tools/baker/bake.sh tools/typecheck.sh` | exit 0 |
+| Types (Lua) | `tools/typecheck.sh` | zero diagnostics at Information level; multi-value lint and gate regression tests pass |
 | Tests | `for s in tests/*_spec.lua; do luajit "$s" \|\| exit 1; done` | every spec prints `…: ok`; ~25 s total |
 | Workflows | `actionlint && zizmor --offline .github` | exit 0 / "No findings" |
 | Secrets | `gitleaks git --redact --no-banner .` | `no leaks found` |
@@ -42,7 +42,7 @@ On-demand tools for audits. Output is candidates, never verdicts.
 | Concern | Command | Known false positives |
 |---|---|---|
 | Dead code (Lua) | `luacheck .` (unused locals/values; clean today) | none so far |
-| Diagnostics (Lua) | `lua-language-server --check=. --checklevel=Warning --logpath=.sift/runs/luals` (results print to stdout, not the log dir) | `duplicate-set-field` / `unbalanced-assignments` in tests are deliberate stub monkeypatching |
+| Diagnostics (Lua) | `tools/typecheck.sh` (file:line diagnostics and counts; JSON in `.types/diagnostics.json`) | tests/tools are excluded from LuaLS; all TOC runtime files, including generated data, are checked |
 | Dead code (Python) | `uvx vulture tools --min-confidence 60` | clean today |
 | Types (Python) | `uvx --with pillow ty check --extra-search-path tools --python-version 3.10 tools` | 5 inference errors in `gen_nav.py` (tuple unpacking, `dict.get` keys) + Pillow `Image.LANCZOS` — not bugs |
 | Duplication | `npx --yes jscpd@4 --silent --reporters json --output .sift/runs/jscpd --ignore '**/ShortestPathForever_Nav*/**,**/Data/**,**/.sift/**,**/media/**,LICENSE' .` | the test harness preambles (`walk_sim`, `journey_bench`, `journey_optimal_spec`) repeat stub setup |
@@ -95,7 +95,7 @@ How each part of the tree is reviewed. Unlisted paths are `production`.
 ## Conventions
 
 - Tabs, 120 columns (StyLua, luacheck, ruff). Double quotes.
-- Each file opens `local addonName, ns = ...` (or `local _, ns = ...`) and publishes modules as `ns.Name`
+- Each file receives TOC varargs; `---@class SPFNamespace` on `local ns = select(2, ...)` joins its API and publishes modules as `ns.Name`
   tables; locals cache `ns.Model` etc. at file top. Globals only where WoW requires them (mixins,
   SavedVariables, slash commands) — all listed in `.luacheckrc`.
 - Modules start via `ns.Init(fn)` after `ADDON_LOADED`, each under `xpcall` so one failure does not stop
