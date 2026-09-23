@@ -39,6 +39,10 @@ Steps, each reusable on its own:
    same cell (lake and sea beds) are dropped. Every graph edge carries two costs: one where a swum yard counts as
    `SWIM` (3) running yards, so walks keep out of water, and one for a player walking on water, where it counts as 1.
 
+Each cluster field is emitted as one base64 string. `Path.lua` reads this format directly. When the original
+`.mmtile` inputs are unavailable, `python3 tools/pack_nav.py` from the repo root converts older shipped chunk
+tables deterministically, without rebaking or reading a client install. Running it again leaves the data unchanged.
+
 `NAV_DBD` points NavBaker at a directory holding `Map.dbd` and `LiquidType.dbd`. bake.sh fetches them from a pinned
 WoWDBDefs commit and checks their sha256.
 

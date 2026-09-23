@@ -21,7 +21,7 @@ end
 for _, map in ipairs({ 0, 1, 2991 }) do
 	local data, edges, count = ShortestPathForeverPathData[map], {}, 0
 	for cluster, chunks in pairs(data.graph) do
-		local s, k = table.concat(chunks), cluster - 1
+		local s, k = chunks, cluster - 1
 		local n = number(s, 1, 2)
 		local at = 3 + n * 7
 		for i = 0, n - 1 do

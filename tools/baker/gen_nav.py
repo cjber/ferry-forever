@@ -597,10 +597,6 @@ def grid_hpa(grid, cuts):
     return nodes, edges
 
 
-def lua_lines(s, indent, width=96):
-    return [indent + '"' + s[i : i + width] + '",' for i in range(0, len(s), width)] or [indent + '"",']
-
-
 def emit(nodes, edges, grid, cuts, out, name):
     cells = sorted(c for cs in nodes.values() for c in cs)
     parent = {c: c for c in cells}
@@ -708,9 +704,7 @@ def emit(nodes, edges, grid, cuts, out, name):
     for key, table in (("graph", graph), ("grid", grids), ("height", heights), ("floor", floors)):
         lines.append(f"\t{key} = {{")
         for k in sorted(table):
-            lines.append(f"\t\t[{k + 1}] = {{")
-            lines += lua_lines(table[k], "\t\t\t")
-            lines.append("\t\t},")
+            lines.append(f'\t\t[{k + 1}] = "{table[k]}",')
         lines.append("\t},")
     lines.append("}")
     src = "\n".join(lines) + "\n"

@@ -171,11 +171,8 @@ local function OwnsWaypoint()
 end
 
 local function GuideWaypoint(point)
-	if not guide or not OwnsWaypoint() then
+	if not guide then
 		return false
-	end
-	if not SameTracking(guide) then
-		guide.yielded = true
 	end
 	if guide.yielded then
 		return false
@@ -239,9 +236,6 @@ function ns.ClearJourney()
 end
 
 local function UpdateProgress()
-	if guide then
-		OwnsWaypoint()
-	end
 	if not (goal and result) then
 		return
 	end
@@ -599,6 +593,8 @@ local function Render(planned, forced)
 	Refresh()
 end
 
+local plannerCache = {}
+
 local function Plan(preview, bounded)
 	local here = Here()
 	if not (here and goal) then
@@ -643,6 +639,7 @@ local function Plan(preview, bounded)
 		end
 	end
 	local planned = ns.Planner.Plan({
+		cache = plannerCache,
 		from = here,
 		to = goal,
 		now = now,
@@ -738,6 +735,41 @@ local function RefreshCosts(includeGoal, forced)
 	startAt, refreshedAt = here, GetTime()
 	pendingCosts, costError = 2, nil
 	local slices, lastRevision, probeCPU = 0, -1, 0
+	local function fixedPlace(batch)
+		if batch.fixedChecked or not (batch.job and batch.job.valid and ns.Path.ReuseMany) then
+			return
+		end
+		batch.fixedChecked = true
+		for _, place in ipairs(places) do
+			if
+				place.map == batch.point.map
+				and math.abs(place.x - batch.point.x) < 0.00001
+				and math.abs(place.y - batch.point.y) < 0.00001
+				and ns.Path.ReuseMany(batch.job, place)
+			then
+				batch.fixedKey = place.kind .. place.id
+				return
+			end
+		end
+	end
+	local function bakedBound(batch, target)
+		local first = batch.fixedKey
+		local last = target.kind and target.kind .. target.id or target == goal and goalBatch.fixedKey
+		local baked = first and last and ns.Walks and ns.Walks[batch.point.map]
+		if not baked then
+			return 0
+		end
+		if first == last then
+			return 0
+		end
+		if batch.reverse then
+			first, last = last, first
+		end
+		local pair = baked[first < last and first .. " " .. last or last .. " " .. first]
+		local cost = pair and pair[(waterMode and 2 or 1) + (first > last and pair[3] ~= nil and 2 or 0)]
+		-- Baked costs round to whole yards. They strengthen the bound but never stand in for exact endpoint costs.
+		return cost and math.max(0, cost - 0.5) or 0
+	end
 	local function walks(batch)
 		local list = {}
 		if not ns.Path.HasData(batch.point.map) then
@@ -752,7 +784,7 @@ local function RefreshCosts(includeGoal, forced)
 			local estimated = cost == nil
 			if estimated then
 				local lower = ns.Path.LowerBound and ns.Path.LowerBound(batch.point.map, batch.point, target) or 0
-				cost = math.max(lower, radius)
+				cost = math.max(lower, radius, bakedBound(batch, target))
 			end
 			list[#list + 1] = {
 				from = batch.reverse and target or batch.point,
@@ -791,6 +823,12 @@ local function RefreshCosts(includeGoal, forced)
 		then
 			Refresh()
 			return
+		end
+		local hadFixed = startBatch.fixedKey or goalBatch.fixedKey
+		fixedPlace(startBatch)
+		fixedPlace(goalBatch)
+		if not hadFixed and (startBatch.fixedKey or goalBatch.fixedKey) then
+			preview = nil
 		end
 		slices = slices + 1
 		local revision = (startBatch.job and startBatch.job.revision or 0)

@@ -45,7 +45,8 @@ sea; closer maps keep the real sailing path to the map edge.
 While a journey's walks are being checked, the tracker says it is finding the fastest way and the route
 pulses softly on the map and minimap. Easy routes settle quickly, and longer searches stop once unchecked
 alternatives cannot beat the chosen route, without searching the whole continent. Drawn paths stay visible
-during refreshes and repeated journeys to the same destination reuse their walking costs. Your position is
+during refreshes. Route finding uses less memory and shares its work across frames to reduce hitches; the
+first walking-map load starts after the click. Repeated journeys to the same destination reuse their walking costs. Your position is
 checked again when you leave the path or once a minute; standing still or moving a few yards within the same
 walking-map cell reuses its costs. Once settled, the arrival countdown returns. Walk
 steps name the dock, pier, lift or flight master you are heading for. An optional compass strip follows your facing and

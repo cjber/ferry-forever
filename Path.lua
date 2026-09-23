@@ -10,7 +10,9 @@ local Path = {}
 ns.Path = Path
 
 Path.budget = 3 -- milliseconds of CPU per frame, shared by Find and FindMany
-Path.clusters = 64 -- decoded cluster grids kept in memory (at least 4)
+Path.clusters = 64 -- secondary count ceiling per map (at least 4)
+Path.graphKB = 4096 -- decoded entrances/edges across all maps
+Path.cacheKB = 24576 -- decoded grids across all maps; active coroutine locals are additional
 Path.clock = debugprofilestop or function()
 	return os.clock() * 1000
 end
@@ -25,7 +27,7 @@ local SQRT2 = math.sqrt(2)
 local START, GOAL = -1, -2
 
 local byte, floor, sqrt, huge, max, abs = string.byte, math.floor, math.sqrt, math.huge, math.max, math.abs
-local concat, yield = table.concat, coroutine.yield
+local yield = coroutine.yield
 
 local B64 = {}
 do
@@ -52,6 +54,8 @@ local function slice()
 		yield()
 	end
 end
+
+Path.Checkpoint = slice
 
 local function tick()
 	expansions = expansions + 1
@@ -107,8 +111,17 @@ end
 local tried = {}
 local function Data(map)
 	if not (ShortestPathForeverPathData and ShortestPathForeverPathData[map]) and not tried[map] and C_AddOns then
-		tried[map] = true
-		C_AddOns.LoadAddOn("ShortestPathForever_Nav" .. map)
+		-- LoadAddOn itself is atomic in the client. Give it its own frame before the first decode.
+		if deadline < huge then
+			yield("load")
+		end
+		if not tried[map] and not (ShortestPathForeverPathData and ShortestPathForeverPathData[map]) then
+			tried[map] = true
+			C_AddOns.LoadAddOn("ShortestPathForever_Nav" .. map)
+		end
+		if deadline < huge then
+			yield("load")
+		end
 	end
 	return ShortestPathForeverPathData and ShortestPathForeverPathData[map]
 end
@@ -120,6 +133,9 @@ local function State(map)
 	local st = states[map]
 	if st == nil then
 		local D = Data(map)
+		if states[map] then
+			return states[map]
+		end
 		if not D then
 			return nil
 		end
@@ -135,13 +151,16 @@ local function State(map)
 			cs = TILE / C,
 			swim = D.swim,
 			zstep = D.zstep,
+			sizes = {},
 			used = {}, -- [k] = last use, for eviction
 			decoded = 0,
 			val = {}, -- [k] = node values (node + 1), false when the cluster has no data
 			moves = {}, -- [k][lc + 1] = open moves inside the cluster + 16 * the data file's step flags
 			z = {}, -- [k][node + 1] = height of a walkable node
 			at = {}, -- [k][node + 1] = a floor's local cell; [k][-(lc + 1)] = the cell's first floor node
-			links = {}, -- [k][node + 1] = { direction, layer, ... } steps besides the base grid's (layer -1: nearest)
+			links = {}, -- [k][node + 1] = { direction + 8 * (layer + 1), ... } steps besides the base grid's
+			graphUsed = {},
+			graphSize = {},
 			nodes = {}, -- [k] = entrance ids (k * 4096 + i)
 			ncell = {}, -- [id] = local cell
 			nlayer = {}, -- [id] = 0 for the base surface, i for the cell's ith floor
@@ -189,23 +208,64 @@ local function surface(st, k, lc, layer, h, values, heights, floors)
 	return best, gap
 end
 
+-- Floor step masks recur thousands of times. Share the common immutable link sets;
+-- the few nodes with additional explicit links copy on write.
+local linkSets, directionBits = {}, {}
+for _, layer in ipairs({ -1, 1 }) do
+	local set = {}
+	linkSets[layer] = set
+	for mask = 1, 255 do
+		local links, bits = { shared = layer, mask = mask }, mask
+		for d = 0, 7 do
+			if bits % 2 == 1 then
+				links[#links + 1] = d + 8 * (layer + 1)
+			end
+			bits = floor(bits / 2)
+		end
+		set[mask] = links
+	end
+end
+for d = 0, 7 do
+	directionBits[d] = 2 ^ d
+end
+local stepLinks = linkSets[-1]
+
 local function addLink(links, node, d, layer)
 	local l = links[node + 1]
+	local set = linkSets[layer]
+	if set and (not l or l.shared == layer) then
+		local mask, bit = l and l.mask or 0, directionBits[d]
+		if floor(mask / bit) % 2 == 0 then
+			mask = mask + bit
+		end
+		links[node + 1] = set[mask]
+		return
+	end
 	if not l then
 		l = {}
 		links[node + 1] = l
+	elseif l.shared then
+		local copy = {}
+		for i = 1, #l do
+			copy[i] = l[i]
+		end
+		l, links[node + 1] = copy, copy
 	end
-	l[#l + 1], l[#l + 2] = d, layer
+	l[#l + 1] = d + 8 * (layer + 1)
 end
 
 local function decodeHeights(st, k, val, z)
-	local s, C, step = concat(st.D.height[k + 1]), st.C, st.zstep
-	local q = {}
+	local s, C, step = st.D.height[k + 1], st.C, st.zstep
 	local pos, rep, delta, last = 1, 0, 0, 0
 	for i = 1, C * C do
+		if i % 256 == 0 then
+			slice()
+		end
 		if val[i] ~= 0 then
 			local a = i - 1
-			local pred = (a % C > 0 and q[i - 1]) or (a >= C and q[i - C]) or last
+			local pred = (a % C > 0 and z[i - 1] and z[i - 1] / step)
+				or (a >= C and z[i - C] and z[i - C] / step)
+				or last
 			local v
 			if rep > 0 then
 				rep, v = rep - 1, pred + delta
@@ -221,68 +281,75 @@ local function decodeHeights(st, k, val, z)
 					v = pred + delta
 				end
 			end
-			q[i], last, z[i] = v, v, v * step
+			last, z[i] = v, v * step
 		end
 	end
 end
 
 local function decodeFloors(st, k, val, z)
 	local at, links = {}, {}
-	st.at[k], st.links[k] = at, links
 	local chunks = st.D.floor[k + 1]
 	if not chunks then
-		return
+		return at, links
 	end
-	local s, C = concat(chunks), st.C
+	local s, C = chunks, st.C
 	local node, pos = C * C, 4
 	for _ = 1, num(s, 1, 3) do
 		local lc, count = num(s, pos, 3), B64[byte(s, pos + 3)]
 		pos = pos + 4
 		at[-(lc + 1)] = node
 		for _ = 1, count do
-			val[node + 1], z[node + 1], at[node + 1] = B64[byte(s, pos)], num(s, pos + 1, 2) - 2048, lc
-			local steps = num(s, pos + 3, 2)
-			for d = 0, 7 do
-				if steps % 2 == 1 then
-					addLink(links, node, d, -1)
-				end
-				steps = floor(steps / 2)
+			if node % 64 == 0 then
+				slice()
 			end
+			val[node + 1], z[node + 1], at[node + 1] = B64[byte(s, pos)], num(s, pos + 1, 2) - 2048, lc
+			links[node + 1] = stepLinks[num(s, pos + 3, 2)]
 			pos, node = pos + 5, node + 1
 		end
 	end
 	local last = node
-	for _ = 1, num(s, pos, 3) do
+	for i = 1, num(s, pos, 3) do
+		if i % 64 == 0 then
+			slice()
+		end
 		addLink(links, num(s, pos + 3, 3), B64[byte(s, pos + 6)], B64[byte(s, pos + 7)])
 		pos = pos + 5
 	end
 	-- A base cell's links to floors inside the cluster are the reverse of the floors' own.
 	for f = C * C, last - 1 do
+		if f % 64 == 0 then
+			slice()
+		end
 		local l, lc = links[f + 1], at[f + 1]
 		local layer = f - at[-(lc + 1)] + 1
-		for e = 1, #(l or {}), 2 do
-			local d = l[e]
+		for e = 1, l and #l or 0 do
+			local d = l[e] % 8
 			local tx, ty = floor(lc / C) + DX[d], lc % C + DY[d]
 			if tx >= 0 and ty >= 0 and tx < C and ty < C then
-				local t = surface(st, k, tx * C + ty, l[e + 1], z[f + 1])
+				local t = surface(st, k, tx * C + ty, floor(l[e] / 8) - 1, z[f + 1], val, z, at)
 				if t and t < C * C then
 					addLink(links, t, OPPOSITE[d], layer)
 				end
 			end
 		end
 	end
+	return at, links
 end
 
 local function decodeGrid(st, k)
+	Path.decodes = (Path.decodes or 0) + 1
 	local chunks = st.D.grid[k + 1]
 	if not chunks then
 		st.val[k] = false
 		return false
 	end
-	local s, C = concat(chunks), st.C
+	local s, C = chunks, st.C
 	local val, m = {}, {}
 	local n, valueCode, moveCode = 0, 0, 0
 	for i = 1, #s do
+		if i % 256 == 0 then
+			slice()
+		end
 		local sym = B64[byte(s, i)]
 		if sym < 48 then
 			valueCode, moveCode = floor(sym / 16), (sym % 16) * 16
@@ -299,6 +366,9 @@ local function decodeGrid(st, k)
 	local N = C * C
 	-- Descending cells let diagonals reuse their forward neighbours' decoded moves in the same pass.
 	for a = N - 1, 0, -1 do
+		if a % 256 == 0 then
+			slice()
+		end
 		local i, ly = a + 1, a % C
 		local f = m[i] / 16
 		if val[i] ~= 0 then
@@ -332,42 +402,77 @@ local function decodeGrid(st, k)
 		end
 	end
 	local z = {}
-	st.val[k], st.moves[k], st.z[k] = val, m, z
 	decodeHeights(st, k, val, z)
-	decodeFloors(st, k, val, z)
-	return val
+	local at, links = decodeFloors(st, k, val, z)
+	return val, m, z, at, links
 end
 
--- Decoded clusters cost ~0.25 MB each under Lua 5.1, so only the Path.clusters most recently used stay decoded.
-local useClock = 0
-
-local function evict(st)
-	local oldest, at = nil, huge
-	for k, used in pairs(st.used) do
-		if used < at then
-			oldest, at = k, used
-		end
+-- Lua 5.1 array slots occupy 16 bytes and grow by powers of two. Charge sparse floor/link hashes
+-- conservatively too; this is a memory ceiling across continents, not a cluster count estimate.
+local useClock, decodedKB, decodedCount = 0, 0, 0
+local function gridSize(val, at, links)
+	local capacity = 1
+	while capacity < #val do
+		capacity = capacity * 2
 	end
-	st.used[oldest] = nil
+	local bytes = capacity * 16 * 3 + 5 * 64
+	for _ in pairs(at) do
+		bytes = bytes + 64
+	end
+	for _, link in pairs(links) do
+		bytes = bytes + 128 + #link * 32
+	end
+	return bytes / 1024
+end
+
+local function evict(st, oldest)
+	decodedKB, decodedCount = decodedKB - st.sizes[oldest], decodedCount - 1
+	st.sizes[oldest], st.used[oldest] = nil, nil
 	st.val[oldest], st.moves[oldest], st.z[oldest], st.at[oldest], st.links[oldest] = nil, nil, nil, nil, nil
 	st.decoded = st.decoded - 1
 end
 
-local function grid(st, k)
-	-- A single expansion can decode a whole cluster. Yield before it, while no half-decoded grid is visible.
-	if st.val[k] == nil then
-		slice()
+local function trim(st, size)
+	while (decodedKB + size > Path.cacheKB and decodedCount >= 4) or st.decoded >= max(Path.clusters, 4) do
+		local owner, oldest, age = nil, nil, huge
+		for _, candidate in pairs(states) do
+			if st.decoded < max(Path.clusters, 4) or candidate == st then
+				for k, used in pairs(candidate.used) do
+					if used < age then
+						owner, oldest, age = candidate, k, used
+					end
+				end
+			end
+		end
+		if not owner then
+			break
+		end
+		evict(owner, oldest)
 	end
+end
+
+local function grid(st, k)
 	local val = st.val[k]
 	if val == nil then
-		if st.decoded >= max(Path.clusters, 4) then
-			evict(st)
+		local m, z, at, links
+		val, m, z, at, links = decodeGrid(st, k)
+		-- Decoding may yield; only complete grids are published to concurrent searches.
+		if st.val[k] ~= nil then
+			return grid(st, k)
 		end
-		val = decodeGrid(st, k)
-		st.decoded = st.decoded + 1
+		if not val then
+			return false
+		end
+		local size = gridSize(val, at, links)
+		trim(st, size)
+		st.val[k], st.moves[k], st.z[k], st.at[k], st.links[k] = val, m, z, at, links
+		st.sizes[k], st.decoded, decodedKB = size, st.decoded + 1, decodedKB + size
+		decodedCount = decodedCount + 1
 	end
-	useClock = useClock + 1
-	st.used[k] = useClock
+	if val then
+		useClock = useClock + 1
+		st.used[k] = useClock
+	end
 	return val
 end
 
@@ -380,51 +485,110 @@ local function cellOf(st, k, node)
 	return st.at[k][node + 1]
 end
 
+local graphKB, graphClock = 0, 0
+local function trimGraphs()
+	while graphKB > Path.graphKB do
+		local owner, oldest, age = nil, nil, huge
+		for _, st in pairs(states) do
+			for k, used in pairs(st.graphUsed) do
+				if used < age then
+					owner, oldest, age = st, k, used
+				end
+			end
+		end
+		if not owner then
+			break
+		end
+		for _, id in ipairs(owner.nodes[oldest]) do
+			owner.ncell[id], owner.nlayer[id], owner.ncomp[id], owner.nadj[id] = nil, nil, nil, nil
+		end
+		graphKB = graphKB - owner.graphSize[oldest]
+		owner.nodes[oldest], owner.graphUsed[oldest], owner.graphSize[oldest] = nil, nil, nil
+	end
+end
+
 local function decodeGraph(st, k)
 	slice()
+	if st.nodes[k] then
+		return st.nodes[k]
+	end
+	trimGraphs()
 	local ids = {}
 	st.nodes[k] = ids
 	local chunks = st.D.graph[k + 1]
 	if not chunks then
 		return ids
 	end
-	local s = concat(chunks)
+	local s = chunks
 	local n, pos = num(s, 1, 2), 3
+	st.graphSize[k] = (n * 288 + 128) / 1024
+	graphKB = graphKB + st.graphSize[k]
 	local degree = {}
 	for i = 0, n - 1 do
 		local id = k * 4096 + i
 		ids[i + 1] = id
-		st.ncell[id] = num(s, pos, 3)
-		st.nlayer[id] = B64[byte(s, pos + 3)]
-		st.ncomp[id] = num(s, pos + 4, 2)
 		degree[i + 1] = B64[byte(s, pos + 6)]
 		pos = pos + 7
 	end
-	local ny = st.ny
 	for i = 1, n do
-		local adj = {}
-		for e = 1, degree[i] do
-			local offset = B64[byte(s, pos)]
-			local target = k + (floor(offset / 3) - 1) * ny + offset % 3 - 1
-			adj[e * 3 - 2] = target * 4096 + num(s, pos + 1, 2)
-			adj[e * 3 - 1] = num(s, pos + 3, 2)
-			adj[e * 3] = num(s, pos + 5, 2)
-			pos = pos + 7
-		end
-		st.nadj[ids[i]] = adj
+		st.nadj[ids[i]] = pos
+		pos = pos + degree[i] * 7
 	end
 	return ids
 end
 
 local function nodesOf(st, k)
-	return st.nodes[k] or decodeGraph(st, k)
+	local nodes = st.nodes[k] or decodeGraph(st, k)
+	if st.graphSize[k] then
+		graphClock = graphClock + 1
+		st.graphUsed[k] = graphClock
+	end
+	return nodes
+end
+
+local function metadata(st, id)
+	if st.ncell[id] == nil then
+		local s, pos = st.D.graph[floor(id / 4096) + 1], 3 + (id % 4096) * 7
+		st.ncell[id], st.nlayer[id], st.ncomp[id] = num(s, pos, 3), B64[byte(s, pos + 3)], num(s, pos + 4, 2)
+	end
+	return st.ncell[id], st.nlayer[id], st.ncomp[id]
+end
+
+-- Most entrances in a visited cluster are never expanded. Decode their edges only when needed.
+local function adjacent(st, id)
+	local adj = st.nadj[id]
+	if type(adj) == "number" then
+		local k, pos = floor(id / 4096), adj
+		local s = st.D.graph[k + 1]
+		adj = {}
+		for e = 1, B64[byte(s, 9 + (id % 4096) * 7)] do
+			local offset = B64[byte(s, pos)]
+			local target = k + (floor(offset / 3) - 1) * st.ny + offset % 3 - 1
+			adj[e * 3 - 2] = target * 4096 + num(s, pos + 1, 2)
+			adj[e * 3 - 1] = num(s, pos + 3, 2)
+			adj[e * 3] = num(s, pos + 5, 2)
+			pos = pos + 7
+		end
+		st.nadj[id] = adj
+		local capacity = 1
+		while capacity < #adj do
+			capacity = capacity * 2
+		end
+		local size = (64 + capacity * 16) / 1024
+		st.graphSize[k], graphKB = st.graphSize[k] + size, graphKB + size
+	end
+	return adj
 end
 
 -- An entrance's node in its cluster.
 local function entrance(st, id)
 	local k = floor(id / 4096)
+	if not st.nodes[k] then
+		nodesOf(st, k)
+	end
+	local cell, layer = metadata(st, id)
 	grid(st, k)
-	return surface(st, k, st.ncell[id], st.nlayer[id])
+	return surface(st, k, cell, layer)
 end
 
 -- Cluster k and local cell of a world point, or nil outside the data.
@@ -579,11 +743,11 @@ local function search(st, k, swim, source, tree, goal, targets, left)
 			end
 			local l = links[i]
 			if l then
-				for e = 1, #l, 2 do
-					local d = l[e]
+				for e = 1, #l do
+					local d = l[e] % 8
 					local tx, ty = ux + DX[d], uy + DY[d]
 					if tx >= 0 and ty >= 0 and tx < C and ty < C then
-						local v = surface(st, k, tx * C + ty, l[e + 1], z[i], val, z, at)
+						local v = surface(st, k, tx * C + ty, floor(l[e] / 8) - 1, z[i], val, z, at)
 						if v then
 							relax(v, d >= 4 and SQRT2 or 1)
 						end
@@ -715,10 +879,10 @@ local function neighbour(st, k, node, gx, gy, dx, dy, water)
 		return nil
 	end
 	local here, h, d = st.val[k][node + 1], st.z[k][node + 1], DIRECTION[(dx + 1) * 3 + dy + 1]
-	for e = 1, #l, 2 do
-		if l[e] == d then
+	for e = 1, #l do
+		if l[e] % 8 == d then
 			grid(st, tk)
-			local v = surface(st, tk, tlc, l[e + 1], h)
+			local v = surface(st, tk, tlc, floor(l[e] / 8) - 1, h)
 			if v and (water or (here ~= 2 and st.val[tk][v + 1] ~= 2)) then
 				return tk, v
 			end
@@ -823,6 +987,9 @@ local function settle(st, swim, tree, k, node)
 		end
 		return false
 	end
+	if connected() then
+		return node
+	end
 	local tries = 0
 	grid(st, k)
 	local h = st.z[k][node + 1]
@@ -831,7 +998,7 @@ local function settle(st, swim, tree, k, node)
 	for r = 1, SNAP do
 		for dx = -r, r do
 			for dy = -r, r do
-				if connected() or tries >= RETRIES then
+				if tries >= RETRIES then
 					return node
 				end
 				local x, y = lx + dx, ly + dy
@@ -842,6 +1009,9 @@ local function settle(st, swim, tree, k, node)
 					if near and rise <= ZTOL and rise >= -DROP and not reached(tree, near) then
 						tries, node = tries + 1, near
 						endpoint(st, swim, tree, k, node)
+						if connected() then
+							return node
+						end
 					end
 				end
 			end
@@ -875,6 +1045,7 @@ end
 -- Fixed places recur in both batches and in later journeys. Keep their small entrance-cost vectors, not the
 -- grid trees; cap the cache so moving start positions cannot grow it for the entire play session.
 local function connect(st, swim, k, node)
+	nodesOf(st, k)
 	local key = k .. ":" .. node .. ":" .. swim
 	local entry = st.ends[key]
 	if not entry then
@@ -935,10 +1106,14 @@ local function run(map, from, to, waterWalking, costOnly)
 
 		local comps, shared = {}, false
 		for id in pairs(source) do
-			comps[st.ncomp[id]] = true
+			nodesOf(st, floor(id / 4096))
+			local _, _, component = metadata(st, id)
+			comps[component] = true
 		end
 		for id in pairs(target) do
-			shared = shared or comps[st.ncomp[id]]
+			nodesOf(st, floor(id / 4096))
+			local _, _, component = metadata(st, id)
+			shared = shared or comps[component]
 		end
 		if not direct and not shared then
 			return nil, "unreachable"
@@ -946,7 +1121,7 @@ local function run(map, from, to, waterWalking, costOnly)
 
 		-- Abstract A* from START to GOAL through the entrance graph.
 		local function world(id)
-			local k, lc = floor(id / 4096), st.ncell[id]
+			local k, lc = floor(id / 4096), metadata(st, id)
 			return x0 + (floor(k / st.ny) * C + floor(lc / C) + 0.5) * cs, y0 + ((k % st.ny) * C + lc % C + 0.5) * cs
 		end
 		-- Rounded graph edges and snapping must not let the heuristic overstate the remaining cost.
@@ -989,7 +1164,7 @@ local function run(map, from, to, waterWalking, costOnly)
 					relax(GOAL, gu + target[u], u)
 				end
 				nodesOf(st, floor(u / 4096))
-				local adj = st.nadj[u]
+				local adj = adjacent(st, u)
 				for e = 1, #adj, 3 do
 					local v = adj[e]
 					if aclosed[v] ~= gen then
@@ -1200,8 +1375,8 @@ local function runMany(map, from, targets, waterWalking, reverse, job)
 		for i, edges in pairs(ends) do
 			for id, cost in pairs(edges) do
 				links[id] = links[id] or {}
-				local adjacent = links[id]
-				adjacent[#adjacent + 1], adjacent[#adjacent + 2] = -i, cost
+				local joined = links[id]
+				joined[#joined + 1], joined[#joined + 2] = -i, cost
 			end
 		end
 	end
@@ -1225,12 +1400,12 @@ local function runMany(map, from, targets, waterWalking, reverse, job)
 			else
 				local k = floor(u / 4096)
 				prepare(k)
-				local ends = links[u] or {}
-				for i = 1, #ends, 2 do
+				local ends = links[u]
+				for i = 1, ends and #ends or 0, 2 do
 					relax(ends[i], dist[u] + ends[i + 1])
 				end
 				nodesOf(st, k)
-				local adj = st.nadj[u]
+				local adj = adjacent(st, u)
 				for e = 1, #adj, 3 do
 					local v = adj[e]
 					if not closed[v] then
@@ -1257,13 +1432,15 @@ end
 -- SNAP cells and then move SNAP more off a ledge; each nonzero grid step is at least cs before rounding.
 -- This bound is in running yards for both water modes, before the planner divides by walkSpeed.
 function Path.LowerBound(map, from, to)
-	local st = State(map)
-	if not st then
+	local D = ShortestPathForeverPathData and ShortestPathForeverPathData[map]
+	-- Unloaded maps need no synchronous addon load just to publish an admissible preview.
+	if not D then
 		return 0
 	end
+	local cs = TILE / D.cells
 	local dx, dy = abs(from.x - to.x), abs(from.y - to.y)
 	local gap = dx > dy and dx + (SQRT2 - 1) * dy or dy + (SQRT2 - 1) * dx
-	return max(0, gap - (4 * SNAP + 1) * SQRT2 * st.cs) * max(0, 1 - 0.5 / st.cs)
+	return max(0, gap - (4 * SNAP + 1) * SQRT2 * cs) * max(0, 1 - 0.5 / cs)
 end
 
 function Path.ReuseMany(job, point)
@@ -1280,6 +1457,13 @@ function Path.ReuseMany(job, point)
 end
 
 local function start(job)
+	if job.notify then
+		local owner = job.owner
+		if not owner.cancelled then
+			job.notify(job.points, job.cost, owner)
+		end
+		return
+	end
 	expansions = 0
 	if job.targets then
 		return runMany(job.map, job.from, job.targets, job.waterWalking, job.reverse, job)
@@ -1287,8 +1471,13 @@ local function start(job)
 	return run(job.map, job.from, job.to, job.waterWalking, job.costOnly)
 end
 
+local spare
 local function scratch(saved)
 	local previous = { hk, hv, hn, trees, ag, apar, astamp, aclosed, agen }
+	if not saved and spare then
+		saved, spare = spare, nil
+		saved[3] = 0
+	end
 	if saved then
 		hk, hv, hn, trees = saved[1], saved[2], saved[3], saved[4]
 		ag, apar, astamp, aclosed, agen = saved[5], saved[6], saved[7], saved[8], saved[9]
@@ -1329,6 +1518,20 @@ local queue = {}
 local scheduled = false
 local pump
 
+local function notify(job, callback, points, cost)
+	if callback then
+		table.insert(queue, 1, {
+			co = coroutine.create(start),
+			notify = callback,
+			owner = job,
+			points = points,
+			cost = cost,
+			frames = 0,
+			cpu = 0,
+		})
+	end
+end
+
 local function schedule()
 	if not scheduled and #queue > 0 then
 		scheduled = true
@@ -1345,7 +1548,7 @@ pump = function()
 			break
 		end
 		local t0 = clock()
-		deadline, ops = math.min(finish, t0 + (#queue > 0 and Path.budget / 2 or Path.budget)), 0
+		deadline, ops = math.min(finish, t0 + (not job.notify and #queue > 0 and Path.budget / 2 or Path.budget)), 0
 		expansions = job.expansions or 0
 		local saved = scratch(job.scratch)
 		local ok, points, cost = coroutine.resume(job.co, job)
@@ -1355,21 +1558,41 @@ pump = function()
 		job.cpu = job.cpu + clock() - t0
 		deadline = huge
 		if not ok or coroutine.status(job.co) == "dead" then
-			job.done, job.scratch = true, nil
+			if not job.targets and not job.notify then
+				spare = job.scratch
+			end
+			job.done, job.scratch, job.co = true, nil, nil
 			if not ok then
 				geterrorhandler()(points)
 				points, cost = nil, "error"
 			end
 			if not job.cancelled then
-				job.callback(points, cost, job)
+				notify(job, job.callback, points, cost)
 			end
 		else
-			queue[#queue + 1] = job
+			if points == "load" then
+				finish = 0
+			end
+			if job.notify then
+				table.insert(queue, 1, job)
+			else
+				queue[#queue + 1] = job
+			end
 			if job.progress then
-				job.progress(job.costs, nil, job)
+				notify(job, job.progress, job.costs)
 			end
 		end
 	until clock() >= finish
+	if #queue == 0 then
+		-- Endpoint frontiers and cost vectors survive; the geometry grids are cheap to recover.
+		for _, st in pairs(states) do
+			for k in pairs(st.used) do
+				evict(st, k)
+			end
+		end
+		spare = nil
+		trimGraphs()
+	end
 	schedule()
 end
 
@@ -1436,10 +1659,10 @@ end
 -- Paused batches retain their settled costs and frontier for later replans, without consuming frames.
 function Path.Pause(job)
 	job.paused = true
-	for i, queued in ipairs(queue) do
-		if queued == job then
+	for i = #queue, 1, -1 do
+		local queued = queue[i]
+		if queued == job or queued.owner == job then
 			table.remove(queue, i)
-			return
 		end
 	end
 end
@@ -1454,10 +1677,17 @@ end
 
 function Path.Cancel(job)
 	Path.Pause(job)
-	job.cancelled, job.scratch = true, nil
+	job.cancelled, job.scratch, job.co = true, nil, nil
 end
 
 -- The walkable height at a global cell nearest height h, within ZTOL.
 function Path.HasData(map)
-	return Data(map) ~= nil
+	if ShortestPathForeverPathData and ShortestPathForeverPathData[map] then
+		return true
+	end
+	return not tried[map]
+			and C_AddOns
+			and C_AddOns.DoesAddOnExist
+			and C_AddOns.DoesAddOnExist("ShortestPathForever_Nav" .. map)
+		or false
 end

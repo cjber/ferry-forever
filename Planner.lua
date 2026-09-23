@@ -6,6 +6,12 @@ ns.Planner = Planner
 
 local BOARDING = 3000
 
+local function checkpoint()
+	if ns.Path and ns.Path.Checkpoint then
+		ns.Path.Checkpoint()
+	end
+end
+
 local function QuestPointValid(point)
 	return point
 		and type(point.uiMapID) == "number"
@@ -219,39 +225,73 @@ end
 -- rule depends on the path taken, so keeping just one arrival per travel mode can discard the fastest route.
 local function Revisits(labels, current, target)
 	while current do
-		local label = labels[current]
-		if label.node == target then
+		if labels.node[current] == target then
 			return true
 		end
-		current = label.parent
+		current = labels.parent[current]
 	end
 	return false
 end
 
 local function Subset(labels, first, second, target)
 	while first do
-		local label = labels[first]
-		if label.node ~= target and not Revisits(labels, second, label.node) then
+		local node = labels.node[first]
+		if node ~= target and not Revisits(labels, second, node) then
 			return false
 		end
-		first = label.parent
+		first = labels.parent[first]
 	end
 	return true
 end
 
+-- Only callers with immutable data tables opt in; replacing data or advancing revision rebuilds topology.
+-- Taxi discovery is read each plan because the client mutates its known-node set in place.
+local CACHE_KEYS = {
+	"docks",
+	"routes",
+	"taxiNodes",
+	"taxiPaths",
+	"portals",
+	"landmasses",
+	"baked",
+	"faction",
+	"waterWalking",
+	"walkSpeed",
+	"revision",
+}
+
 function Planner.Plan(options)
-	local nodes, edges, masses, walkIndex = {}, {}, {}, {}
+	local cache = options.cache
+	local topology = cache and cache.topology
+	if topology then
+		for _, key in ipairs(CACHE_KEYS) do
+			if topology.options[key] ~= options[key] then
+				topology = nil
+				break
+			end
+		end
+	end
+	local nodes, edges, masses = {}, {}, {}
+	local docks, taxis, portals = {}, {}, {}
+	if topology then
+		nodes, edges, masses = topology.nodes, topology.edges, topology.masses
+		docks, taxis = topology.docks, topology.taxis
+		for index, adjacent in ipairs(edges) do
+			for i = #adjacent, topology.counts[index] + 1, -1 do
+				adjacent[i] = nil
+			end
+		end
+	end
+	local walkIndex = {}
 	for _, walk in ipairs(options.walks or {}) do
 		local from, to = PointKey(walk.from), PointKey(walk.to)
 		walkIndex[from] = walkIndex[from] or {}
 		local previous = walkIndex[from][to]
-		-- Co-located docks and taxi nodes share a physical endpoint. An unresolved alias must not
-		-- replace an exact cost, while the latest exact Remaining() measurement still wins.
+		-- An unresolved alias must not replace an exact measurement of the same physical endpoint.
 		if not previous or previous.estimated or not walk.estimated then
 			walkIndex[from][to] = walk
 		end
 	end
-	local docks, taxis, portals = {}, {}, {}
 	local speed = options.walkSpeed or 7
 	assert(speed > 0, "walkSpeed must be positive")
 
@@ -270,53 +310,119 @@ function Planner.Plan(options)
 		edges[from][#edges[from] + 1] = edge
 	end
 
-	local start, goal = Add("start", nil, options.from), Add("goal", nil, options.to)
-	for _, place in ipairs(Planner.Places(options)) do
-		local index = Add(place.kind, place.id, place)
-		if place.kind == "dock" then
-			docks[place.id] = index
-		elseif place.kind == "taxi" then
-			taxis[place.id] = index
-			nodes[index].undiscovered = options.taxiKnown ~= nil and not options.taxiKnown[place.id]
-		else
-			portals[place.id] = index
+	local start, goal = 1, 2
+	if not topology then
+		Add("start", nil, options.from)
+		Add("goal", nil, options.to)
+		for _, place in ipairs(Planner.Places(options)) do
+			local index = Add(place.kind, place.id, place)
+			if place.kind == "dock" then
+				docks[place.id] = index
+			elseif place.kind == "taxi" then
+				taxis[place.id] = index
+				nodes[index].undiscovered = options.taxiKnown ~= nil and not options.taxiKnown[place.id]
+			else
+				portals[place.id] = index
+			end
 		end
-	end
-	for id, portal in ipairs(options.portals or {}) do
-		local from, to = portals[id * 2 - 1], portals[id * 2]
-		if from and to then
-			Edge(from, to, { mode = portal.kind, duration = portal.seconds * 1000 })
+		for id, portal in ipairs(options.portals or {}) do
+			local from, to = portals[id * 2 - 1], portals[id * 2]
+			if from and to then
+				Edge(from, to, { mode = portal.kind, duration = portal.seconds * 1000 })
+			end
 		end
-	end
-	for _, path in ipairs(options.taxiPaths or {}) do
-		if taxis[path.from] and taxis[path.to] then
-			Edge(taxis[path.from], taxis[path.to], {
-				mode = "flight",
-				path = path,
-				duration = path.seconds * 1000,
-				estimated = path.estimated,
-			})
+		for _, path in ipairs(options.taxiPaths or {}) do
+			if taxis[path.from] and taxis[path.to] then
+				Edge(taxis[path.from], taxis[path.to], {
+					mode = "flight",
+					path = path,
+					duration = path.seconds * 1000,
+					estimated = path.estimated,
+				})
+			end
 		end
-	end
-	for _, id in ipairs(Keys(options.routes or {})) do
-		local route = options.routes[id]
-		for index, stop in ipairs(route.stops) do
-			if docks[stop.dock] then
-				for offset = 1, #route.stops - 1 do
-					local onward = route.stops[(index + offset - 1) % #route.stops + 1]
-					if docks[onward.dock] and onward.dock ~= stop.dock then
-						Edge(docks[stop.dock], docks[onward.dock], {
-							mode = route.kind,
-							route = id,
-							stop = stop,
-							alighting = onward,
-							duration = Model.RideTime(route, stop, onward),
-						})
+		for _, id in ipairs(Keys(options.routes or {})) do
+			local route = options.routes[id]
+			for index, stop in ipairs(route.stops) do
+				if docks[stop.dock] then
+					for offset = 1, #route.stops - 1 do
+						local onward = route.stops[(index + offset - 1) % #route.stops + 1]
+						if docks[onward.dock] and onward.dock ~= stop.dock then
+							Edge(docks[stop.dock], docks[onward.dock], {
+								mode = route.kind,
+								route = id,
+								stop = stop,
+								alighting = onward,
+								duration = Model.RideTime(route, stop, onward),
+							})
+						end
 					end
 				end
 			end
 		end
+		-- Fixed baked edges and the remaining dynamic pairs share one topology build.
+		local pairs = {}
+		for from = 1, #nodes do
+			checkpoint()
+			for to = from + 1, #nodes do
+				if from <= 2 then
+					pairs[#pairs + 1], pairs[#pairs + 2] = from, to
+				elseif nodes[from].map == nodes[to].map and masses[from] == masses[to] then
+					local baked, yards = BakedCost(options, nodes[from], nodes[to])
+					if not baked then
+						pairs[#pairs + 1], pairs[#pairs + 2] = from, to
+					else
+						if yards then
+							Edge(from, to, { mode = "walk", duration = yards / speed * 1000, yards = yards })
+						end
+						local _, reverse = BakedCost(options, nodes[to], nodes[from])
+						if reverse then
+							Edge(to, from, { mode = "walk", duration = reverse / speed * 1000, yards = reverse })
+						end
+					end
+				end
+			end
+		end
+		local counts, saved = {}, {}
+		for i, adjacent in ipairs(edges) do
+			counts[i] = #adjacent
+		end
+		for _, key in ipairs(CACHE_KEYS) do
+			saved[key] = options[key]
+		end
+		topology = {
+			nodes = nodes,
+			edges = edges,
+			masses = masses,
+			docks = docks,
+			taxis = taxis,
+			counts = counts,
+			options = saved,
+			pairs = pairs,
+		}
+		if cache then
+			cache.topology = topology
+		end
+	else
+		-- Returned legs retain their endpoint objects; never move a previously drawn route in place.
+		for i = 1, 2 do
+			local point = i == 1 and options.from or options.to
+			nodes[i] = {
+				kind = i == 1 and "start" or "goal",
+				map = point.map,
+				x = point.x,
+				y = point.y,
+				z = point.z,
+				label = point.label,
+				pointKey = PointKey(point),
+			}
+			masses[i] = Planner.Landmass(point, options.landmasses or {})
+		end
 	end
+	for id, index in pairs(taxis) do
+		nodes[index].undiscovered = options.taxiKnown ~= nil and not options.taxiKnown[id]
+	end
+
 	local ride = options.ride
 	if ride and docks[ride.dock] and (options.routes or {})[ride.route] then
 		local route = options.routes[ride.route]
@@ -333,30 +439,25 @@ function Planner.Plan(options)
 			end
 		end
 	end
-	for from, a in ipairs(nodes) do
-		for to = from + 1, #nodes do
-			local b = nodes[to]
-			if a.map == b.map and masses[from] == masses[to] and not (ride and from == start) then
-				for direction = 1, 2 do
-					local first, last = direction == 1 and from or to, direction == 1 and to or from
-					local origin, destination = nodes[first], nodes[last]
-					local baked, yards, estimated = BakedCost(options, origin, destination)
-					if not baked then
-						yards, estimated = WalkCost(options, origin, destination, walkIndex)
-					end
-					if yards and first ~= goal and last ~= start then
-						Edge(first, last, {
-							mode = "walk",
-							duration = yards / speed * 1000,
-							yards = yards,
-							estimated = estimated,
-						})
-					end
+	for pair = 1, #topology.pairs, 2 do
+		local from, to = topology.pairs[pair], topology.pairs[pair + 1]
+		local a, b = nodes[from], nodes[to]
+		if a.map == b.map and masses[from] == masses[to] and not (ride and from == start) then
+			for direction = 1, 2 do
+				local first, last = direction == 1 and from or to, direction == 1 and to or from
+				local origin, destination = nodes[first], nodes[last]
+				local yards, estimated = WalkCost(options, origin, destination, walkIndex)
+				if yards and first ~= goal and last ~= start then
+					Edge(first, last, {
+						mode = "walk",
+						duration = yards / speed * 1000,
+						yards = yards,
+						estimated = estimated,
+					})
 				end
 			end
 		end
 	end
-
 	-- Keep arrivals on foot separate from transit and flight. Splitting a continuous walk at arbitrary places
 	-- invents fresh straight-line shortcuts around a measured detour (or a blocked walk), so it must be one search.
 	-- Zero-length transfers still connect co-located places and break a flight for boarding costs.
@@ -376,6 +477,7 @@ function Planner.Plan(options)
 		end
 	end
 	for _ = 1, count do
+		checkpoint()
 		local current, best
 		for node, cost in pairs(lower) do
 			if not done[node] and (not best or cost < best) then
@@ -394,14 +496,33 @@ function Planner.Plan(options)
 			end
 		end
 	end
-	local labels =
-		{ { node = start, state = start, time = options.now, key = options.now + (lower[start] or math.huge) } }
+	local labels = topology.labels
+		or {
+			node = {},
+			state = {},
+			time = {},
+			key = {},
+			parent = {},
+			edge = {},
+			depart = {},
+			wait = {},
+			estimated = {},
+			discarded = {},
+		}
+	for i = 1, labels.count or 0 do
+		labels.discarded[i], labels.edge[i] = nil, nil
+	end
+	labels.node[1], labels.state[1], labels.time[1] = start, start, options.now
+	labels.key[1], labels.parent[1] = options.now + (lower[start] or math.huge), nil
+	topology.labels = labels
+	local labelCount = 1
+	labels.count = 1
 	local states, heap = { [start] = { 1 } }, { 1 }
 	local function push(id)
 		local at = #heap + 1
 		while at > 1 do
 			local parent = math.floor(at / 2)
-			if labels[heap[parent]].key <= labels[id].key then
+			if labels.key[heap[parent]] <= labels.key[id] then
 				break
 			end
 			heap[at], at = heap[parent], parent
@@ -414,10 +535,10 @@ function Planner.Plan(options)
 			local at = 1
 			while at * 2 <= #heap do
 				local child = at * 2
-				if child < #heap and labels[heap[child + 1]].key < labels[heap[child]].key then
+				if child < #heap and labels.key[heap[child + 1]] < labels.key[heap[child]] then
 					child = child + 1
 				end
-				if labels[last].key <= labels[heap[child]].key then
+				if labels.key[last] <= labels.key[heap[child]] then
 					break
 				end
 				heap[at], at = heap[child], child
@@ -428,15 +549,16 @@ function Planner.Plan(options)
 	end
 	local finishAt
 	while #heap > 0 do
+		checkpoint()
 		local current = pop()
-		local label = labels[current]
-		if not label.discarded then
-			local node, earliest = label.node, label.time
+		if not labels.discarded[current] then
+			local node, earliest = labels.node[current], labels.time[current]
+			local state = labels.state[current]
 			if node == goal then
 				finishAt = current
 				break
 			end
-			local flying, walked = label.state > count and label.state <= count * 2, label.state > count * 2
+			local flying, walked = state > count and state <= count * 2, state > count * 2
 			for _, edge in ipairs(edges[node]) do
 				-- Unknown nodes may be learned on foot or crossed in flight, but never used to land.
 				local canLeave = not flying or not nodes[node].undiscovered or edge.mode == "flight"
@@ -466,40 +588,29 @@ function Planner.Plan(options)
 					local peers = states[target] or {}
 					local dominated = false
 					for _, peer in ipairs(peers) do
-						local other = labels[peer]
-						if not other.discarded and other.time <= finish and Subset(labels, peer, current, edge.to) then
+						if
+							not labels.discarded[peer]
+							and labels.time[peer] <= finish
+							and Subset(labels, peer, current, edge.to)
+						then
 							dominated = true
 							break
 						end
 					end
 					if not dominated then
-						local id = #labels + 1
-						labels[id] = {
-							node = edge.to,
-							state = target,
-							time = finish,
-							key = finish + (lower[edge.to] or math.huge),
-							parent = current,
-							leg = {
-								mode = edge.mode,
-								from = nodes[node],
-								to = nodes[edge.to],
-								depart = depart,
-								arrive = finish,
-								wait = wait,
-								estimated = estimated,
-								route = edge.route,
-								aboard = edge.aboard,
-								boarding = edge.stop,
-								alighting = edge.alighting,
-								hops = edge.path and { edge.path } or nil,
-								yards = edge.yards,
-							},
-						}
+						labelCount = labelCount + 1
+						labels.count = labelCount
+						local id = labelCount
+						labels.node[id], labels.state[id], labels.time[id] = edge.to, target, finish
+						labels.key[id], labels.parent[id], labels.edge[id] = finish + lower[edge.to], current, edge
+						labels.depart[id], labels.wait[id], labels.estimated[id] = depart, wait, estimated
 						for _, peer in ipairs(peers) do
-							local other = labels[peer]
-							if not other.discarded and finish <= other.time and Subset(labels, id, peer) then
-								other.discarded = true
+							if
+								not labels.discarded[peer]
+								and finish <= labels.time[peer]
+								and Subset(labels, id, peer)
+							then
+								labels.discarded[peer] = true
 							end
 						end
 						states[target] = peers
@@ -510,13 +621,29 @@ function Planner.Plan(options)
 			end
 		end
 	end
+	labels.count = labelCount
 	if not finishAt then
 		return nil
 	end
 	local reversed, legs, current = {}, {}, finishAt
 	local needsStart, needsGoal, pendingWalks = false, false, {}
-	while labels[current].parent do
-		local leg = labels[current].leg
+	while labels.parent[current] do
+		local edge = labels.edge[current]
+		local leg = {
+			mode = edge.mode,
+			from = nodes[labels.node[labels.parent[current]]],
+			to = nodes[labels.node[current]],
+			depart = labels.depart[current],
+			arrive = labels.time[current],
+			wait = labels.wait[current],
+			estimated = labels.estimated[current],
+			route = edge.route,
+			aboard = edge.aboard,
+			boarding = edge.stop,
+			alighting = edge.alighting,
+			hops = edge.path and { edge.path } or nil,
+			yards = edge.yards,
+		}
 		-- Zero-cost lower bounds may disappear from the displayed steps, but still need proof.
 		if leg.mode == "walk" and leg.estimated then
 			if leg.from.kind == "start" or leg.to.kind == "goal" then
@@ -526,7 +653,7 @@ function Planner.Plan(options)
 			needsGoal = needsGoal or (leg.to.kind == "goal" and leg.from.kind ~= "start")
 		end
 		reversed[#reversed + 1] = leg
-		current = labels[current].parent
+		current = labels.parent[current]
 	end
 	for index = #reversed, 1, -1 do
 		local leg, last = reversed[index], legs[#legs]
@@ -541,7 +668,7 @@ function Planner.Plan(options)
 		end
 	end
 	return {
-		arrive = labels[finishAt].time,
+		arrive = labels.time[finishAt],
 		legs = legs,
 		needsStart = needsStart,
 		needsGoal = needsGoal,

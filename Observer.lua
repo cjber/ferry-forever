@@ -19,7 +19,7 @@ local TRACE_LIMIT = 1500
 
 -- { samples = { [route] = {...} }, count, last = ms of the latest moving sample, announced = route }
 local ride
-local previous
+local previous = {}
 local lastDebug = 0
 
 local function Fits()
@@ -54,11 +54,11 @@ end
 -- Speed since the last sample in yd/s, height included (0 across a map change).
 local function Speed(now, x, y, z, map)
 	local speed = 0
-	if previous and previous.map == map and now > previous.now then
+	if previous.map == map and now > previous.now then
 		local distance = math.sqrt((x - previous.x) ^ 2 + (y - previous.y) ^ 2 + (z - previous.z) ^ 2)
 		speed = distance * 1000 / (now - previous.now)
 	end
-	previous = { now = now, x = x, y = y, z = z, map = map }
+	previous.now, previous.x, previous.y, previous.z, previous.map = now, x, y, z, map
 	return speed
 end
 
@@ -67,15 +67,18 @@ function ns.CurrentRide()
 	return ride and ride.announced
 end
 
+local phaseScratch = {}
+
 local function Sample()
 	local now = ns.NowMs()
 	local x, y, z, map = UnitPosition("player")
 	local speed = x and not UnitOnTaxi("player") and Speed(now, x, y, z or 0, map) or 0
 	if speed > 0 then
 		for routeID, route in pairs(ns.Routes) do
-			local phases = speed >= (route.fit and route.fit.speed or MIN_SPEED) and Model.Phases(route, map, x, y, z)
-				or {}
-			if #phases > 0 then
+			local phases = speed >= (route.fit and route.fit.speed or MIN_SPEED)
+				and Model.Phases(route, map, x, y, z, phaseScratch)
+			if phases and #phases > 0 then
+				phaseScratch = {}
 				ride = ride or { samples = {}, count = 0 }
 				ride.samples[routeID] = ride.samples[routeID] or {}
 				table.insert(ride.samples[routeID], { now = now, phases = phases })

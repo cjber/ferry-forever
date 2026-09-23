@@ -20,6 +20,7 @@ local COLORS = {
 }
 local provider, goal, result, paths, minimap
 local transportProvider, dockHover, highlightedRoutes
+local geometryRevision = 0
 
 -- Each map's world corners: { continent, x and y at the top left, x and y at the bottom right }.
 local corners = {}
@@ -288,6 +289,8 @@ end
 function ShortestPathForeverRoutePinMixin:Draw()
 	local map = self:GetMap()
 	local canvas = map:GetCanvas()
+	self.drawMap, self.drawWidth, self.drawHeight, self.drawScale =
+		map:GetMapID(), canvas:GetWidth(), canvas:GetHeight(), self:GetEffectiveScale()
 	self:SetSize(canvas:GetWidth(), canvas:GetHeight())
 	self:SetPosition(0.5, 0.5)
 	self.used = 0
@@ -337,7 +340,30 @@ function ShortestPathForeverRoutePinMixin:OnReleased()
 end
 
 function ShortestPathForeverRoutePinMixin:OnAcquired(geometry)
+	local same = self.hits and self.paths and #self.paths == #geometry
+	if same then
+		for i, path in ipairs(geometry) do
+			if self.paths[i] ~= path then
+				same = false
+				break
+			end
+		end
+	end
 	self.paths = geometry
+	local map, canvas = self:GetMap(), self:GetMap():GetCanvas()
+	local width, height, scale = canvas:GetWidth(), canvas:GetHeight(), self:GetEffectiveScale()
+	if
+		same
+		and self.drawMap == map:GetMapID()
+		and self.drawWidth == width
+		and self.drawHeight == height
+		and self.drawScale == scale
+	then
+		-- MapCanvas's pool clears anchors on release, even when the strokes remain reusable.
+		self:SetPosition(0.5, 0.5)
+		self:UpdateAlpha()
+		return
+	end
 	self:Draw()
 end
 
@@ -439,6 +465,7 @@ function ShortestPathForeverTransportPinMixin:OnReleased()
 end
 
 local TransportProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
+local transportGeometry = {}
 
 function TransportProviderMixin:RemoveAllData()
 	self:GetMap():RemoveAllPinsByTemplate(TRANSPORT_TEMPLATE)
@@ -460,18 +487,27 @@ function TransportProviderMixin:RefreshAllData()
 	table.sort(ids)
 	for _, id in ipairs(ids) do
 		local route = ns.Routes[id]
-		-- Dock-to-dock legs preserve intermediate calls and give overview maps the actual crossing endpoints.
-		for index, stop in ipairs(route.stops) do
-			local onward = route.stops[index % #route.stops + 1]
-			local leg = {
-				mode = route.kind,
-				route = id,
-				from = ns.Docks[stop.dock],
-				to = ns.Docks[onward.dock],
-				boarding = stop,
-				alighting = onward,
-			}
-			geometry[#geometry + 1] = { mode = route.kind, route = id, points = ns.Planner.LegPoints(leg, ns.Routes) }
+		local cached = transportGeometry[id]
+		if not cached or cached.route ~= route or cached.docks ~= ns.Docks then
+			cached = { route = route, docks = ns.Docks, paths = {} }
+			transportGeometry[id] = cached
+			-- Dock-to-dock legs preserve intermediate calls and give overview maps the actual crossing endpoints.
+			for index, stop in ipairs(route.stops) do
+				local onward = route.stops[index % #route.stops + 1]
+				local leg = {
+					mode = route.kind,
+					route = id,
+					from = ns.Docks[stop.dock],
+					to = ns.Docks[onward.dock],
+					boarding = stop,
+					alighting = onward,
+				}
+				cached.paths[#cached.paths + 1] =
+					{ mode = route.kind, route = id, points = ns.Planner.LegPoints(leg, ns.Routes) }
+			end
+		end
+		for _, path in ipairs(cached.paths) do
+			geometry[#geometry + 1] = path
 		end
 	end
 	map:AcquirePin(TRANSPORT_TEMPLATE, geometry)
@@ -560,18 +596,34 @@ function ns.MinimapPoint()
 end
 
 local function DrawMinimap(self)
-	self.used = 0
-	self.loading.used = 0
-	self.loading:SetSize(self:GetWidth(), self:GetHeight())
 	local x, y, _, map = UnitPosition("player")
 	local radius, facing = MinimapView()
 	local width, height = self:GetWidth(), self:GetHeight()
 	local scale = self:GetEffectiveScale()
+	local square = GetMinimapShape and GetMinimapShape() == "SQUARE"
+	if
+		self.lastX == x
+		and self.lastY == y
+		and self.lastMap == map
+		and self.lastRadius == radius
+		and self.lastFacing == facing
+		and self.lastWidth == width
+		and self.lastHeight == height
+		and self.lastScale == scale
+		and self.lastSquare == square
+		and self.revision == geometryRevision
+	then
+		return
+	end
+	self.lastX, self.lastY, self.lastMap, self.lastRadius, self.lastFacing = x, y, map, radius, facing
+	self.lastWidth, self.lastHeight, self.lastScale, self.lastSquare = width, height, scale, square
+	self.revision = geometryRevision
+	self.used, self.loading.used = 0, 0
+	self.loading:SetSize(width, height)
 	local border = UNDER_THICKNESS / scale
 	if x and facing and radius and radius > 0 and width > border and height > border then
 		local cosine, sine = math.cos(facing), math.sin(facing)
 		-- GetMinimapShape is an optional addon convention (HBD-Pins:215), not a Blizzard global.
-		local square = GetMinimapShape and GetMinimapShape() == "SQUARE"
 		local inset = 1 - border / math.min(width, height)
 		for _, path in ipairs(paths) do
 			local owner = IsLoading(path) and self.loading or self
@@ -621,6 +673,7 @@ end
 
 function ns.SetJourneyRoute(destination, route)
 	goal, result = destination, route
+	geometryRevision = geometryRevision + 1
 	paths = {}
 	for _, leg in ipairs(route and route.legs or {}) do
 		paths[#paths + 1] = {

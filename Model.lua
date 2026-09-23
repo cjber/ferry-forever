@@ -56,8 +56,13 @@ end
 
 -- Every phase at which the route passes within NEAR yards of (map, x, y) while moving. A docked boat is
 -- still for a minute, so a stop's own point yields no phase.
-function Model.Phases(route, map, x, y, z)
-	local frames, phases = route.frames, {}
+function Model.Phases(route, map, x, y, z, scratch)
+	local frames, phases = route.frames, scratch
+	if phases then
+		for i = #phases, 1, -1 do
+			phases[i] = nil
+		end
+	end
 	-- Adjacent lift shafts can run different periods; a boat-sized radius confuses their cars.
 	local near = route.kind == "lift" and 10 or NEAR
 	for i = 1, #frames - 1 do
@@ -74,11 +79,12 @@ function Model.Phases(route, map, x, y, z)
 			local px, py = a[4] + t * dx - x, a[5] + t * dy - y
 			local pz = t * dz - oz
 			if px * px + py * py + pz * pz <= near * near and t > 0 and t < 1 then
+				phases = phases or {}
 				phases[#phases + 1] = a[2] + t * (b[1] - a[2])
 			end
 		end
 	end
-	return phases
+	return phases or {}
 end
 
 -- The epoch most samples of one ride agree on, and how many agree (nil, support when too few do). Each

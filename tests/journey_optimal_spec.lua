@@ -147,3 +147,20 @@ drain()
 assert(#batches == count + 3, "clearing the UI must not discard destination costs")
 ns.ClearJourney()
 print("journey cache: repeated goal, stationary refresh, same-cell movement and water invalidation: ok")
+
+-- Rounded baked walks may strengthen bounds at a fixed endpoint, including clicks with no height.
+-- They must never replace its exact forward/reverse cost or change the proved optimum.
+for _, pair in ipairs({ { 26, 39 }, { 26, 67 }, { 25, 22 }, { 6, 7 } }) do
+	for _, water in ipairs({ false, true }) do
+		ns.faction, ns.water = pair[1] == 25 and "Horde" or "Alliance", water
+		driver.begin(ns.TaxiNodes[pair[1]], ns.TaxiNodes[pair[2]])
+		drain()
+		local bounded, exact = driver.shown(), full(options)
+		assert(
+			bounded and exact and math.abs(bounded.arrive - exact.arrive) < 1e-5,
+			"baked endpoint bounds must preserve the full-search optimum"
+		)
+		ns.ClearJourney()
+	end
+end
+print("baked endpoint bounds: four journeys, both water modes, exact full-search costs: ok")
