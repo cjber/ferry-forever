@@ -4,21 +4,23 @@ on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
+permissions: {}
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # the packager creates the GitHub release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
       # The release notes are this version's CHANGELOG entry, not the whole file;
       # a tag without one fails here rather than shipping empty notes.
       - name: Release notes
         run: python3 tools/changelog.py "$GITHUB_REF_NAME" > .release-notes.md
-      - uses: BigWigsMods/packager@v2
+      - uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}

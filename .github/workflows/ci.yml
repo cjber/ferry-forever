@@ -5,16 +5,30 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - run: sudo apt-get update && sudo apt-get install -y luajit lua-check
       - run: luacheck .
       - run: for spec in tests/*_spec.lua; do luajit "$spec" || exit 1; done
-      - uses: JohnnyMorganz/stylua-action@v4
+      - uses: JohnnyMorganz/stylua-action@479972f01e665acfcba96ada452c36608bdbbb5e # v4.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          version: latest
+          version: 2.5.2
           args: --check .
+
+  workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - run: pipx run --spec actionlint-py==1.7.12.25 actionlint
+      - run: pipx run zizmor==1.30.1 --offline .github/workflows
