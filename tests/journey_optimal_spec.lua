@@ -12,7 +12,7 @@ for _, file in ipairs({
 	driver.load(file)
 end
 for _, map in ipairs({ 0, 1, 2991 }) do
-	assert(loadfile("ShortestPathForever_Nav" .. map .. "/Nav" .. map .. ".lua"))()
+	assert(loadfile("tools/load_nav.lua"))(map)
 end
 ns.NowMs = function()
 	return 123456

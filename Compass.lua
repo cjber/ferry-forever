@@ -1,9 +1,33 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 local WIDTH, HEIGHT, POLL_EVERY = 360, 60, 0.1
 local TURN, EASE, SETTLED = 2 * math.pi, 18, 0.001
 local OVERLAP = 6
-local frame, OnUpdate
+---@class SPFCompassFrame : Frame, BackdropTemplate
+---@field ticks SPFCompassTick[]
+---@field markers SPFCompassMarker[]
+---@field Goal SPFCompassMarker
+---@field Stop SPFCompassMarker
+---@field Next SPFCompassMarker
+---@field Bend SPFCompassMarker
+---@field Center Texture
+---@field Distance FontString
+---@field updating? boolean
+---@field facing? number
+---@field rawFacing? number
+---@field x? number
+---@field y? number
+---@field map? number
+---@field distance? number
+---@field distanceOwner? SPFCompassMarker
+---@field dirty? boolean
+---@field idle number
+---@field ticker? FunctionContainer
+---@type SPFCompassFrame
+local frame
+local OnUpdate
+---@type table<string, AtlasInfo|false>
 local atlases = {
 	["Waypoint-MapPin-Tracked"] = false,
 	["Navigation-Tracked-Icon"] = false,
@@ -116,8 +140,8 @@ local function Render(x, y, map)
 	end
 	local bend = frame.Bend
 	local owner = bend.visible and bend or bend.replacement
-	if owner then
-		local point = bend.point
+	local point = bend.point
+	if owner and point then
 		local distance = math.floor(math.sqrt((point.x - x) ^ 2 + (point.y - y) ^ 2))
 		if distance ~= frame.distance then
 			frame.distance = distance
@@ -226,7 +250,9 @@ local function Create()
 	for atlas in pairs(atlases) do
 		atlases[atlas] = C_Texture.GetAtlasInfo(atlas) or false
 	end
-	frame = CreateFrame("Frame", "ShortestPathForeverCompass", UIParent, "BackdropTemplate")
+	local compass = CreateFrame("Frame", "ShortestPathForeverCompass", UIParent, "BackdropTemplate")
+	---@cast compass SPFCompassFrame
+	frame = compass
 	frame:SetSize(WIDTH, HEIGHT)
 	frame:SetPoint("TOP", 0, -42)
 	frame:SetFrameStrata("LOW")
@@ -245,6 +271,9 @@ local function Create()
 	frame.ticks = {}
 	local directions = { "N", "W", "S", "E" }
 	for index = 0, 23 do
+		---@class SPFCompassTick : Texture
+		---@field angle number
+		---@field label? FontString
 		local tick = frame:CreateTexture(nil, "ARTWORK")
 		tick.angle = index * TURN / 24
 		tick:SetColorTexture(0.72, 0.67, 0.55, 0.7)
@@ -261,6 +290,14 @@ local function Create()
 	frame.Center:SetSize(1, 6)
 	frame.Center:SetPoint("TOP", frame, "TOP", 0, -3)
 	for _, name in ipairs({ "Goal", "Stop", "Next", "Bend" }) do
+		---@class SPFCompassMarker : Texture
+		---@field size number
+		---@field icon? string
+		---@field target? SPFPoint|SPFPlace
+		---@field point? SPFPoint
+		---@field visible boolean
+		---@field replacement? SPFCompassMarker
+		---@field offset number
 		local marker = frame:CreateTexture(nil, "OVERLAY")
 		marker.size = name == "Next" and 12 or 18
 		SetIcon(marker, name == "Goal" and "Waypoint-MapPin-Tracked" or "Navigation-Tracked-Icon")

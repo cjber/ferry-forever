@@ -7,3 +7,4 @@
 ## IconTexture: Interface\AddOns\ShortestPathForever\media\Icon
 
 Nav1.lua
+Nav1_floor.lua

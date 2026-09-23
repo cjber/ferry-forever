@@ -1,0 +1,263 @@
+---@meta
+
+-- The TOC passes one namespace table to every module; reopening SPFNamespace joins their APIs.
+---@class SPFNamespace
+---@field Docks table<number, SPFDock>
+---@field Routes table<number, SPFRoute>
+---@field TaxiNodes table<number, SPFTaxiNode>
+---@field TaxiPaths SPFTaxiPath[]
+---@field Portals SPFPortal[]
+---@field Landmasses SPFLandmass[]
+---@field Walks table<number, table<string, (number|false)[]>>
+---@field WalkPlaces table<number, table<string, number[]>>
+---@field db SPFDatabase
+---@field charDB SPFCharacterDatabase
+
+---@alias SPFMode 'walk'|'flight'|'boat'|'zeppelin'|'lift'|'tram'|'portal'|'passage'
+---@alias SPFKind 'start'|'goal'|'dock'|'taxi'|'portal'
+---@class SPFPoint
+---@field map number
+---@field x number
+---@field y number
+---@field z? number
+---@field jump? number
+---@field label? string
+---@class SPFPlace : SPFPoint
+---@field kind SPFKind
+---@field id? number
+---@field pointKey? string
+---@field undiscovered? boolean
+---@class SPFDock : SPFPoint
+---@field pin? SPFPoint
+---@field site? string
+---@field name? string
+---@class SPFStop
+---@field dock number
+---@field arrive number
+---@field depart number
+---@class SPFRoute
+---@field kind SPFMode
+---@field site? string
+---@field faction? string
+---@field period number
+---@field stops SPFStop[]
+---@field frames number[][]
+---@field fit? {span?: number, samples?: number, speed?: number}
+---@class SPFTaxiNode : SPFPoint
+---@field name string
+---@field faction? string
+---@class SPFTaxiPath
+---@field from number
+---@field to number
+---@field seconds number
+---@field estimated? boolean
+---@field points number[]
+---@class SPFPortal
+---@field name string
+---@field kind SPFMode
+---@field from SPFPoint
+---@field to SPFPoint
+---@field faction? string
+---@field requires? string
+---@field seconds number
+---@class SPFLandmass
+---@field map number
+---@field minX number
+---@field maxX number
+---@field minY number
+---@field maxY number
+---@class SPFAnchor
+---@field epoch number
+---@field seen number
+---@field source? string
+---@class SPFSample
+---@field now number
+---@field phases number[]
+---@class SPFLocation
+---@field uiMap number
+---@field x number
+---@field y number
+---@field zone string
+---@class SPFDeparture
+---@field route number
+---@field kind SPFMode
+---@field to number[]
+---@field known boolean
+---@field docked? boolean
+---@field arriveIn? number
+---@field departIn? number
+---@field thenIn? number
+---@field seen? number
+---@field source? string
+---@class SPFRow
+---@field key number|string
+---@field text string
+---@field current? boolean
+---@field grey? boolean
+
+---@class SPFDatabase
+---@field pins? boolean
+---@field transit? boolean
+---@field portals? boolean
+---@field mapFlightMasters? boolean
+---@field mapRoutes? boolean
+---@field otherFaction? boolean
+---@field tracker? boolean
+---@field alerts? boolean
+---@field alertSound? boolean
+---@field journey? boolean
+---@field share? boolean
+---@field guideStops? boolean
+---@field compass? boolean
+---@field debug? boolean
+---@field anchors table<string, table<number, SPFAnchor>>
+---@field trace? (number|string)[][]
+---@field taxiLog? table<string, {seen: number, showsNodes: boolean, nodes: string[]}>
+---@class SPFCharacterDatabase
+---@field taxi table<number, boolean>
+---@field taxiVersion number
+---@field taxiScanned? boolean
+---@field guideWaypoint? {uiMapID: number, x: number, y: number}
+---@type SPFDatabase
+ShortestPathForeverDB = nil
+---@type SPFCharacterDatabase
+ShortestPathForeverCharDB = nil
+
+---@class SPFNavData
+---@field cells number
+---@field nx number
+---@field ny number
+---@field cx0 number
+---@field cy0 number
+---@field swim number
+---@field zstep number
+---@field grid string[]
+---@field graph string[]
+---@field height string[]
+---@field floor string[]
+---@type table<number, SPFNavData>
+ShortestPathForeverPathData = nil
+
+---@class SPFWalkPoints
+---@field [integer] SPFPoint
+---@field wet? number
+---@class SPFLeg
+---@field mode SPFMode
+---@field from SPFPlace
+---@field to SPFPlace
+---@field depart number
+---@field arrive number
+---@field wait number
+---@field estimated? boolean
+---@field route? number
+---@field aboard? boolean
+---@field boarding? SPFStop
+---@field alighting? SPFStop
+---@field hops? SPFTaxiPath[]
+---@field yards? number
+---@field walkPoints? SPFWalkPoints
+---@field walkError? string
+---@field wet? number
+---@field measured? boolean
+---@class SPFPlan
+---@field arrive number
+---@field legs SPFLeg[]
+---@field needsStart boolean
+---@field needsGoal boolean
+---@field pendingWalks SPFLeg[]
+---@field now? number
+---@field preview? boolean
+---@field prepared? boolean
+---@field waterMode? boolean
+---@class SPFWalkCost
+---@field from SPFPoint
+---@field to SPFPoint
+---@field cost number|false
+---@field estimated? boolean
+---@class SPFPlanOptions : SPFPlaceOptions
+---@field from SPFPoint
+---@field to SPFPoint
+---@field now number
+---@field walkSpeed? number
+---@field waterWalking? boolean
+---@field revision? number
+---@field ride? {route: number, dock: number, arrive: number}
+---@class SPFPlaceOptions
+---@field faction? string
+---@field docks? table<number, SPFDock>
+---@field routes? table<number, SPFRoute>
+---@field taxiNodes? table<number, SPFTaxiNode>
+---@field taxiPaths? SPFTaxiPath[]
+---@field taxiKnown? table<number, boolean>
+---@field portals? SPFPortal[]
+---@field landmasses? SPFLandmass[]
+---@field anchors? table<number, SPFAnchor>
+---@field baked? table<number, table<string, (number|false)[]>>
+---@field exactMaps? table<number, boolean>
+---@field walks? SPFWalkCost[]
+---@field cache? SPFPlannerCache
+---@class SPFPlannerCache
+---@field topology? SPFTopology
+---@class SPFTopology
+---@field nodes SPFPlace[]
+---@field edges SPFEdge[][]
+---@field masses table<number, number>
+---@field docks table<number, number>
+---@field taxis table<number, number>
+---@field counts number[]
+---@field options SPFPlanOptions
+---@field pairs number[]
+---@field labels? SPFLabels
+---@class SPFEdge
+---@field to number
+---@field mode SPFMode
+---@field duration number
+---@field route? number
+---@field stop? SPFStop
+---@field alighting? SPFStop
+---@field path? SPFTaxiPath
+---@field aboard? boolean
+---@field estimated? boolean
+---@field yards? number
+---@class SPFLabels
+---@field node number[]
+---@field state number[]
+---@field time number[]
+---@field key number[]
+---@field parent number[]
+---@field edge SPFEdge[]
+---@field depart number[]
+---@field wait number[]
+---@field estimated boolean[]
+---@field discarded boolean[]
+---@field count? number
+
+---@class SPFPathJob
+---@field map number
+---@field from SPFPoint
+---@field to? SPFPoint
+---@field targets? SPFPoint[]
+---@field waterWalking? boolean
+---@field reverse? boolean
+---@field costOnly? boolean
+---@field cancelled? boolean
+---@field paused? boolean
+---@field done? boolean
+---@field frames number
+---@field cpu number
+---@field expansions? number
+---@field sourceNode? number
+---@field sourceCluster? number
+---@field radius? number
+---@field revision? number
+---@field valid? boolean
+---@field costs? (number|false)[]
+---@field co? thread
+---@field callback? function
+---@field progress? function
+---@field scratch? table
+
+---@class SPFDistanceCache
+---@field result SPFPlan
+---@field version number
+---@field legs {points: SPFPoint[], after: number[], lengths: number[], yards: number, later: number}[]

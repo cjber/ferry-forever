@@ -20,6 +20,7 @@
 --   floor from the bottom; directions 0-7 are +x, -x, +y, -y, +x+y, +x-y, -x+y, -x-y.
 ShortestPathForeverPathData = ShortestPathForeverPathData or {}
 
+---@type SPFNavData
 -- stylua: ignore
 ShortestPathForeverPathData[0] = {
 	cx0 = -30,

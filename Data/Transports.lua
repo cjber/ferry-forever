@@ -2,6 +2,7 @@
 -- Source: TransportAnimation + classic-db gameobject spawns; milliseconds, world yards.
 -- DB2: https://wago.tools/db2 (CSV build 1.60.1.69913).
 -- DB: https://github.com/cmangos/classic-db/tree/22b51464f1625f6ef6275771de1f5466c6f5d19e
+---@type string, SPFNamespace
 local _, ns = ...
 
 -- TB pairs have 30000/30033 ms periods: each car is a separate route.

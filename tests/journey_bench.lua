@@ -19,7 +19,7 @@ for _, case in ipairs({
 		driver.load(file)
 	end
 	for _, map in ipairs({ 0, 1, 2991 }) do
-		assert(loadfile("ShortestPathForever_Nav" .. map .. "/Nav" .. map .. ".lua"))()
+		assert(loadfile("tools/load_nav.lua"))(map)
 	end
 	local fromName, toName = case[1]:match("^(.-) %-> (.+)$")
 	assert(ns.TaxiNodes[case[2]].name:find(fromName, 1, true), "wrong benchmark origin")

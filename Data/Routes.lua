@@ -2,6 +2,7 @@
 -- Source: wago.tools TaxiPathNode, wow_classic_beta 1.60.1.69913: taxi paths with stops. Timetable: the
 -- CMaNGOS mangos-classic transport model (TransportMgr::GenerateWaypoints) at 30 yd/s, 1 yd/s².
 -- Periods stretched onto the sniffed CMaNGOS classic-db periods (the new routes by the mean correction).
+---@type string, SPFNamespace
 local _, ns = ...
 
 -- [dock] = { map = continent, x = world x (north), y = world y (west) }

@@ -84,8 +84,8 @@ local ns = {}
 for _, name in ipairs({ "Data/Routes", "Data/Transports", "Data/Portals", "Data/Taxi", "Model", "Path", "Planner" }) do
 	assert(loadfile(name .. ".lua"))("ShortestPathForever", ns)
 end
-assert(loadfile("ShortestPathForever_Nav0/Nav0.lua"))()
-assert(loadfile("ShortestPathForever_Nav1/Nav1.lua"))()
+assert(loadfile("tools/load_nav.lua"))(0)
+assert(loadfile("tools/load_nav.lua"))(1)
 local function walk(map, a, b)
 	local points, why = ns.Path.FindSync(map, a, b)
 	assert(points, tostring(why))

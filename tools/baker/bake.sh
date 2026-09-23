@@ -76,4 +76,5 @@ for m in $MAPS; do
 
 Nav$m.lua
 TOC
+	python3 "$HERE/../pack_nav.py" "$addon/Nav$m.lua"
 done

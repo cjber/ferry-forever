@@ -1,4 +1,5 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 local Model = ns.Model
 local PREFIX = "ShortPath1"
@@ -114,6 +115,7 @@ local function SendSightings(anchors, chatTypes)
 	end
 end
 
+---@param routeID number
 function ns.Share(routeID)
 	local anchor = ns.FreshAnchors()[routeID]
 	if ns.db.share and anchor then
@@ -159,7 +161,7 @@ local function OnMessage(prefix, message, chatType, sender)
 		local wanted = requests[chatType] or {}
 		for routeID in message:gmatch("%d+") do
 			local id = tonumber(routeID)
-			if ns.Routes[id] then
+			if id and ns.Routes[id] then
 				wanted[id] = true
 			end
 		end

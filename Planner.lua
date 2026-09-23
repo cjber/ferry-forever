@@ -1,6 +1,8 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 local Model = ns.Model
+---@class SPFPlanner
 local Planner = {}
 ns.Planner = Planner
 
@@ -26,6 +28,12 @@ end
 
 -- Native POIs already describe the quest's current state. A completed quest prefers its
 -- destination POI (turn-in) over a next waypoint that may still describe the last objective.
+---@param questID number
+---@param title string?
+---@param complete boolean
+---@param uiMapID number?
+---@param pois QuestPOIMapInfo[]?
+---@param waypoint {uiMapID: number?, x: number?, y: number?}?
 function Planner.QuestDestination(questID, title, complete, uiMapID, pois, waypoint)
 	local destination
 	for _, poi in ipairs(pois or {}) do
@@ -38,7 +46,7 @@ function Planner.QuestDestination(questID, title, complete, uiMapID, pois, waypo
 			end
 		end
 	end
-	if QuestPointValid(waypoint) and (not complete or not destination) then
+	if waypoint and QuestPointValid(waypoint) and (not complete or not destination) then
 		destination = { uiMapID = waypoint.uiMapID, x = waypoint.x, y = waypoint.y }
 	end
 	if destination and title and title ~= "" then
@@ -48,11 +56,17 @@ function Planner.QuestDestination(questID, title, complete, uiMapID, pois, waypo
 end
 
 -- Preview geometry while a walking leg is still pending.
+---@param from SPFPoint
+---@param to SPFPoint
+---@return SPFWalkPoints
 function Planner.WalkPoints(from, to)
 	return { { map = from.map, x = from.x, y = from.y }, { map = to.map, x = to.x, y = to.y } }
 end
 
 -- World points in travel order; jump marks a teleport to the next point. Keep this free of map APIs.
+---@param leg SPFLeg
+---@param routes table<number, SPFRoute>
+---@return SPFWalkPoints
 function Planner.LegPoints(leg, routes)
 	if leg.mode == "walk" then
 		return leg.walkPoints or Planner.WalkPoints(leg.from, leg.to)
@@ -112,6 +126,9 @@ function Planner.LegPoints(leg, routes)
 	return points
 end
 
+---@param node SPFPoint
+---@param landmasses SPFLandmass[]
+---@return number?
 function Planner.Landmass(node, landmasses)
 	for index, land in ipairs(landmasses) do
 		if
@@ -190,6 +207,8 @@ end
 
 -- The same fixed places feed the planner and endpoint batches. Keeping their identities here
 -- prevents a new dock or portal from silently retaining an estimated start/goal edge.
+---@param options SPFPlaceOptions
+---@return SPFPlace[]
 function Planner.Places(options)
 	local places = {}
 	local function add(kind, id, point, label)
@@ -260,6 +279,8 @@ local CACHE_KEYS = {
 	"revision",
 }
 
+---@param options SPFPlanOptions
+---@return SPFPlan?
 function Planner.Plan(options)
 	local cache = options.cache
 	local topology = cache and cache.topology

@@ -1,5 +1,5 @@
 local ns = {}
-assert(loadfile("ShortestPathForever_Nav0/Nav0.lua"))()
+assert(loadfile("tools/load_nav.lua"))(0)
 assert(loadfile("Path.lua"))("ShortestPathForever", ns)
 local Path = ns.Path
 
@@ -149,7 +149,7 @@ assert(overCost < 550 and roundCost > overCost * 1.4, roundCost .. " " .. overCo
 
 -- The reported Darkshore route: reachable Felwood points go round the mountains; neighbouring map clicks can
 -- miss every walkable surface. Both outcomes must arrive through the sliced callback as well as FindSync.
-assert(loadfile("ShortestPathForever_Nav1/Nav1.lua"))()
+assert(loadfile("tools/load_nav.lua"))(1)
 local AUBERDINE = { x = 6341.38, y = 557.68, z = 16.29 }
 for _, target in ipairs({
 	{ x = 5068.4, y = -337.22 },

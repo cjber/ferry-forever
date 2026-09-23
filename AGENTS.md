@@ -10,6 +10,7 @@ addons, as one zip on a `v*` tag.
 stylua --check .
 ruff format --check . && ruff check .
 luacheck .
+tools/typecheck.sh                  # LuaLS 3.19.1 + multi-value lint; first run fetches pinned WoW types
 for s in tests/*_spec.lua; do luajit "$s" || exit 1; done
 luajit -joff tests/journey_bench.lua   # after touching the planner: frames stay under 3 ms
 ```
@@ -28,11 +29,15 @@ The same gate CI runs, plus actionlint, zizmor and gitleaks on the workflows and
 ## Rules
 
 - Lua 5.1 in the game's sandbox: no `require`. The client loads the files `ShortestPathForever.toc` lists, in
-  that order, each receiving `local addonName, ns = ...`; a new file goes in the TOC or never runs.
+  that order, each receiving `local addonName, ns = ...` (or `ns = select(2, ...)`); a new file goes in the TOC or never runs.
 - The specs are a headless harness with stubbed client APIs. Anything they cannot reach (frames,
   menus, tooltips, the tracker) is checked in game: list those checks in the PR as `/reload` tests
   for the user. Never drive the game client.
-- New globals go in both `.luacheckrc` and `.luarc.json`; the two lists must stay equal.
+- New runtime globals go in `.luacheckrc` and need real types: Ketho's pinned annotations, the defining
+  addon class, or `types/*.lua` for missing Forever APIs. No blanket globals/diagnostic allowlist.
+- LuaLS checks every TOC-loaded Lua file, including generated data and walking maps. Keep namespace and
+  frame types current; generated annotations belong in the generator. Intentional trailing `select(...)`
+  expansion needs `-- multi-value: <reason>`; otherwise use parentheses or a local.
 - Commits are signed (`git commit -S`) with the personal email.
 - Quality: load `.agents/skills/sift-project/SKILL.md` before cleanup, dead-code or refactoring
   work.

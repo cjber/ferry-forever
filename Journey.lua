@@ -1,4 +1,5 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 -- Shift-click the world map: the fastest way there from here, by foot, flight, boat, zeppelin, tram and portal,
 -- with the boats' live waits. Search candidates stay private until costs and geometry settle, with a grace
@@ -24,6 +25,17 @@ local plannerCache = {}
 local walkOrder, walkPending = {}, {}
 local WALK_CACHE_LIMIT = 64
 local progress = { index = 1 }
+---@class SPFJourneyDriver : Frame
+---@field elapsed number
+---@field progressElapsed number
+---@field riding? number
+---@field flying? boolean
+---@field drawAt? number
+---@field drawX? number
+---@field drawY? number
+---@field drawZ? number
+---@field drawMap? number
+---@type SPFJourneyDriver
 local driver
 local ARRIVAL = 15
 -- A lift's landings share a spot on the map; height tells the top from the bottom.
@@ -61,6 +73,7 @@ local function RefreshTracker()
 	ns.RefreshTracker()
 end
 
+---@return boolean
 function ns.HasJourney()
 	return goal ~= nil
 end
@@ -100,6 +113,8 @@ local function WaterWalking()
 		end
 	end
 	for _, id in ipairs(WATER_SPELLS) do
+		-- Forever still exposes IsPlayerSpell; Ketho marks the retail compatibility wrapper deprecated.
+		---@diagnostic disable-next-line: deprecated
 		if IsPlayerSpell(id) then
 			return true, id
 		end
@@ -395,6 +410,7 @@ local function UpdateProgress()
 	ns.ClearJourney()
 end
 
+---@return boolean
 function ns.IsJourneyGuided()
 	return guide ~= nil
 end
@@ -433,6 +449,7 @@ function ns.ShowJourneyMap()
 end
 
 -- Shared by the tracker and the goal pin, including on a fullscreen map.
+---@return string? title, SPFRow[]? rows, SPFPlan? plan, number? index, boolean? loading
 function ns.JourneyInfo()
 	if not goal then
 		return nil
@@ -764,7 +781,11 @@ FinishSearch = function()
 	local estimate = EstimateKept(planned and planned.now or ns.NowMs())
 	local same = SameJourney(planned, result)
 	local gain = estimate and planned and estimate.arrive - planned.arrive
-	local better = gain and gain >= SWITCH_GAIN and gain >= (estimate.arrive - planned.now) * SWITCH_SHARE
+	local better = estimate
+		and planned
+		and gain
+		and gain >= SWITCH_GAIN
+		and gain >= (estimate.arrive - planned.now) * SWITCH_SHARE
 	local valid = true
 	for _, leg in ipairs(planned and planned.legs or {}) do
 		if leg.walkError then
@@ -1211,6 +1232,8 @@ local function RefreshCosts(includeGoal, forced)
 	end
 end
 
+---@param self SPFJourneyDriver
+---@param elapsed number
 local function Update(self, elapsed)
 	if InCombatLockdown() then
 		return
@@ -1281,7 +1304,10 @@ local function Update(self, elapsed)
 			local leg = result and result.legs[progress.index]
 			local off = here and leg and leg.mode == "walk" and leg.measured and not OnWalk(leg.walkPoints, here)
 			local moved = here and startAt and not SamePlace(startAt, here)
-			local retry = moved and (not result or (leg and leg.walkError) or here.map ~= startAt.map)
+			local retry = here
+				and startAt
+				and moved
+				and (not result or (leg and leg.walkError) or here.map ~= startAt.map)
 			if ns.Path and not flying and not riding and (off or retry or GetTime() - refreshedAt >= REFRESH_EVERY) then
 				RefreshCosts(false, off or retry)
 			else
@@ -1290,7 +1316,7 @@ local function Update(self, elapsed)
 					planned
 					and ns.Path
 					and (
-						(planned.needsStart and ns.Path.HasData(here.map))
+						(planned.needsStart and here and ns.Path.HasData(here.map))
 						or (planned.needsGoal and ns.Path.HasData(goal.map))
 					)
 				then
@@ -1366,6 +1392,8 @@ local function PlanQuest(questID, clickedMap, isWaypoint)
 	if not ns.db.journey then
 		return
 	end
+	-- Forever takes questID and ignoreWaypoint; Ketho's Wiki stub incorrectly has zero parameters.
+	---@diagnostic disable-next-line: redundant-parameter
 	local uiMapID = clickedMap or GetQuestUiMapID(questID, true)
 	local waypoint
 	if not clickedMap or isWaypoint then
@@ -1430,7 +1458,9 @@ local function OnPinClick(map, action, button)
 		return false
 	end
 	-- MapCanvas calls these handlers before POIButton.OnClick. Canvas click handlers do not run over pins.
-	for _, pin in ipairs(GetMouseFoci()) do
+	for _, focus in ipairs(GetMouseFoci()) do
+		local pin = focus
+		---@cast pin SPFQuestPin
 		if pin.pinTemplate == "QuestPinTemplate" and pin:GetMap() == map and pin:GetQuestID() then
 			PlanQuest(pin:GetQuestID(), map:GetMapID(), pin:GetStyle() == POIButtonUtil.Style.Waypoint)
 			return true
@@ -1448,7 +1478,9 @@ local function AddQuestMenuEntry(root, questID)
 end
 
 ns.Init(function()
-	driver = CreateFrame("Frame", "ShortestPathForeverJourneyDriver", UIParent)
+	local journeyDriver = CreateFrame("Frame", "ShortestPathForeverJourneyDriver", UIParent)
+	---@cast journeyDriver SPFJourneyDriver
+	driver = journeyDriver
 	driver:SetScript("OnUpdate", Update)
 	driver:RegisterEvent("PLAYER_REGEN_DISABLED")
 	driver:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -1499,6 +1531,7 @@ ns.Init(function()
 		-- Resolve the right-clicked HeaderButton's block; never reuse a previous hover's quest.
 		for _, header in ipairs(GetMouseFoci()) do
 			local block = header:GetParent()
+			---@cast block SPFTrackerBlock
 			if
 				block
 				and block.HeaderButton == header
@@ -1511,6 +1544,7 @@ ns.Init(function()
 		end
 	end)
 	Menu.ModifyMenu("MENU_QUEST_MAP_LOG_TITLE", function(owner, root)
+		---@cast owner SPFQuestMenuOwner
 		-- Waypoint menus share this tag, but have no questID.
 		AddQuestMenuEntry(root, owner.questID)
 	end)

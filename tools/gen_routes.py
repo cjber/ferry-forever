@@ -254,6 +254,7 @@ def render(routes, docks):
         "-- Periods stretched onto the sniffed CMaNGOS classic-db periods (the new routes by the mean correction).",
     ]
     lines += [
+        "---@type string, SPFNamespace",
         "local _, ns = ...",
         "",
         "-- [dock] = { map = continent, x = world x (north), y = world y (west) }",

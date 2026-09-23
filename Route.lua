@@ -1,4 +1,5 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 local LINE_TEMPLATE = "ShortestPathForeverRoutePinTemplate"
 local TRANSPORT_TEMPLATE = "ShortestPathForeverTransportPinTemplate"
@@ -18,7 +19,30 @@ local COLORS = {
 	portal = CreateColor(0.85, 0.35, 1),
 	passage = CreateColor(0.85, 0.35, 1),
 }
-local provider, goal, result, paths, minimap
+local provider, goal, result, paths
+---@class SPFMinimapRoute : Frame
+---@field lines Line[]
+---@field underlines Line[]
+---@field used number
+---@field Goal Texture
+---@field strokeLayer SPFStrokeLayer
+---@field elapsed number
+---@field lastX? number
+---@field lastY? number
+---@field lastMap? number
+---@field lastRadius? number
+---@field lastFacing? number
+---@field lastWidth? number
+---@field lastHeight? number
+---@field lastScale? number
+---@field lastSquare? boolean
+---@field revision? number
+---@field fadeX? number
+---@field fadeY? number
+---@field fadeScaleX? number
+---@field fadeScaleY? number
+---@type SPFMinimapRoute
+local minimap
 local transportProvider, dockHover, highlightedRoutes
 local geometryRevision = 0
 local loading = false
@@ -158,6 +182,7 @@ end
 
 -- One alpha animation covers all strokes and outlines, beneath the minimap's separate arrival fade.
 local function StrokeLayer(owner)
+	---@class SPFStrokeLayer : Frame
 	local layer = CreateFrame("Frame", nil, owner)
 	owner.strokeLayer = layer
 	layer:SetAllPoints(owner)
@@ -177,6 +202,7 @@ local function StrokeLayer(owner)
 end
 
 -- JourneyInfo's loading flag drives both the header spinner and the route, even when geometry is kept.
+---@param shown boolean
 function ns.RefreshJourneyPulse(shown)
 	if loading == shown then
 		return
@@ -190,6 +216,9 @@ function ns.RefreshJourneyPulse(shown)
 	end
 end
 
+---@class SPFRoutePin : SPFMapPin
+---@field strokeLayer? SPFStrokeLayer
+---@field UpdateAlpha? fun(self: SPFRoutePin)
 ShortestPathForeverRoutePinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function ShortestPathForeverRoutePinMixin:OnLoad()
@@ -424,6 +453,8 @@ function ShortestPathForeverRoutePinMixin:OnCanvasSizeChanged()
 	self:Draw()
 end
 
+---@class SPFGoalPin : SPFMapPin
+---@field Texture Texture
 ShortestPathForeverGoalPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function ShortestPathForeverGoalPinMixin:OnLoad()
@@ -443,7 +474,7 @@ end
 
 function ShortestPathForeverGoalPinMixin:OnMouseEnter()
 	local title, rows = ns.JourneyInfo()
-	if not title then
+	if not title or not rows then
 		return
 	end
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -466,7 +497,7 @@ function ShortestPathForeverGoalPinMixin.ShouldMouseButtonBePassthrough()
 	return false
 end
 
-function ShortestPathForeverGoalPinMixin.OnMouseClickAction(_self, button)
+function ShortestPathForeverGoalPinMixin.OnMouseClickAction(_, button)
 	if button == "RightButton" then
 		ns.ClearJourney()
 	end
@@ -478,6 +509,7 @@ function ShortestPathForeverGoalPinMixin:OnReleased()
 end
 
 -- One mouse-transparent canvas pin holds every boat and zeppelin route, each hidden until its dock is hovered.
+---@class SPFTransportPin : SPFRoutePin
 ShortestPathForeverTransportPinMixin = CreateFromMixins(ShortestPathForeverRoutePinMixin)
 
 function ShortestPathForeverTransportPinMixin:OnLoad()
@@ -495,6 +527,8 @@ function ShortestPathForeverTransportPinMixin:UpdateAlpha()
 	end
 end
 
+---@param owner SPFMapPin
+---@param routes table<number, boolean>?
 function ns.HoverTransportRoutes(owner, routes)
 	if not routes and dockHover ~= owner then
 		return
@@ -502,6 +536,7 @@ function ns.HoverTransportRoutes(owner, routes)
 	dockHover, highlightedRoutes = routes and owner or nil, routes
 	-- Looked up rather than cached: a pin hidden with the map stays active and is not always re-acquired.
 	for pin in WorldMapFrame:EnumeratePinsByTemplate(TRANSPORT_TEMPLATE) do
+		---@cast pin SPFTransportPin
 		pin:UpdateAlpha()
 	end
 end
@@ -513,6 +548,7 @@ function ShortestPathForeverTransportPinMixin:OnReleased()
 	MapCanvasPinMixin.OnReleased(self)
 end
 
+---@class SPFTransportProvider : SPFMapProvider
 local TransportProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
 local transportGeometry = {}
 local geometryRoutes, geometryDocks
@@ -577,6 +613,7 @@ function ns.RefreshTransportRoutes()
 	end
 end
 
+---@class SPFRouteProvider : SPFMapProvider
 local ProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
 
 function ProviderMixin:RemoveAllData()
@@ -640,6 +677,7 @@ end
 -- The world point under the cursor on the minimap, undoing Project; nil off its face.
 function ns.MinimapPoint()
 	local x, y, _, map = ns.JourneyPosition()
+	---@type number?, number?
 	local radius, facing = MinimapView()
 	local scale = Minimap:GetEffectiveScale()
 	local cx, cy = Minimap:GetCenter()
@@ -653,8 +691,10 @@ function ns.MinimapPoint()
 	return { map = map, x = x + north, y = y - east }
 end
 
+---@param self SPFMinimapRoute
 local function DrawMinimap(self)
 	local x, y, _, map = ns.JourneyPosition()
+	---@type number?, number?
 	local radius, facing = MinimapView()
 	if not (canaccessvalue(radius) and canaccessvalue(facing)) then
 		radius, facing = nil, nil
@@ -729,6 +769,8 @@ local function DrawMinimap(self)
 	Pulse(self)
 end
 
+---@param self SPFMinimapRoute
+---@param elapsed number
 local function UpdateMinimap(self, elapsed)
 	if not (goal and ns.db.journey) then
 		self.Goal:Hide()
@@ -742,6 +784,8 @@ local function UpdateMinimap(self, elapsed)
 	end
 end
 
+---@param destination SPFPoint?
+---@param route SPFPlan?
 function ns.SetJourneyRoute(destination, route)
 	goal, result = destination, route
 	geometryRevision = geometryRevision + 1
@@ -775,7 +819,9 @@ ns.Init(function()
 	WorldMapFrame:AddDataProvider(transportProvider)
 	provider = CreateFromMixins(ProviderMixin)
 	WorldMapFrame:AddDataProvider(provider)
-	minimap = CreateFrame("Frame", "ShortestPathForeverMinimapRoute", Minimap)
+	local minimapRoute = CreateFrame("Frame", "ShortestPathForeverMinimapRoute", Minimap)
+	---@cast minimapRoute SPFMinimapRoute
+	minimap = minimapRoute
 	minimap:SetAllPoints(Minimap)
 	minimap:EnableMouse(false)
 	minimap.lines, minimap.underlines, minimap.used = {}, {}, 0

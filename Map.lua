@@ -1,4 +1,5 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 local PIN_TEMPLATE = "ShortestPathForeverDockPinTemplate"
 local FLIGHT_TEMPLATE = "ShortestPathForeverFlightPinTemplate"
@@ -12,6 +13,8 @@ local EDGE = 0.015
 local OVERLAP = 0.8
 local provider
 
+---@param departure SPFDeparture
+---@return string
 function ns.DepartureDestination(departure)
 	local zones = {}
 	for _, dockID in ipairs(departure.to) do
@@ -22,6 +25,8 @@ end
 
 local HERE = { boat = "docked", zeppelin = "docked", lift = "here", tram = "boarding" }
 
+---@param departure SPFDeparture
+---@return string
 function ns.DepartureStatus(departure)
 	if not departure.known then
 		return "no sighting yet"
@@ -39,6 +44,8 @@ end
 -- The stock ferry for boats. There is no zeppelin map icon in the game (only top-down vehicle sprites), so
 -- zeppelins use our own, drawn to match the ferry (tools/draw_zeppelin.py). Lifts and the tram take the stock
 -- map's floor-change arrows; portals its arcane door.
+---@param texture Texture
+---@param kind SPFMode
 function ns.SetTransportIcon(texture, kind)
 	if kind == "boat" then
 		texture:SetAtlas("flightmasterferry")
@@ -59,6 +66,8 @@ function ns.SetTransportIcon(texture, kind)
 end
 
 local dockKinds
+---@param dockID number
+---@return SPFMode
 function ns.DockKind(dockID)
 	if not dockKinds then
 		dockKinds = {}
@@ -102,6 +111,10 @@ local function AddDepartureLines(departures)
 	end
 end
 
+---@class SPFDockPin : SPFMapPin
+---@field Texture Texture
+---@field HighlightTexture Texture
+---@field Glow Texture
 ShortestPathForeverDockPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function ShortestPathForeverDockPinMixin:OnLoad()
@@ -151,6 +164,8 @@ local function LandingName(cluster, dock, kind)
 end
 
 local dockNames = {}
+---@param dockID number
+---@return string
 function ns.DockPierName(dockID)
 	if not dockNames[dockID] then
 		local dock, kind = ns.Docks[dockID], ns.DockKind(dockID)
@@ -270,6 +285,7 @@ function ShortestPathForeverDockPinMixin:OnReleased()
 	MapCanvasPinMixin.OnReleased(self)
 end
 
+---@class SPFDockProvider : SPFMapProvider
 local ProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
 
 function ProviderMixin:RemoveAllData()
@@ -313,6 +329,7 @@ end
 
 -- A dock shows on its zone and every map above it (continent, Azeroth), where both ends of a crossing fit.
 local function IsDockMap(location, mapID)
+	---@type UiMapDetails?
 	local info = C_Map.GetMapInfo(location.uiMap)
 	while info do
 		if info.mapID == mapID then
@@ -518,6 +535,9 @@ function ProviderMixin:OnCanvasScaleChanged()
 	self:RefreshAllData()
 end
 
+---@class SPFPortalPin : SPFMapPin
+---@field Texture Texture
+---@field HighlightTexture Texture
 ShortestPathForeverPortalPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function ShortestPathForeverPortalPinMixin:OnLoad()
@@ -560,6 +580,7 @@ local function PortalShown(portal)
 	return portal.kind == "portal" and (not portal.faction or portal.faction == UnitFactionGroup("player"))
 end
 
+---@class SPFPortalProvider : SPFMapProvider
 local PortalProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
 
 function PortalProviderMixin:RemoveAllData()
@@ -584,6 +605,7 @@ function PortalProviderMixin:RefreshAllData()
 end
 
 -- Reuse the native flight-point template and acquisition (atlas size, nudging and supertracking).
+---@class SPFAddonFlightPin : SPFFlightPin
 ShortestPathForeverFlightPinMixin = CreateFromMixins(FlightPointPinMixin)
 
 function ShortestPathForeverFlightPinMixin:OnMouseEnter()
@@ -606,6 +628,7 @@ function ShortestPathForeverFlightPinMixin:OnReleased()
 	MapCanvasPinMixin.OnReleased(self)
 end
 
+---@class SPFAddonFlightProvider : SPFFlightProvider
 local FlightProviderMixin = CreateFromMixins(FlightPointDataProviderMixin)
 
 function FlightProviderMixin:RemoveAllData()
@@ -633,7 +656,7 @@ function FlightProviderMixin:RefreshAllData()
 	for id, node in pairs(ns.TaxiNodes) do
 		local location = ns.Locate(node)
 		local x, y = MapPosition(node, mapID)
-		if x and location and IsDockMap(location, mapID) then
+		if x and y and location and IsDockMap(location, mapID) then
 			Query(location.uiMap)
 			local unknown = known ~= nil and not known[id]
 			local native = reported[id]

@@ -1,4 +1,6 @@
-local addonName, ns = ...
+local addonName = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 local Model = ns.Model
 local DEFAULTS = {
@@ -17,6 +19,7 @@ local DEFAULTS = {
 	compass = false,
 }
 
+---@param message string
 function ns.Print(message)
 	print(NORMAL_FONT_COLOR:WrapTextInColorCode("Shortest Path Forever:") .. " " .. message)
 end
@@ -27,6 +30,7 @@ local function Start(fn)
 end
 
 local pending, ready = {}, false
+---@param fn fun()
 function ns.Init(fn)
 	if ready then
 		Start(fn)
@@ -36,6 +40,7 @@ function ns.Init(fn)
 end
 
 local listeners = {}
+---@param fn fun()
 function ns.OnChange(fn)
 	listeners[#listeners + 1] = fn
 end
@@ -49,6 +54,7 @@ end
 -- Server time in ms. GetServerTime has whole seconds; it floors the true time, so its largest lead over
 -- GetTime is the offset between the two clocks (reset if the clocks jump).
 local offset
+---@return number
 function ns.NowMs()
 	local lead = GetServerTime() - GetTime()
 	if not offset or lead > offset or offset - lead > 2 then
@@ -63,6 +69,9 @@ end
 
 -- Record a sighting ({ epoch = server ms at phase 0, seen = server s, source = "you"|"player" }) unless the
 -- one held should stand.
+---@param routeID number
+---@param anchor SPFAnchor
+---@return boolean
 function ns.Sighted(routeID, anchor)
 	local anchors = Anchors()
 	if not Model.Newer(anchor, anchors[routeID], GetServerTime()) then
@@ -74,12 +83,15 @@ function ns.Sighted(routeID, anchor)
 	return true
 end
 
+---@param routeID number
+---@return SPFAnchor?
 function ns.FreshAnchor(routeID)
 	local anchor = Anchors()[routeID]
 	return anchor and GetServerTime() - anchor.seen <= Model.MAX_AGE and anchor or nil
 end
 
 -- Sightings still fresh enough to count down from (and to share).
+---@return table<number, SPFAnchor>
 function ns.FreshAnchors()
 	local fresh, now = {}, GetServerTime()
 	for routeID, anchor in pairs(Anchors()) do
@@ -113,6 +125,8 @@ local function Resolve(point)
 end
 
 local locations = setmetatable({}, { __mode = "k" })
+---@param point SPFPoint
+---@return SPFLocation?
 function ns.Locate(point)
 	if locations[point] == nil then
 		locations[point] = Resolve(point) or false
@@ -121,32 +135,43 @@ function ns.Locate(point)
 end
 
 -- Where a dock is drawn: the tram's stations are on a map with no world map, so they show at the city entrance.
+---@param dockID number
+---@return SPFPoint
 function ns.DockPoint(dockID)
 	local dock = ns.Docks[dockID]
 	return dock.pin or dock
 end
 
+---@param dockID number
+---@return SPFLocation?
 function ns.DockLocation(dockID)
 	return ns.Locate(ns.DockPoint(dockID))
 end
 
+---@param dockID number
+---@return string
 function ns.DockZone(dockID)
 	local location = ns.DockLocation(dockID)
 	return location and location.zone or UNKNOWN
 end
 
 -- A dock as a destination: a lift's landing or a tram station by name, a pier by its zone.
+---@param dockID number
+---@return string
 function ns.DockLabel(dockID)
 	return ns.Docks[dockID].name or ns.DockZone(dockID)
 end
 
 -- A specific stop for walking directions and tracker headings; boat destinations still use DockLabel.
+---@param dockID number
+---@return string
 function ns.DockTitle(dockID)
 	local dock = ns.Docks[dockID]
 	return dock.site and dock.site .. ", " .. dock.name or ns.DockPierName(dockID)
 end
 
 local dockX, dockY, dockZ, dockMap, nearestDock, nearestYards
+---@return number? dockID, number? yards
 function ns.NearestDock()
 	local x, y, z, map = UnitPosition("player")
 	if not x then
@@ -178,18 +203,23 @@ local function SoonestFirst(a, b)
 end
 
 -- Anyone can ride either faction's boats, so the other faction's show unless turned off.
+---@param route SPFRoute
+---@return boolean
 function ns.RouteShown(route)
 	return ns.db.otherFaction or not route.faction or route.faction == UnitFactionGroup("player")
 end
 
 -- Which map filter each kind of route answers to.
 local FILTER = { boat = "pins", zeppelin = "pins", lift = "transit", tram = "transit" }
+---@param kind SPFMode
+---@return boolean?
 function ns.KindShown(kind)
 	return ns.db[FILTER[kind] or error("unknown route kind " .. tostring(kind))]
 end
 
 -- Timetable topology never changes with sightings; build it only when a dock first needs it.
 local dockVisits = {}
+---@param dockID number
 function ns.DockVisits(dockID)
 	if not dockVisits[dockID] then
 		local visits = {}
@@ -205,6 +235,8 @@ function ns.DockVisits(dockID)
 	return dockVisits[dockID]
 end
 
+---@param dockID number
+---@return SPFDeparture[]
 function ns.DockDepartures(dockID)
 	local departures, now = {}, ns.NowMs()
 	for _, visit in ipairs(ns.DockVisits(dockID)) do
@@ -229,6 +261,8 @@ end
 
 -- Boats sharing a lane (Auberdine's two Menethil boats, a lift's two cars) read as one line: the soonest,
 -- with when the one after it leaves once both are timed. Departures arrive soonest first.
+---@param departures SPFDeparture[]
+---@return SPFDeparture[]
 function ns.ByDestination(departures)
 	local merged, first = {}, {}
 	for _, departure in ipairs(departures) do
@@ -249,6 +283,8 @@ function ns.ByDestination(departures)
 end
 
 -- Where the route being ridden calls next, and in how many ms, when its schedule is known.
+---@param routeID number
+---@return number? dockID, number? arriveIn
 function ns.NextStop(routeID)
 	local anchor = ns.FreshAnchor(routeID)
 	if not anchor then
@@ -300,6 +336,7 @@ end)
 -- through a ride; elsewhere movement/world events wake one shared clock instead of four idle tickers.
 local travelListeners, travelTicker = {}, nil
 local moving, probes = false, 0
+---@param fn fun(dockID: number?, yards: number?)
 function ns.OnTravelTick(fn)
 	travelListeners[#travelListeners + 1] = fn
 end

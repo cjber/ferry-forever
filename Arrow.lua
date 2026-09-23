@@ -1,4 +1,5 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 -- Guide follows the map's walking path bend by bend. Journey places Blizzard's native navigation marker at
 -- this target; our screen arrow is the fallback when that marker is unavailable or the player owns tracking.
@@ -9,7 +10,14 @@ local UPDATE_EVERY = 0.05
 local RADIUS = 36
 -- A bend this close counts as passed, and the arrow turns to the next one.
 local PASSED = 25
-local frame, source, path, index, target, placeTarget, native
+---@class SPFArrowFrame : Frame
+---@field Icon Texture
+---@field Arrow Texture
+---@field Distance FontString
+---@field yards? number
+---@type SPFArrowFrame
+local frame
+local source, path, index, target, placeTarget, native
 local stepEnd, destination
 
 -- Counter-clockwise from north, like GetPlayerFacing: UnitPosition's first value grows north, its second west.
@@ -64,7 +72,9 @@ local function Update()
 end
 
 local function Create()
-	frame = CreateFrame("Frame", nil, UIParent)
+	local arrow = CreateFrame("Frame", nil, UIParent)
+	---@cast arrow SPFArrowFrame
+	frame = arrow
 	frame:SetSize(100, 100)
 	frame:SetPoint("TOP", 0, -120)
 	frame:SetFrameStrata("BACKGROUND")
@@ -109,6 +119,10 @@ function ns.RefreshGuideStops()
 end
 
 -- placeBend owns waypoint placement and returns whether native tracking is ours. Progress lives only here.
+---@param points SPFWalkPoints?
+---@param placeBend? fun(point: SPFPoint, fading: boolean): boolean?
+---@param stop SPFPlace?
+---@param goal SPFPoint?
 function ns.PointGuideArrow(points, placeBend, stop, goal)
 	if points and #points == 0 then
 		points = nil

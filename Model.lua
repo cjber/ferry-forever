@@ -1,7 +1,9 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 -- Pure timetable arithmetic, free of game APIs. Times are server milliseconds; a route's `epoch` is the
 -- server time at which its loop was at 0 ms, so its phase is (now - epoch) % period.
+---@class SPFModel
 local Model = {}
 ns.Model = Model
 
@@ -19,12 +21,18 @@ local OWN_TRUST = 3600
 -- Sightings older than this are too stale to share or to count down from.
 Model.MAX_AGE = 6 * 3600
 
+---@param ms number
+---@return string
 function Model.FormatCountdown(ms)
 	local seconds = math.max(0, math.ceil(ms / 1000))
 	return string.format("%d:%02d", math.floor(seconds / 60), seconds % 60)
 end
 
 -- The next visit of `stop` at `phase`: docked now (departIn), or arriveIn and that visit's departIn.
+---@param route SPFRoute
+---@param stop SPFStop
+---@param phase number
+---@return boolean docked, number? arriveIn, number departIn
 function Model.Visit(route, stop, phase)
 	local period = route.period
 	local stay = (stop.depart - stop.arrive) % period
@@ -37,6 +45,9 @@ function Model.Visit(route, stop, phase)
 end
 
 -- The docks visited after stop `index`, in order, until the route returns to it.
+---@param route SPFRoute
+---@param index number
+---@return number[]
 function Model.Onward(route, index)
 	local stops, onward, seen = route.stops, {}, { [route.stops[index].dock] = true }
 	for offset = 1, #stops - 1 do
@@ -50,12 +61,23 @@ function Model.Onward(route, index)
 end
 
 -- Ride time excludes the boarding stop's dwell and includes intermediate stops, across phase zero.
+---@param route SPFRoute
+---@param from SPFStop
+---@param to SPFStop
+---@return number
 function Model.RideTime(route, from, to)
 	return (to.arrive - from.depart) % route.period
 end
 
 -- Every phase at which the route passes within NEAR yards of (map, x, y) while moving. A docked boat is
 -- still for a minute, so a stop's own point yields no phase.
+---@param route SPFRoute
+---@param map number
+---@param x number
+---@param y number
+---@param z? number
+---@param scratch? number[]
+---@return number[]
 function Model.Phases(route, map, x, y, z, scratch)
 	local frames, phases = route.frames, scratch
 	if phases then
@@ -91,6 +113,9 @@ end
 -- sample is { now = ms, phases = {...} } from Model.Phases. The agreeing samples must span MIN_SPAN: offsets
 -- of someone standing near a leg drift one second per second, so they agree only briefly, while a rider's
 -- hold for the whole leg.
+---@param route SPFRoute
+---@param samples SPFSample[]
+---@return number? epoch, number support
 function Model.FitEpoch(route, samples)
 	local period, offsets = route.period, {}
 	local fit = route.fit or {}
@@ -123,6 +148,8 @@ end
 
 -- The route a ride was on. Routes sharing a lane (Menethil's two Auberdine boats) both fit the shared part,
 -- so only a clear winner counts: the most supported fit, well ahead of every other.
+---@param fits table<number, {epoch: number, support: number}>
+---@return number?
 function Model.RideRoute(fits)
 	local best, runnerUp
 	for routeID, fit in pairs(fits) do
@@ -139,6 +166,9 @@ end
 
 -- Wire format: "<route>:<seen s>:<phase ms at seen>" entries joined by ";". Phase-at-seen keeps every number
 -- short and independent of the sender's clock beyond the sighting's own timestamp.
+---@param anchors table<number, SPFAnchor>
+---@param routes table<number, SPFRoute>
+---@return string[]
 function Model.Encode(anchors, routes)
 	local entries = {}
 	for routeID, anchor in pairs(anchors) do
@@ -153,12 +183,24 @@ function Model.Encode(anchors, routes)
 end
 
 -- Validated anchors from one message; anything malformed, unknown, future-dated or stale is dropped.
+---@param message string
+---@param routes table<number, SPFRoute>
+---@param now number
+---@return table<number, SPFAnchor>
 function Model.Decode(message, routes, now)
 	local anchors = {}
-	for routeID, seen, phase in message:gmatch("(%d+):(%d+):(%d+)") do
-		routeID, seen, phase = tonumber(routeID), tonumber(seen), tonumber(phase)
-		local route = routes[routeID]
-		if route and phase < route.period and seen <= now + CLOCK_SLACK and now - seen <= Model.MAX_AGE then
+	for routeText, seenText, phaseText in message:gmatch("(%d+):(%d+):(%d+)") do
+		local routeID, seen, phase = tonumber(routeText), tonumber(seenText), tonumber(phaseText)
+		local route = routeID and routes[routeID]
+		if
+			routeID
+			and route
+			and seen
+			and phase
+			and phase < route.period
+			and seen <= now + CLOCK_SLACK
+			and now - seen <= Model.MAX_AGE
+		then
 			anchors[routeID] = { epoch = seen * 1000 - phase, seen = seen }
 		end
 	end
@@ -167,6 +209,10 @@ end
 
 -- Whether an incoming sighting replaces the one held: only a newer one, and another player's never
 -- replaces a recent ride of your own.
+---@param incoming SPFAnchor
+---@param held SPFAnchor?
+---@param now number
+---@return boolean
 function Model.Newer(incoming, held, now)
 	if held == nil then
 		return true

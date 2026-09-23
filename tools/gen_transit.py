@@ -396,6 +396,7 @@ def header(source):
         f"-- Source: {source}",
         f"-- DB2: https://wago.tools/db2 (CSV build {BUILD}).",
         f"-- DB: https://github.com/cmangos/classic-db/tree/{DB_REV}",
+        "---@type string, SPFNamespace",
         "local _, ns = ...",
         "",
     ]

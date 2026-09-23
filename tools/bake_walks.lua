@@ -12,12 +12,8 @@ for _, file in ipairs({
 }) do
 	assert(loadfile(file))("ShortestPathForever", ns)
 end
-for _, nav in ipairs({
-	"ShortestPathForever_Nav0/Nav0.lua",
-	"ShortestPathForever_Nav1/Nav1.lua",
-	"ShortestPathForever_Nav2991/Nav2991.lua",
-}) do
-	assert(loadfile(nav))()
+for _, map in ipairs({ 0, 1, 2991 }) do
+	assert(loadfile("tools/load_nav.lua"))(map)
 end
 local Path = ns.Path
 
@@ -44,6 +40,7 @@ for map in pairs(places) do
 	end
 end
 table.sort(maps)
+print("---@type string, SPFNamespace")
 print("local _, ns = ...")
 print("")
 print("-- Fixed place coordinates rounded to yards, so tests can detect stale walking costs.")

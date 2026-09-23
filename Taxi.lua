@@ -1,4 +1,5 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 -- The flight points this character knows, for the journey planner and the map's flight master pins. Only a
 -- flight master's own map says which nodes a character can fly to: the world map's taxi query answers anywhere
@@ -45,6 +46,7 @@ local function ScanFlightMaster()
 end
 
 -- Empty until the character opens a flight master: the planner then walks rather than guessing at flights.
+---@return table<number, boolean>
 function ns.KnownTaxiNodes()
 	return ns.charDB.taxi
 end

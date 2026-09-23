@@ -25,7 +25,7 @@ if arg[1] == "cold" then _G.C_AddOns = {
  DoesAddOnExist = function(name) return name:match("Nav[01]$") ~= nil end,
  LoadAddOn = function(name)
   local map = assert(name:match("Nav(%d+)$"))
-  assert(loadfile(name .. "/Nav" .. map .. ".lua"))()
+  assert(loadfile("tools/load_nav.lua"))(map)
  end,
 } end
 local miniEnabled = true
@@ -78,9 +78,9 @@ if
 	and scenario ~= "boat"
 	and scenario ~= "cold"
 then
-	assert(loadfile("ShortestPathForever_Nav1/Nav1.lua"))()
+	assert(loadfile("tools/load_nav.lua"))(1)
 	if scenario == "cross" or scenario == "aboard" then
-		assert(loadfile("ShortestPathForever_Nav0/Nav0.lua"))()
+		assert(loadfile("tools/load_nav.lua"))(0)
 	end
 end
 collectgarbage("collect")

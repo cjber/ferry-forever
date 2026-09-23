@@ -1,8 +1,12 @@
-local addonName, ns = ...
+local addonName = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 local settings = {}
 
 -- Change an option from anywhere (the map's filter menu) with the settings panel kept in step.
+---@param key string
+---@param value boolean
 function ns.SetOption(key, value)
 	settings[key]:SetValue(value)
 end

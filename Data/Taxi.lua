@@ -2,6 +2,7 @@
 -- Source: TaxiNodes/TaxiPath/TaxiPathNode; InFlight classic directed durations (seconds).
 -- DB2: https://wago.tools/db2 (CSV build 1.60.1.69913).
 -- DB: https://github.com/cmangos/classic-db/tree/22b51464f1625f6ef6275771de1f5466c6f5d19e
+---@type string, SPFNamespace
 local _, ns = ...
 
 -- InFlight: https://github.com/LudiusMaximus/InFlight/tree/310f5fa167c6171ec2858561077ec441989541ae

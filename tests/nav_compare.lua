@@ -26,7 +26,7 @@ local function loader(root)
 	local ns = {}
 	setfenv(assert(loadfile(root .. "/Path.lua")), env)("ShortestPathForever", ns)
 	for _, map in ipairs({ 0, 1, 2991 }) do
-		setfenv(assert(loadfile(root .. "/ShortestPathForever_Nav" .. map .. "/Nav" .. map .. ".lua")), env)()
+		assert(loadfile("tools/load_nav.lua"))(map, root, env)
 	end
 	return assert(upvalue(ns.Path.FindSync, "State")),
 		assert(upvalue(ns.Path.FindSync, "decodeGrid")),
