@@ -79,7 +79,7 @@ def classicdb(refresh=False, offline=False):
 
 
 def location(map_id, pos):
-    return dict(zip(("map", "x", "y", "z"), (map_id, *pos)))
+    return dict(zip(("map", "x", "y", "z"), (map_id, *pos), strict=False))
 
 
 def point(row, prefix="Pos_"):
@@ -426,7 +426,9 @@ def main():
     spawns, teleports = classicdb(args.refresh, args.offline)
     triggers = {int(r["ID"]): r for r in tables["AreaTrigger"]}
     docks, routes = transports(tables["TransportAnimation"], spawns, triggers)
-    durations = inflight(download(f"{INFLIGHT_URL}/Defaults.lua", f"InFlight-{INFLIGHT_REV}-Defaults.lua", args.refresh, args.offline))
+    durations = inflight(
+        download(f"{INFLIGHT_URL}/Defaults.lua", f"InFlight-{INFLIGHT_REV}-Defaults.lua", args.refresh, args.offline)
+    )
     license_text = download(f"{INFLIGHT_URL}/LICENSE", f"InFlight-{INFLIGHT_REV}-LICENSE", args.refresh, args.offline)
     nodes, paths = taxis(tables["TaxiNodes"], tables["TaxiPath"], tables["TaxiPathNode"], durations)
     islands = landmasses(tables["UiMapAssignment"], {int(r["ID"]): r for r in tables["Map"]})
@@ -448,7 +450,8 @@ def main():
     taxi_lines += (
         [
             f"-- InFlight: https://github.com/LudiusMaximus/InFlight/tree/{INFLIGHT_REV}",
-            f"-- Measured durations: {covered}/{len(paths)} ({covered / len(paths):.1%}); remaining paths estimated at 32 yd/s.",
+            f"-- Measured durations: {covered}/{len(paths)} ({covered / len(paths):.1%}); "
+            "remaining paths estimated at 32 yd/s.",
             "-- Speed: cmangos/mangos-classic src/game/MotionGenerators/PathMovementGenerator.cpp, TAXI_FLIGHT_SPEED.",
             "-- Only ordinary, unrestricted flight-map nodes; quest/test/transport/PvP/druid-only paths excluded.",
             "-- Path points: flattened map/x/y triples, simplified within 20 yd in XY, rounded to 0.1 yd.",

@@ -19,14 +19,14 @@ y grows west (world Y).
 import glob
 import heapq
 import math
+import multiprocessing
 import os
 import re
 import struct
 import sys
 from array import array
-from textwrap import wrap
 from collections import defaultdict
-import multiprocessing
+from textwrap import wrap
 
 MM = os.environ.get("NAV_MM", "mm")
 T = 1600 / 3
@@ -99,7 +99,7 @@ def load_tile(path):
     assert h[0] == b"VAND", path
     poly_count, vert_count = h[6], h[7]
     o += 100
-    verts = struct.unpack_from("<%df" % (vert_count * 3), b, o)
+    verts = struct.unpack_from(f"<{vert_count * 3}f", b, o)
     o += vert_count * 12
     polys = []
     for _ in range(poly_count):
@@ -142,7 +142,7 @@ def read_tile(rc):
     pts_of = [[(verts[v * 3 + 2], verts[v * 3], verts[v * 3 + 1]) for v in pv] for pv, *_ in tile_polys]  # (X, Y, Z)
     ok = [bool(walkable(pts_of[i], flags, area, typ)) for i, (_, _, flags, area, typ) in enumerate(tile_polys)]
     polys, links, border = [], [], []
-    for i, (pv, pn, flags, area, typ) in enumerate(tile_polys):
+    for i, (_pv, pn, _flags, area, _typ) in enumerate(tile_polys):
         if not ok[i]:
             continue
         pts = pts_of[i]
@@ -218,8 +218,11 @@ def components():
         size[find(x)] += 1
     SIZE = array("i", (size[find(x)] for x in range(len(parent))))
     big = sorted((s for s in size.values() if s >= MIN_COMPONENT), reverse=True)
-    print(f"tiles {len(TILES)}, polys {len(parent)}, components {len(size)}, kept {len(big)} "
-          f"({sum(big)} polys): {big[:12]}{' ...' if len(big) > 12 else ''}", flush=True)
+    print(
+        f"tiles {len(TILES)}, polys {len(parent)}, components {len(size)}, kept {len(big)} "
+        f"({sum(big)} polys): {big[:12]}{' ...' if len(big) > 12 else ''}",
+        flush=True,
+    )
 
 
 def load_window(tiles):
@@ -235,7 +238,9 @@ def load_window(tiles):
             kept.add(i)
             nv = len(pts)
             c = tuple(sum(p[a] for p in pts) / nv for a in range(3))
-            polys[gid(rc, i)] = dict(c=c, water=water, k=k, size=SIZE[base + n], pts=[(p[0], p[1]) for p in pts], plane=plane(pts, c))
+            polys[gid(rc, i)] = dict(
+                c=c, water=water, k=k, size=SIZE[base + n], pts=[(p[0], p[1]) for p in pts], plane=plane(pts, c)
+            )
         for i, j, p1, p2 in links:
             if i in kept and j in kept:
                 adj[gid(rc, i)].add(gid(rc, j))
@@ -290,14 +295,14 @@ def rasterize_tile(rc):
     """Pass 2 for one tile: its cells' surfaces (0 blocked, 1 ground, 2 water), heights, floors and step codes.
 
     A cell's base surface is the one of the larger navmesh component and, within one component, the highest: a
-    bridge is ground and a lake (a water surface over a walkable lake bed) is water, while a city under a walkable roof
-    (Ironforge under its mountain top) stays the city. Every other surface at least CLIMB above or below it is kept as
-    a floor of its own, so a tunnel under a mountain, the ground under a bridge and both ends of a lift are all on the
-    map; a lake or sea bed under the water is not. A step between neighbouring cells is cut unless a 2D ray along the navmesh surface from one cell's anchor
-    reaches the other's surface poly, so the grid cannot climb a cliff, pass a fence or wall, or drop off a bridge;
-    floors link to neighbouring surfaces by the same test. Surfaces are computed two cells beyond the tile and steps
-    one cell beyond, which is all the tile's own steps and diagonals read; everything comes from the 3x3 tiles around
-    it.
+    bridge is ground and a lake (a water surface over a walkable lake bed) is water, while a city under a walkable
+    roof (Ironforge under its mountain top) stays the city. Every other surface at least CLIMB above or below it is
+    kept as a floor of its own, so a tunnel under a mountain, the ground under a bridge and both ends of a lift are
+    all on the map; a lake or sea bed under the water is not. A step between neighbouring cells is cut unless a 2D
+    ray along the navmesh surface from one cell's anchor reaches the other's surface poly, so the grid cannot climb
+    a cliff, pass a fence or wall, or drop off a bridge; floors link to neighbouring surfaces by the same test.
+    Surfaces are computed two cells beyond the tile and steps one cell beyond, which is all the tile's own steps and
+    diagonals read; everything comes from the 3x3 tiles around it.
     """
     rr, cc = rc
     window = [(rr + dr, cc + dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1) if (rr + dr, cc + dc) in TILES]
@@ -358,8 +363,12 @@ def rasterize_tile(rc):
         if pa == pb or pb in adj.get(pa, ()):
             return True
         (xi, yi), (xj, yj) = divmod(i, GH), divmod(j, GH)
-        box = (X0 + min(xi, xj) * CS - MARGIN, X0 + (max(xi, xj) + 1) * CS + MARGIN,
-               Y0 + min(yi, yj) * CS - MARGIN, Y0 + (max(yi, yj) + 1) * CS + MARGIN)
+        box = (
+            X0 + min(xi, xj) * CS - MARGIN,
+            X0 + (max(xi, xj) + 1) * CS + MARGIN,
+            Y0 + min(yi, yj) * CS - MARGIN,
+            Y0 + (max(yi, yj) + 1) * CS + MARGIN,
+        )
         hb = height(polys[pb], *b)
         seen, stack = {pa}, [pa]
         while stack:
@@ -423,8 +432,11 @@ def rasterize_tile(rc):
                         if (la or lb) and joined(i, la, j, lb):
                             links.append((i, za, j, zb))
     vals = bytes(g(gx, gy) for gx in range(tx0, tx1 + 1) for gy in range(ty0, ty1 + 1))
-    zs = [layers[gx * GH + gy][0][0] if gx * GH + gy in layers else None
-          for gx in range(tx0, tx1 + 1) for gy in range(ty0, ty1 + 1)]
+    zs = [
+        layers[gx * GH + gy][0][0] if gx * GH + gy in layers else None
+        for gx in range(tx0, tx1 + 1)
+        for gy in range(ty0, ty1 + 1)
+    ]
     return rc, vals, zs, floors, links, sorted(own)
 
 
@@ -444,14 +456,23 @@ def diag_ok(grid, cuts, ux, uy, vx, vy):
     if not grid(vx, vy):
         return False
     if (step_ok(grid, cuts, ux, uy, vx, uy) and step_ok(grid, cuts, vx, uy, vx, vy)) or (
-            step_ok(grid, cuts, ux, uy, ux, vy) and step_ok(grid, cuts, ux, vy, vx, vy)):
+        step_ok(grid, cuts, ux, uy, ux, vy) and step_ok(grid, cuts, ux, vy, vx, vy)
+    ):
         return True
     ax, ay, by = (ux, uy, vy) if vx > ux else (vx, vy, uy)
     return (ax * GH + ay) * 4 + (2 if by > ay else 3) in cuts
 
 
-MOVES = ((1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0),
-         (1, 1, math.sqrt(2)), (1, -1, math.sqrt(2)), (-1, 1, math.sqrt(2)), (-1, -1, math.sqrt(2)))
+MOVES = (
+    (1, 0, 1.0),
+    (-1, 0, 1.0),
+    (0, 1, 1.0),
+    (0, -1, 1.0),
+    (1, 1, math.sqrt(2)),
+    (1, -1, math.sqrt(2)),
+    (-1, 1, math.sqrt(2)),
+    (-1, -1, math.sqrt(2)),
+)
 
 
 def cell_of(n):
@@ -589,7 +610,7 @@ def grid_hpa(grid, cuts):
                     continue
                 if all(
                     any(dist.get((a, x), 1e18) + dist.get((x, b), 1e18) <= d * PRUNE for x in el if x not in (a, b))
-                    for dist, d in zip(dists, ds)
+                    for dist, d in zip(dists, ds, strict=False)
                 ):
                     continue
                 edges[(a, b)] = tuple(ds)
@@ -613,7 +634,7 @@ def emit(nodes, edges, grid, cuts, out, name):
     comp = {c: roots.setdefault(find(c), len(roots)) for c in cells}
     local = {}
     order = {k: sorted(cs) for k, cs in nodes.items()}
-    for k, cs in order.items():
+    for cs in order.values():
         for i, c in enumerate(cs):
             local[c] = i
     nbrs = defaultdict(list)
@@ -626,7 +647,7 @@ def emit(nodes, edges, grid, cuts, out, name):
         flags[i] |= 1 << d
 
     floor_index = {}
-    for k, fs in FLOORS_OF.items():
+    for fs in FLOORS_OF.values():
         for i, n in enumerate(fs):
             floor_index[n] = CELLS * CELLS + i
 
@@ -653,8 +674,11 @@ def emit(nodes, edges, grid, cuts, out, name):
                     costs = "".join(enc(round(w), 2) for w in d)  # 4095 is ample: the longest baked is 2357
                     erec.append(enc((dx + 1) * 3 + dy + 1, 1) + enc(local[m], 2) + costs)
             graph[k] = "".join(rec) + "".join(erec)
-        vals = [grid[(kx * CELLS + i) * GH + ky * CELLS + j] * 16 + flags.get((kx * CELLS + i) * GH + ky * CELLS + j, 0)
-                for i in range(CELLS) for j in range(CELLS)]
+        vals = [
+            grid[(kx * CELLS + i) * GH + ky * CELLS + j] * 16 + flags.get((kx * CELLS + i) * GH + ky * CELLS + j, 0)
+            for i in range(CELLS)
+            for j in range(CELLS)
+        ]
         if any(vals):
             syms, i = [], 0
             while i < len(vals):
@@ -678,7 +702,8 @@ def emit(nodes, edges, grid, cuts, out, name):
         f"-- Map {MAP} ({name}), mmtile rows {ROWS.start}-{ROWS.stop - 1} x cols {COLS.start}-{COLS.stop - 1}.",
         "-- UnitPosition's frame (x north, y west). Cluster k (0-based) is the ADT tile x in [(cx0 + k // ny) T, +T),",
         "-- y in [(cy0 + k % ny) T, +T), T = 1600 / 3, cut into cells x cells cells, x-major. Base64 (A-Za-z0-9+/).",
-        "-- graph[k + 1]: n(2) | n x [cell(3) layer(1) component(2) degree(1)] | edges in node order [cluster offset(1):",
+        "-- graph[k + 1]: n(2) | n x [cell(3) layer(1) component(2) degree(1)] | edges in node order "
+        "[cluster offset(1):",
         "--   (dx + 1) * 3 + dy + 1, node(2), cost(2) swimming with water at swim, cost(2) walking on water, both in",
         "--   running yards]. grid[k + 1]: per cell value * 16 + flags, where value 0 blocked, 1 ground, 2 water;",
         "--   flags 1/2 close the step to the +x/+y neighbour, 4/8 open the +x+y/+x-y",
@@ -713,8 +738,11 @@ def emit(nodes, edges, grid, cuts, out, name):
     gb, rb = sum(map(len, graph.values())), sum(map(len, grids.values()))
     zb, fb = sum(map(len, heights.values())), sum(map(len, floors.values()))
     print(f"emit: heights {zb / 1e3:.1f} KB, floors {fb / 1e3:.1f} KB", flush=True)
-    print(f"emit: components {len(roots)}, graph {gb / 1e3:.1f} KB, grids+cuts {rb / 1e3:.1f} KB "
-          f"({len(grids)} clusters, cuts {len(cuts)}), file {len(src) / 1e3:.1f} KB", flush=True)
+    print(
+        f"emit: components {len(roots)}, graph {gb / 1e3:.1f} KB, grids+cuts {rb / 1e3:.1f} KB "
+        f"({len(grids)} clusters, cuts {len(cuts)}), file {len(src) / 1e3:.1f} KB",
+        flush=True,
+    )
 
 
 def assemble_floors(floors, links):
@@ -745,8 +773,11 @@ def assemble_floors(floors, links):
             LINKS[b].add(a)
     for n in sorted(LINKS):
         LINKED_OF[cluster_of_cell(n)].append(n)
-    print(f"floors {len(FLOOR_CELL)} on {len(at)} cells, linked nodes {len(LINKS)}, "
-          f"links {sum(map(len, LINKS.values())) // 2}", flush=True)
+    print(
+        f"floors {len(FLOOR_CELL)} on {len(at)} cells, linked nodes {len(LINKS)}, "
+        f"links {sum(map(len, LINKS.values())) // 2}",
+        flush=True,
+    )
 
 
 def encode_heights(grid, k):
@@ -792,7 +823,7 @@ def stored_z(n):
 def matched(grid, u, d):
     """The surface in direction d from node u nearest u's height (the base surface first on a tie)."""
     ux, uy = divmod(cell_of(u), GH)
-    (dx, dy), = [m for m, code in DIRS.items() if code == d]
+    ((dx, dy),) = [m for m, code in DIRS.items() if code == d]
     tx, ty = ux + dx, uy + dy
     if not (0 <= tx < GW and 0 <= ty < GH):
         return None
@@ -859,8 +890,11 @@ def main():
     jobs = int((opt(args, "--jobs", 1) or [os.environ.get("NAV_JOBS", "6")])[0])
     out = args[0] if args else f"Nav{map_id}.lua"
     configure(map_id, rows and tuple(map(int, rows)), cols and tuple(map(int, cols)))
-    print(f"map {map_id}: {len(TILES)} tiles, rows {ROWS.start}-{ROWS.stop - 1}, cols {COLS.start}-{COLS.stop - 1}, "
-          f"grid {GW}x{GH}", flush=True)
+    print(
+        f"map {map_id}: {len(TILES)} tiles, rows {ROWS.start}-{ROWS.stop - 1}, cols {COLS.start}-{COLS.stop - 1}, "
+        f"grid {GW}x{GH}",
+        flush=True,
+    )
     components()
     grid, cuts = bytearray(GW * GH), set()
     BASE_Z.frombytes(bytes(4 * GW * GH))
