@@ -102,8 +102,8 @@ function ShortestPathForeverDockPinMixin:OnLoad()
 	self:SetScript("OnHide", self.OnMouseLeave)
 end
 
--- cluster = { docks = { { id, x, y }... }, x, y, kind, kinds = { [kind] = true } }: one dock, or several too
--- close to tell apart.
+-- cluster = { docks = { { id, x, y }... }, x, y, kind, kinds = { [kind] = true }, key = the dock ids joined by
+-- commas }: one dock, or several too close to tell apart.
 function ShortestPathForeverDockPinMixin:OnAcquired(cluster)
 	self.cluster = cluster
 	ns.SetTransportIcon(self.Texture, cluster.kind)
@@ -282,7 +282,7 @@ function ProviderMixin:ShowDestinations(pin)
 end
 
 function ProviderMixin:HideDestinations()
-	for _, pin in pairs(self.pins or {}) do
+	for _, pin in pairs(self.pins) do
 		pin.Glow:Hide()
 	end
 end
