@@ -1543,7 +1543,7 @@ end
 
 -- Round-robin slices share one frame budget, including callbacks that replan from newly settled costs.
 local queue = {}
-local scheduled = false
+local scheduled, pumped = false, false
 local pump, combatWait
 
 local function notify(job, callback, points, cost)
@@ -1568,7 +1568,7 @@ local function schedule()
 end
 
 pump = function()
-	scheduled = false
+	scheduled, pumped = false, true
 	if InCombatLockdown and InCombatLockdown() then
 		if not combatWait then
 			combatWait = CreateFrame("Frame")
@@ -1637,6 +1637,14 @@ pump = function()
 		trimGraphs()
 	end
 	schedule()
+end
+
+-- Idle work waits while searches hold frames, so the two never share one frame budget. A search that ran since
+-- the last call may have spent this frame's budget just before the caller.
+function Path.Busy()
+	local busy = scheduled or pumped or #queue > 0
+	pumped = false
+	return busy
 end
 
 -- Next-frame scheduling; tests replace it.
