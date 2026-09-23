@@ -158,10 +158,18 @@ _G.C_AddOnProfiler = {
  IsEnabled=function() return true end,
  GetAddOnMetric=function(name, metric) assert(name == "ShortestPathForever") return metric == 6 and 2 or 0.123 end,
 }
-_G.UpdateAddOnMemoryUsage = function() updates = updates + 1 end
+local collected, gc = false, collectgarbage
+_G.collectgarbage = function(action)
+ assert(action == "collect")
+ collected = true
+ return gc(action)
+end
+_G.UpdateAddOnMemoryUsage = function() assert(collected, "collect before addon accounting") updates = updates + 1 end
 _G.GetAddOnMemoryUsage = function(name) return name == "ShortestPathForever" and 100 or 20 end
 SlashCmdList.SHORTESTPATHFOREVER("perf")
 assert(updates == 1 and #messages == 6 and messages[1]:find("0.123 ms", 1, true))
+_G.collectgarbage = gc
+assert(messages[6]:find("collected", 1, true))
 assert(messages[6]:find("160.0 KB", 1, true), "include all loaded nav addons in memory")
 assert(#errors == 0, table.concat(errors, "\n"))
 print("activity_ui: idle sleep, tracker, combat, passive rides, pin pools and profiler ok")

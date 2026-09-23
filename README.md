@@ -22,7 +22,8 @@ Each feature has more detail in [docs/features.md](docs/features.md).
 - **Journey planner.** Shift-click the map or minimap, or choose *Plan journey* on a quest, for the fastest way there:
   walking through tunnels and city levels, known flight points, boats, zeppelins, lifts, the tram and portals. The
   route is drawn on both maps and its steps sit in the objective tracker. It replans as you move, switching only for a
-  clearly faster way.
+  clearly faster way. While a new journey is checked, only the destination pin and a small spinner show;
+  the route, steps and totals appear together, and a long search shows its best route after three seconds.
   ![Journey steps from Auberdine to Silithus with time and distance remaining](docs/screenshots/tracker.png)
 - **Guide.** The game's own waypoint marker leads you along the route turn by turn, round walls rather than straight at
   the stop, and hands your tracked quest back when you arrive. Click the tracker header to turn it off.
@@ -59,7 +60,7 @@ Install it from [CurseForge](https://www.curseforge.com/wow/addons/shortest-path
 | Command | What it does |
 |---|---|
 | `/path` | Open the settings (also in Settings → AddOns, or from the addon compartment on the minimap) |
-| `/path perf` | Print this addon's CPU averages, peaks and memory from the client's profiler |
+| `/path perf` | Print this addon's CPU averages and peaks from the client's profiler, and its memory after a full collection |
 | `/path debug` | Keep a trace of your position and ride matching, for reporting a ride that did not sync |
 
 Every feature has its own switch in the settings. Searches and tracker updates wait until combat ends.
@@ -89,6 +90,7 @@ luajit tests/path_many_spec.lua      # exact costs, frontier bounds, interleavin
 luajit tests/journey_optimal_spec.lua # 30 seeded full-search comparisons and cache invalidation
 luajit -joff tests/journey_bench.lua  # searches, rounds and frames at the 3 ms budget
 luajit tests/walk_sim.lua            # follow four real routes; assert zero route flips
+luajit -joff tests/memory_bench.lua felwood # before/after collection and cache attribution
 luajit tests/activity_ui.lua       # idle sleep, passive rides, combat, tracker and profiler
 luajit -joff tests/activity_bench.lua idle # offline CPU/allocation and login cost (also dock/walking/ride/panel/combat)
 ```

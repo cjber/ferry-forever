@@ -1,10 +1,10 @@
 local _, ns = ...
 
 -- Shift-click the world map: the fastest way there from here, by foot, flight, boat, zeppelin, tram and portal,
--- with the boats' live waits. Endpoint lower bounds prove the winning route before committing; chosen walks
--- then get geometry without replanning. The tracker owns the list; closing the map leaves the journey running.
+-- with the boats' live waits. Search candidates stay private until costs and geometry settle, with a grace
+-- period for longer searches. The tracker owns the list; closing the map leaves the journey running.
 local REPLAN_EVERY, REFRESH_EVERY = 5, 60
-local DRAW_EVERY = 0.5
+local DRAW_EVERY, SEARCH_GRACE = 0.5, 3
 local PROBE_BUDGET = 60 -- ms before switching from candidate costs to shared endpoint searches
 local SCHEDULED = { boat = true, zeppelin = true, lift = true, tram = true }
 local VERB = {
@@ -19,6 +19,10 @@ local VERB = {
 }
 
 local goal, guide, result
+local search, FinishSearch
+local plannerCache = {}
+local walkOrder, walkPending = {}, {}
+local WALK_CACHE_LIMIT = 64
 local progress = { index = 1 }
 local driver
 local ARRIVAL = 15
@@ -36,7 +40,7 @@ local costsWaiting
 local ON_PATH = 15
 -- Timed replans replace the followed route only for a worthwhile gain; endpoint costs stay unchanged between
 -- the infrequent batches, except for Remaining() along the walk you are following.
-local SWITCH_GAIN, SWITCH_SHARE = 20000, 0.1
+local SWITCH_GAIN, SWITCH_SHARE = 30000, 0.1
 -- Water Walking, Levitate and the Elixir of Water Walking make water ground. A spell you know counts too: the step
 -- asks you to cast it. waterMode is the mode this journey's walks were searched in.
 local WATER_AURAS = { 546, 1706, 11319 }
@@ -71,7 +75,7 @@ local function CancelPaths()
 			batch.path.Pause(batch.job)
 		end
 	end
-	pathJobs, pendingWalks, pendingCosts = {}, 0, 0
+	pathJobs, walkPending, pendingWalks, pendingCosts = {}, {}, 0, 0
 end
 
 local function NodeLabel(node, mode)
@@ -256,7 +260,16 @@ function ns.ClearJourney()
 	CancelPaths()
 	costsWaiting = nil
 	settleRound, costError, goalError = 0, nil, nil
-	walkCache, startCosts, goalCosts, startAt = {}, {}, {}, nil
+	for _, batch in pairs({ start = startBatch, goal = goalBatch }) do
+		if batch.job then
+			batch.path.Cancel(batch.job)
+		end
+	end
+	startBatch, goalBatch, search = nil, nil, nil
+	walkCache, walkOrder, startCosts, goalCosts, startAt, plannerCache = {}, {}, {}, {}, nil, {}
+	if ns.Path and ns.Path.ClearCaches then
+		ns.Path.ClearCaches()
+	end
 	StopGuide()
 	goal, result = nil, nil
 	progress.index, progress.departed = 1, false
@@ -335,7 +348,7 @@ end
 function ns.ToggleJourneyGuide()
 	if guide then
 		StopGuide()
-	elseif result then
+	elseif goal then
 		StartGuide()
 	end
 	RefreshTracker()
@@ -353,12 +366,10 @@ function ns.JourneyInfo()
 	end
 	local title = "Journey to " .. NodeLabel(goal)
 	local rows = {}
-	if result then
-		if ns.JourneyStatus() then
-			title = title .. " · finding the fastest way" .. string.rep(".", math.floor(GetTime()) % 3 + 1)
-		else
-			title = title .. " · " .. ns.FormatCountdown(math.max(0, result.arrive - ns.NowMs()))
-		end
+	local loading = search and search.initial or false
+	if not result and loading then
+		rows[1] = { key = "searching", text = "Finding the fastest way…", grey = true }
+	elseif result then
 		local _, spell = WaterWalking()
 		for index = progress.index, #result.legs do
 			local leg = result.legs[index]
@@ -371,18 +382,20 @@ function ns.JourneyInfo()
 			end
 			if leg.walkError then
 				text = text .. " (" .. (WALK_FAILURE[leg.walkError] or "walking search failed") .. ")"
-			elseif leg.mode == "walk" and ns.Path and not leg.measured then
-				text = text .. " (finding walking path)"
 			end
 			if spell and leg.wet and leg.wet >= WATER_HINT then
 				text = text .. " (cast " .. C_Spell.GetSpellName(spell) .. ")"
 			end
-			rows[#rows + 1] = { key = index, text = text .. "   " .. LegTime(leg), current = index == progress.index }
+			rows[#rows + 1] = {
+				key = index,
+				text = loading and text or text .. "   " .. LegTime(leg),
+				current = index == progress.index,
+			}
 		end
 	else
 		rows[1] = { key = "unreachable", text = costError and WALK_FAILURE[costError] or "No way there from here." }
 	end
-	return title, rows, result, progress.index
+	return title, rows, result, progress.index, loading
 end
 
 -- Where here falls on a walk: the segment ending at points[index], how far along it (t), and the yards still to walk
@@ -416,7 +429,7 @@ end
 local function Refresh()
 	local remaining
 	if result then
-		remaining = { now = result.now, arrive = result.arrive, legs = {}, settling = ns.JourneyStatus() }
+		remaining = { now = result.now, arrive = result.arrive, legs = {} }
 		for index = progress.index, #result.legs do
 			remaining.legs[#remaining.legs + 1] = result.legs[index]
 		end
@@ -461,12 +474,7 @@ local function Walks(here)
 		end
 	end
 	local leg = result and result.legs[progress.index]
-	local rest = leg
-		and not result.preview
-		and result.waterMode == waterMode
-		and leg.mode == "walk"
-		and leg.measured
-		and Remaining(leg, here)
+	local rest = leg and result.waterMode == waterMode and leg.mode == "walk" and leg.measured and Remaining(leg, here)
 	if rest then
 		walks[#walks + 1] = { from = here, to = leg.to, cost = rest }
 	end
@@ -481,37 +489,62 @@ local function WalkKey(from, to)
 	return table.concat({ from.map, from.x, from.y, from.z or "", to.x, to.y, to.z or "" }, ":")
 end
 
+local function CacheWalk(key, entry)
+	if not walkCache[key] then
+		walkOrder[#walkOrder + 1] = key
+		if #walkOrder > WALK_CACHE_LIMIT then
+			walkCache[table.remove(walkOrder, 1)] = nil
+		end
+	end
+	walkCache[key] = entry
+end
+
 local function FindWalk(planned, leg, key)
 	local version, previous = pathVersion, leg.walkPoints
 	leg.walkDrawn = previous ~= nil
 	leg.walkPoints = previous or ns.Planner.WalkPoints(leg.from, leg.to)
-	pendingWalks = pendingWalks + 1
-	local job = ns.Path.Find(leg.from.map, leg.from, leg.to, function(points, cost, finished)
-		pathJobs[finished] = nil
-		if result ~= planned or version ~= pathVersion then
-			return
-		end
-		pendingWalks = pendingWalks - 1
+	local function apply(points, cost)
 		leg.walkError = not points and cost or nil
 		leg.walkPoints = points or previous or {}
 		if points then
 			leg.measured, leg.walkDrawn, leg.wet = true, true, points.wet
-			if guide and result.legs[progress.index] == leg then
-				guide.target = nil
+			if planned.preview then
+				leg.walkCost, leg.yards = cost, cost
 			end
 		end
-		walkCache[key] = { points = points or previous, reason = leg.walkError }
+	end
+	if walkPending[key] then
+		walkPending[key][#walkPending[key] + 1] = apply
+		return
+	end
+	local waiting = { apply }
+	walkPending[key] = waiting
+	pendingWalks = pendingWalks + 1
+	local job = ns.Path.Find(leg.from.map, leg.from, leg.to, function(points, cost, finished)
+		pathJobs[finished] = nil
+		if version ~= pathVersion then
+			return
+		end
+		pendingWalks = pendingWalks - 1
+		walkPending[key] = nil
+		for _, callback in ipairs(waiting) do
+			callback(points, cost)
+		end
+		CacheWalk(key, { points = points or previous, reason = not points and cost or nil, cost = points and cost })
 		if ns.db.debug and (not points or math.abs(cost - leg.yards) > math.max(1, leg.yards * 0.1)) then
 			ns.Print(string.format("walking cost mismatch: planned %.1f, found %s", leg.yards, tostring(cost)))
 		end
-		-- Costs were settled before choosing the plan. Geometry must never start another planning round.
-		UpdateProgress()
-		Refresh()
+		-- Geometry is private until the entire search can be committed together.
+		FinishSearch()
 	end, waterMode)
 	pathJobs[job] = true
 end
 
 local function PrepareWalks(planned)
+	if not planned or planned.prepared then
+		return
+	end
+	planned.prepared = true
 	for _, leg in ipairs(planned and planned.legs or {}) do
 		if leg.mode == "walk" then
 			local key = WalkKey(leg.from, leg.to)
@@ -521,6 +554,9 @@ local function PrepareWalks(planned)
 				leg.walkPoints, leg.measured = entry.points or {}, entry.reason == nil
 				leg.walkDrawn = entry.points ~= nil
 				leg.wet, leg.walkError = entry.points and entry.points.wet, entry.reason
+				if planned.preview and entry.cost then
+					leg.walkCost, leg.yards = entry.cost, entry.cost
+				end
 			elseif ns.Path and leg.from.map == leg.to.map and ns.Path.HasData(leg.from.map) then
 				-- A replacement may itself still be pending while drawing an older result; preserve that too.
 				for _, previous in ipairs(result and result.legs or {}) do
@@ -541,7 +577,7 @@ end
 
 -- The same journey replanned from a few yards on: every leg goes the same way to the same place.
 local function SameJourney(a, b)
-	if not (a and b) or b.preview or a.waterMode ~= b.waterMode or #a.legs ~= #b.legs - progress.index + 1 then
+	if not (a and b) or a.waterMode ~= b.waterMode or #a.legs ~= #b.legs - progress.index + 1 then
 		return false
 	end
 	for index, leg in ipairs(a.legs) do
@@ -574,53 +610,72 @@ local function Retime(planned)
 	end
 end
 
--- Whether the plan you are following still works: you are on its walk, and have not missed a timed departure.
-local function StillValid(plan, now)
-	local leg = plan.legs[progress.index]
-	if not leg or plan.arrive < now then
-		return false
+-- Compare against this route's own measured legs, at the same departure time as the challenger.
+-- Reusing the old optimistic arrival would make a grace-period route unfairly hard to replace.
+local function EstimateKept(now)
+	if not result then
+		return nil
 	end
-	if leg.route and not progress.departed and leg.depart and leg.depart < now then
-		return false
-	end
-	return not (leg.mode == "walk" and leg.measured) or OnWalk(leg.walkPoints, Here()) ~= nil
-end
-
--- A route only gives way to one clearly faster, as satnavs do, so near-ties cannot flip the route back and forth
--- and restart its searches every few seconds.
-local function Better(planned)
-	local gain = math.max(SWITCH_GAIN, (result.arrive - planned.now) * SWITCH_SHARE)
-	return planned.arrive < result.arrive - gain
-end
-
-local function Render(planned, forced)
-	if SameJourney(planned, result) then
-		Retime(planned)
-		UpdateProgress()
-		Refresh()
-		return
-	end
-	if
-		not forced
-		and planned
-		and result
-		and not result.preview
-		and StillValid(result, planned.now)
-		and not Better(planned)
-	then
-		UpdateProgress()
-		Refresh()
-		return
-	end
-	if planned ~= result then
-		CancelPaths()
-		progress.index, progress.departed = 1, false
-		PrepareWalks(planned)
-		if guide then
-			guide.target = nil
+	local here, anchors = Here(), ns.FreshAnchors()
+	local estimate = { now = now, arrive = now, legs = {} }
+	for index = progress.index, #result.legs do
+		local leg = result.legs[index]
+		if index == progress.index and leg.route and not progress.departed and leg.depart < now then
+			return nil
 		end
+		local duration, wait = leg.arrive - leg.depart, leg.wait or 0
+		local yards = leg.yards or duration / 1000 * math.max(lastRunSpeed, 7)
+		if leg.walkError then
+			return nil
+		end
+		if leg.mode == "walk" then
+			local entry = walkCache[WalkKey(leg.from, leg.to)]
+			if entry and entry.reason then
+				return nil
+			end
+			local basis = entry and entry.cost or leg.walkCost or yards
+			if index == progress.index and leg.measured then
+				local rest = Remaining(leg, here)
+				if not rest then
+					return nil
+				end
+				yards = rest * basis / (leg.walkCost or leg.yards)
+			else
+				yards = basis
+			end
+			duration, wait = yards / math.max(lastRunSpeed, 7) * 1000, 0
+		elseif leg.route and not leg.aboard then
+			local route, anchor = ns.Routes[leg.route], anchors[leg.route]
+			if anchor and leg.boarding then
+				local _, _, departIn =
+					ns.Model.Visit(route, leg.boarding, (estimate.arrive - anchor.epoch) % route.period)
+				wait = departIn
+			else
+				wait = route.period / 2
+			end
+		elseif index == progress.index and leg.aboard then
+			duration, wait = math.max(0, leg.arrive - now), 0
+		end
+		local depart = estimate.arrive + wait
+		estimate.arrive = depart + duration
+		estimate.legs[#estimate.legs + 1] = {
+			depart = depart,
+			arrive = estimate.arrive,
+			wait = wait,
+			yards = yards,
+			estimated = leg.estimated,
+			aboard = leg.aboard,
+		}
 	end
+	return estimate
+end
+
+local function Commit(planned)
 	result = planned
+	progress.index, progress.departed = 1, false
+	if guide then
+		guide.target = nil
+	end
 	if not result then
 		StopGuide()
 	end
@@ -628,7 +683,102 @@ local function Render(planned, forced)
 	Refresh()
 end
 
-local plannerCache = {}
+FinishSearch = function()
+	if not search or pendingCosts > 0 or pendingWalks > 0 then
+		return
+	end
+	local planned, forced, refine = search.candidate, search.forced, search.initial or search.refine
+	local estimate = EstimateKept(planned and planned.now or ns.NowMs())
+	local same = SameJourney(planned, result)
+	local gain = estimate and planned and estimate.arrive - planned.arrive
+	local better = gain and gain >= SWITCH_GAIN and gain >= (estimate.arrive - planned.now) * SWITCH_SHARE
+	local valid = true
+	for _, leg in ipairs(planned and planned.legs or {}) do
+		if leg.walkError then
+			valid = false
+		end
+	end
+	local keep = result and planned and estimate and (not valid or (not forced and (same or not better)))
+	if not keep and planned and not planned.prepared then
+		PrepareWalks(planned)
+		if pendingWalks > 0 then
+			return
+		end
+	end
+	search = nil
+	-- Retain exact endpoint vectors and their lower bounds, never suspended search stacks.
+	for _, batch in pairs({ start = startBatch, goal = goalBatch }) do
+		if batch.job and batch.path.ReleaseMany then
+			batch.path.ReleaseMany(batch.job)
+		end
+	end
+	if keep then
+		Retime(same and planned or estimate)
+		local changedWater = result.waterMode ~= waterMode
+		result.waterMode = waterMode
+		if refine or changedWater then
+			for _, leg in ipairs(result.legs) do
+				if leg.mode == "walk" then
+					local entry = walkCache[WalkKey(leg.from, leg.to)]
+					if entry then
+						if refine then
+							leg.walkPoints = entry.points or {}
+						end
+						leg.walkError, leg.wet = entry.reason, entry.points and entry.points.wet
+						leg.measured, leg.walkCost = entry.reason == nil, entry.cost or leg.walkCost
+					end
+				end
+			end
+			result.prepared = true
+			if refine and guide then
+				guide.target = nil
+			end
+		end
+		UpdateProgress()
+		if refine then
+			Refresh()
+		else
+			RefreshTracker()
+		end
+	else
+		Commit(planned)
+	end
+end
+
+local function Render(planned, forced)
+	search = search or { started = GetTime(), initial = not result }
+	search.candidate, search.forced = planned, forced
+	search.refine = result and not result.prepared
+	-- Measure the grace route's own legs only after the proof finishes, so presentation never
+	-- competes with the bounded search for its frame budget.
+	if search.grace then
+		PrepareWalks(search.grace)
+	end
+	if result and result.waterMode ~= waterMode then
+		local kept = { legs = {}, preview = true }
+		for index = progress.index, #result.legs do
+			local copy = {}
+			for key, value in pairs(result.legs[index]) do
+				copy[key] = value
+			end
+			kept.legs[#kept.legs + 1] = copy
+		end
+		PrepareWalks(kept)
+	end
+	local estimate = not search.initial and not forced and EstimateKept(planned and planned.now or ns.NowMs())
+	if estimate and planned and pendingWalks == 0 and not search.refine then
+		local gain = estimate.arrive - planned.arrive
+		if gain < SWITCH_GAIN or gain < (estimate.arrive - planned.now) * SWITCH_SHARE then
+			FinishSearch()
+			return
+		end
+	end
+	-- Reusing the followed walk needs no new geometry and preserves Guide's passed bends.
+	if search.refine or not SameJourney(planned, result) then
+		PrepareWalks(planned)
+	end
+	FinishSearch()
+end
 
 local function Plan(preview, bounded)
 	local here = Here()
@@ -712,6 +862,7 @@ local function RefreshCosts(includeGoal, forced)
 		return
 	end
 	CancelPaths()
+	search = { started = GetTime(), initial = not result, forced = forced }
 	local version, faction = pathVersion, UnitFactionGroup("player")
 	local places = ns.Planner.Places({
 		docks = ns.Docks,
@@ -769,6 +920,9 @@ local function RefreshCosts(includeGoal, forced)
 	end
 	startAt, refreshedAt = here, GetTime()
 	pendingCosts, costError = 2, nil
+	if search.initial then
+		Refresh()
+	end
 	local slices, lastRevision, probeCPU = 0, -1, 0
 	local function fixedPlace(batch)
 		if batch.fixedChecked or not (batch.job and batch.job.valid and ns.Path.ReuseMany) then
@@ -844,7 +998,7 @@ local function RefreshCosts(includeGoal, forced)
 		startCosts, goalCosts = walks(startBatch), walks(goalBatch)
 		preview = Plan(false, true)
 		if preview then
-			preview.preview, result = true, preview
+			preview.preview, search.candidate = true, preview
 		end
 	end
 	local consider
@@ -860,7 +1014,6 @@ local function RefreshCosts(includeGoal, forced)
 			(not startBatch.done and not (startBatch.job and startBatch.job.valid))
 			or (not goalBatch.done and not (goalBatch.job and goalBatch.job.valid))
 		then
-			Refresh()
 			return
 		end
 		local hadFixed = startBatch.fixedKey or goalBatch.fixedKey
@@ -908,10 +1061,7 @@ local function RefreshCosts(includeGoal, forced)
 				end
 			end
 			if #probes > 0 then
-				if not result or result.preview then
-					planned.preview, result = true, planned
-					progress.index, progress.departed = 1, false
-				end
+				planned.preview, search.candidate = true, planned
 				active(startBatch, false)
 				active(goalBatch, false)
 				local left = #probes
@@ -934,7 +1084,6 @@ local function RefreshCosts(includeGoal, forced)
 					end, waterMode)
 					pathJobs[job] = true
 				end
-				Refresh()
 				return
 			end
 		end
@@ -952,15 +1101,10 @@ local function RefreshCosts(includeGoal, forced)
 			pendingCosts, settleRound = 0, settleRound + 1
 			Render(planned, forced)
 		else
-			-- Interim routes are previews; only a proven route starts geometry and becomes committed.
-			if not result or result.preview then
-				if planned then
-					planned.preview = true
-				end
-				result = planned
-				progress.index, progress.departed = 1, false
+			if planned then
+				planned.preview = true
 			end
-			Refresh()
+			search.candidate = planned
 		end
 	end
 	local function attach(batch)
@@ -991,8 +1135,6 @@ local function RefreshCosts(includeGoal, forced)
 	-- Existing settled costs can prove a repeated journey without advancing either frontier.
 	if ns.Path.Pause and (startBatch.job.valid or startBatch.done) and (goalBatch.job.valid or goalBatch.done) then
 		consider(true)
-	else
-		Refresh()
 	end
 end
 
@@ -1021,6 +1163,32 @@ local function Update(self, elapsed)
 			RefreshCosts(true, true)
 		end
 	end
+	if
+		search
+		and search.initial
+		and not result
+		and search.candidate
+		and #search.candidate.legs > 0
+		and GetTime() - search.started >= SEARCH_GRACE
+	then
+		local candidate = search.candidate
+		search.grace = candidate
+		-- The visible snapshot never shares mutable leg records with ongoing geometry work.
+		local snapshot = { now = candidate.now, arrive = candidate.arrive, waterMode = candidate.waterMode, legs = {} }
+		for _, leg in ipairs(candidate.legs) do
+			local copy = {}
+			for key, value in pairs(leg) do
+				copy[key] = value
+			end
+			if leg.mode == "walk" and not copy.walkPoints then
+				local entry = walkCache[WalkKey(leg.from, leg.to)]
+				copy.walkPoints = entry and entry.points or ns.Planner.WalkPoints(leg.from, leg.to)
+				copy.measured = entry and entry.reason == nil
+			end
+			snapshot.legs[#snapshot.legs + 1] = copy
+		end
+		Commit(snapshot)
+	end
 	local index = progress.index
 	UpdateProgress()
 	if not goal then
@@ -1033,8 +1201,8 @@ local function Update(self, elapsed)
 		self.elapsed = 0
 		local mode = WaterWalking()
 		if mode ~= waterMode then
-			waterMode, walkCache, startCosts, goalCosts = mode, {}, {}, {}
-			RefreshCosts(true, true)
+			waterMode, walkCache, walkOrder, startCosts, goalCosts = mode, {}, {}, {}, {}
+			RefreshCosts(true, false)
 		elseif pendingCosts == 0 and pendingWalks == 0 then
 			local here = Here()
 			local leg = result and result.legs[progress.index]
@@ -1083,12 +1251,13 @@ local function StartJourney(point)
 	CancelPaths()
 	costsWaiting = nil
 	settleRound, costError, goalError = 0, nil, nil
-	walkCache, startCosts, goalCosts, startAt = repeated and walkCache or {}, {}, {}, nil
+	walkCache, walkOrder, startCosts, goalCosts, startAt =
+		repeated and walkCache or {}, repeated and walkOrder or {}, {}, {}, nil
 	if guide then
 		StopGuide()
 	end
 	goal = point
-	result = previous
+	result, search = previous, nil
 	progress.index, progress.departed = previous and index or 1, previous and departed or false
 	driver.elapsed, driver.progressElapsed = 0, 0
 	if not InCombatLockdown() then
@@ -1097,10 +1266,10 @@ local function StartJourney(point)
 	ns.WakeTravel()
 	waterMode = mode
 	if ns.Path then
-		if not ns.Path.LowerBound then
-			result = result or Plan(true)
+		RefreshCosts(true, false)
+		if search and not search.candidate and not ns.Path.LowerBound then
+			search.candidate = Plan(true)
 		end
-		RefreshCosts(true, true)
 	else
 		Render(Plan())
 	end

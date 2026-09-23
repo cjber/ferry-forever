@@ -207,7 +207,13 @@ while frame do
 	fn()
 end
 assert(pauses == 1 and not complete[1] and complete[2] and geometry)
-Path.Resume(incremental[1])
+local released = incremental[1]
+local callback, progressCallback, savedCosts = released.callback, released.progress, released.costs
+Path.ReleaseMany(released)
+assert(not released.co and not released.scratch and not released.callback and not released.progress)
+assert(released.costs == savedCosts and Path.ReuseMany(released, sources[1]))
+released.callback, released.progress = callback, progressCallback
+Path.Resume(released)
 while frame do
 	local fn = frame
 	frame = nil
@@ -215,4 +221,4 @@ while frame do
 end
 assert(complete[1])
 Path.clock, Path.budget = realClock, 3
-print("incremental frontier bounds, cross-map interleaving, pause/resume and geometry: ok")
+print("incremental frontier bounds, cross-map interleaving, pause/release/resume and geometry: ok")

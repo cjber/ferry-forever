@@ -121,6 +121,12 @@ driver.begin(from, destination)
 drain()
 local count = #batches
 local points = driver.shown().legs[1].walkPoints
+for _, batch in ipairs(batches) do
+	assert(
+		not batch.co and not batch.scratch and not batch.callback and not batch.progress,
+		"a settled journey must release its endpoint frontiers and callbacks"
+	)
+end
 assert(count == 2 and #points > 2)
 driver.begin(from, destination)
 drain()
@@ -144,7 +150,7 @@ assert(#batches == count + 3 and batches[#batches].waterWalking, "water mode inv
 ns.ClearJourney()
 driver.begin(nearby, destination)
 drain()
-assert(#batches == count + 3, "clearing the UI must not discard destination costs")
+assert(#batches == count + 5, "clearing a journey releases both endpoint caches")
 ns.ClearJourney()
 print("journey cache: repeated goal, stationary refresh, same-cell movement and water invalidation: ok")
 

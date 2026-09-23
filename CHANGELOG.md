@@ -15,6 +15,13 @@ Clicking a dock, station or portal on the world map opens the map at the other e
 where it comes in. A dock with boats or zeppelins to several places asks which one with a small menu. The
 tooltip says when a click will take you somewhere.
 
+New journeys show a destination pin and a small loading spinner while finding the fastest way,
+then reveal the route and steps together. Longer searches show their best route after three seconds
+and keep it unless another is at least 30 seconds and 10% faster, or the route no longer works.
+Later checks happen quietly without flashing routes or changing “finding” messages. Journey searches
+retain less memory, clearing a journey frees its caches, and `/path perf` now collects unused memory
+before reporting what remains.
+
 ## [1.1.0] - 2026-09-23
 
 A new icon across the addon and its walking maps, settings in the minimap's addon compartment, and a fixed place in the objective tracker.
