@@ -18,13 +18,27 @@ local function Bearing(x, y)
 end
 
 local function Update()
-	local x, y, _, map = UnitPosition("player")
+	local x, y, _, map = ns.JourneyPosition()
 	local facing = GetPlayerFacing()
+	if not x or not canaccessvalue(facing) then
+		frame:SetAlpha(0)
+		return
+	end
 	while x and index < #path and map == target.map and (target.x - x) ^ 2 + (target.y - y) ^ 2 <= PASSED ^ 2 do
 		index = index + 1
 		target = path[index]
 	end
-	native = placeTarget and placeTarget(target)
+	local alpha = 1
+	if
+		destination
+		and map == destination.map
+		and target.map == destination.map
+		and target.x == destination.x
+		and target.y == destination.y
+	then
+		alpha = math.max(0, math.min(1, (math.sqrt((target.x - x) ^ 2 + (target.y - y) ^ 2) - 15) / 25))
+	end
+	native = placeTarget and placeTarget(target, alpha < 1)
 	-- A manual waypoint replacement can stop Guide inside placeTarget.
 	if not path then
 		return
@@ -33,7 +47,7 @@ local function Update()
 		frame:SetAlpha(0)
 		return
 	end
-	frame:SetAlpha(1)
+	frame:SetAlpha(alpha)
 	local angle = Bearing(x, y) - facing
 	frame.Arrow:SetRotation(angle)
 	frame.Arrow:SetPoint("CENTER", frame.Icon, "CENTER", -math.sin(angle) * RADIUS, math.cos(angle) * RADIUS)
@@ -75,7 +89,7 @@ end
 function ns.RefreshGuideStops()
 	path = source and (ns.db.guideStops and { source[#source] } or source)
 	index = 1
-	local x, y, z, map = UnitPosition("player")
+	local x, y, z, map = ns.JourneyPosition()
 	local nearest
 	-- Guide may be restarted halfway along a walk, including one that crosses itself on another floor.
 	for i = 2, #(path or {}) do

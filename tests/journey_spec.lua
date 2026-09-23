@@ -54,6 +54,11 @@ local settling, round, pending = ns.JourneyStatus()
 assert(settling and round == 0 and pending == 2 and driver.shown().settling)
 assert(#jobs == 0 and #plans == 1 and #batches == 2)
 assert(ns.JourneyInfo():find("finding the fastest way", 1, true))
+driver.move({ map = 1, x = 7, y = 0, z = 0 })
+driver.update(0.6)
+local previewPoints = driver.shown().legs[1].walkPoints
+assert(previewPoints and previewPoints[1].x == 7, "even a pending preview must trim while walking")
+driver.move(here)
 for _ = 1, 3 do
 	driver.update(5)
 end
@@ -282,6 +287,159 @@ assert(
 	"a ride in transit must still reach its next dock"
 )
 ns.ClearJourney()
+
+-- Real Auberdine geometry, the actual Guide consumer and next-frame notifications from our own writes.
+for _, destination in ipairs({ { map = 1, x = 6400, y = 100 }, { map = 0, x = 2271.09, y = -5340.8 } }) do
+	local live = assert(loadfile("tests/journey_driver.lua"))()
+	local addon = live.ns
+	for _, file in ipairs({
+		"Data/Routes.lua",
+		"Data/Transports.lua",
+		"Data/Taxi.lua",
+		"Data/Portals.lua",
+		"Data/Walks.lua",
+		"Path.lua",
+		"Arrow.lua",
+	}) do
+		live.load(file)
+	end
+	for _, mapID in ipairs({ 0, 1, 2991 }) do
+		assert(loadfile("ShortestPathForever_Nav" .. mapID .. "/Nav" .. mapID .. ".lua"))()
+	end
+	local nextFrame, searches = nil, 0
+	addon.Path.after = function(fn)
+		nextFrame = fn
+	end
+	local findMany = addon.Path.FindMany
+	addon.Path.FindMany = function(...)
+		searches = searches + 1
+		return findMany(...)
+	end
+	local function frame()
+		local fn = nextFrame
+		nextFrame = nil
+		if fn then
+			fn()
+		end
+		live.update(1 / 60)
+	end
+	local function drain()
+		local frames = 0
+		while nextFrame do
+			frame()
+			frames = frames + 1
+			assert(frames < 20000, "Auberdine search must settle")
+		end
+		assert(not addon.JourneyStatus())
+	end
+	local position = { map = 1, x = 6407.6, y = 509.8, z = 16 }
+	live.begin(position, destination)
+	drain()
+	local route = live.shown()
+	assert(route and route.legs[1].measured)
+	local path = route.legs[1].walkPoints
+	local initialWaypoint = live.waypoint()
+	assert(initialWaypoint and addon.IsJourneyGuided(), "Auberdine must start Guide automatically")
+	-- An unavailable sample spanning a replan used to discard the route and permanently stop Guide.
+	for _, unavailable in ipairs({ {}, { x = live.secret, y = live.secret, map = live.secret } }) do
+		local held = live.shown()
+		live.move(unavailable)
+		for _ = 1, 360 do
+			frame()
+		end
+		assert(live.shown() == held and addon.IsJourneyGuided(), "unreadable position must preserve the journey")
+		live.move(position)
+		frame()
+	end
+	local travelled, changes, previous = 0, 0, live.waypoint()
+	for i = 2, #path do
+		local a, b = path[i - 1], path[i]
+		local length = math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2)
+		local frames = math.max(1, math.ceil(length / 7 * 60))
+		for step = 1, frames do
+			local t = step / frames
+			position = {
+				map = a.map,
+				x = a.x + t * (b.x - a.x),
+				y = a.y + t * (b.y - a.y),
+				z = a.z and b.z and a.z + t * (b.z - a.z),
+			}
+			live.move(position)
+			frame()
+			travelled = travelled + length / frames
+			local bend = addon.GuideTargets()
+			local marker, tracking = live.waypoint()
+			assert(marker and tracking and addon.IsJourneyGuided(), "deferred writes must retain Guide ownership")
+			assert(math.abs(marker.position.x - (0.5 - bend.y / 50000)) < 1e-9)
+			assert(math.abs(marker.position.y - (0.5 - bend.x / 50000)) < 1e-9)
+			if marker ~= previous then
+				changes, previous = changes + 1, marker
+			end
+			local start = live.shown().legs[1].walkPoints[1]
+			assert(
+				(start.x - position.x) ^ 2 + (start.y - position.y) ^ 2 < 5 ^ 2,
+				"drawn start must trim within half a second while walking"
+			)
+			if travelled >= 180 then
+				break
+			end
+		end
+		if travelled >= 180 then
+			break
+		end
+	end
+	assert(changes >= 2 and searches == 2, "following bends reuses settled costs")
+	-- A minute and an off-route move each replace only the start-side search.
+	for _ = 1, 3600 do
+		frame()
+	end
+	drain()
+	assert(searches == 3)
+	position = { map = 1, x = position.x + 80, y = position.y }
+	live.move(position)
+	for _ = 1, 360 do
+		frame()
+	end
+	drain()
+	assert(searches == 4 and addon.IsJourneyGuided())
+	-- Player ownership still wins after removing per-frame ownership polling.
+	live.env.C_SuperTrack.SetSuperTrackedQuestID(99)
+	frame()
+	local manual = live.env.UiMapPoint.CreateFromCoordinates(1, 0.2, 0.3)
+	live.env.C_Map.SetUserWaypoint(manual)
+	frame()
+	assert(not addon.IsJourneyGuided() and live.waypoint() == manual)
+	addon.ClearJourney()
+	-- A fresh engine ensures the recovery test cannot pass using an already settled endpoint cache.
+	live.load("Path.lua")
+	addon.Path.after = function(fn)
+		nextFrame = fn
+	end
+	live.begin({}, destination)
+	assert(addon.IsJourneyGuided() and not live.shown())
+	live.move(position)
+	live.update(0.1)
+	assert(nextFrame and addon.JourneyStatus())
+	-- Finishing endpoint callbacks without a readable player position must not strand pendingCosts.
+	live.move({})
+	local waitingFrames = 0
+	while nextFrame do
+		frame()
+		waitingFrames = waitingFrames + 1
+		assert(waitingFrames < 20000)
+	end
+	assert(addon.JourneyStatus() and addon.IsJourneyGuided())
+	live.move(position)
+	for _ = 1, 7 do
+		frame()
+	end
+	drain()
+	assert(live.waypoint() and addon.IsJourneyGuided())
+	addon.ClearJourney()
+	print(
+		"Auberdine -> map " .. destination.map .. ": Guide bends, deferred events, position recovery and trimming: ok"
+	)
+end
 
 -- The durable long-route regression uses real Journey, Path and all three nav maps.
 assert(loadfile("tests/journey_bench.lua"))()

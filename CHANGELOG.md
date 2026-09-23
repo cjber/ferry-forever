@@ -65,6 +65,11 @@ by default and can be turned on in `/path`. Its heading glides smoothly as you t
 a soft frame and correctly proportioned markers. Marks for the same place or bearing combine into one,
 keeping the destination or transport icon and the distance to your next turn.
 
+Guide and the route now survive temporarily unavailable player coordinates, and the drawn walking leg
+trims as you move without waiting for the next route search. On the minimap, the final 30 yards fade into
+the destination and the whole line fades as you approach within 40 yards. Guide's final marker uses a
+fading arrow nearby so its native waypoint does not cover the goal; the world-map route keeps its contrast.
+
 On board, once the ride has synced, the tracker shows where the boat calls next and when it gets there. Half
 a minute before a timed boat reaches the dock you are waiting at, and shortly before your own boat docks, a
 raid-warning banner, a sound and a flashing taskbar icon let you know, even with the game in the

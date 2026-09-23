@@ -82,13 +82,19 @@ local function Stroke(owner, x1, y1, x2, y2, color, scale)
 		owner.lines[owner.used] = line
 		owner.underlines[owner.used] = underline
 	end
-	underline:SetAlpha((owner.strokeAlpha or 1) * UNDER_ALPHA)
+	local alpha = owner.strokeAlpha or 1
+	if owner.fadeX then
+		local dx = ((x1 + x2) / 2 - owner.fadeX) * owner.fadeScaleX
+		local dy = ((y1 + y2) / 2 - owner.fadeY) * owner.fadeScaleY
+		alpha = alpha * math.min(1, math.sqrt(dx * dx + dy * dy) / 30)
+	end
+	underline:SetAlpha(alpha * UNDER_ALPHA)
 	underline:SetThickness(UNDER_THICKNESS / scale)
 	underline:SetStartPoint("TOPLEFT", owner, x1, y1)
 	underline:SetEndPoint("TOPLEFT", owner, x2, y2)
 	underline:Show()
 	line:SetVertexColor(color:GetRGBA())
-	line:SetAlpha(owner.strokeAlpha or 1)
+	line:SetAlpha(alpha)
 	line:SetThickness(THICKNESS / scale)
 	line:SetStartPoint("TOPLEFT", owner, x1, y1)
 	line:SetEndPoint("TOPLEFT", owner, x2, y2)
@@ -581,13 +587,13 @@ end
 
 -- The world point under the cursor on the minimap, undoing Project; nil off its face.
 function ns.MinimapPoint()
-	local x, y, _, map = UnitPosition("player")
+	local x, y, _, map = ns.JourneyPosition()
 	local radius, facing = MinimapView()
 	local scale = Minimap:GetEffectiveScale()
 	local cx, cy = Minimap:GetCenter()
 	local mx, my = GetCursorPosition()
 	local u, v = (mx / scale - cx) / (Minimap:GetWidth() / 2), (my / scale - cy) / (Minimap:GetHeight() / 2)
-	if not (x and radius and facing) or u * u + v * v > 1 then
+	if not (x and canaccessvalue(radius) and canaccessvalue(facing) and radius and facing) or u * u + v * v > 1 then
 		return nil
 	end
 	local cosine, sine = math.cos(facing), math.sin(facing)
@@ -596,8 +602,11 @@ function ns.MinimapPoint()
 end
 
 local function DrawMinimap(self)
-	local x, y, _, map = UnitPosition("player")
+	local x, y, _, map = ns.JourneyPosition()
 	local radius, facing = MinimapView()
+	if not (canaccessvalue(radius) and canaccessvalue(facing)) then
+		radius, facing = nil, nil
+	end
 	local width, height = self:GetWidth(), self:GetHeight()
 	local scale = self:GetEffectiveScale()
 	local square = GetMinimapShape and GetMinimapShape() == "SQUARE"
@@ -620,9 +629,21 @@ local function DrawMinimap(self)
 	self.revision = geometryRevision
 	self.used, self.loading.used = 0, 0
 	self.loading:SetSize(width, height)
+	self.fadeX, self.loading.fadeX = nil, nil
+	self:SetAlpha(1)
 	local border = UNDER_THICKNESS / scale
 	if x and facing and radius and radius > 0 and width > border and height > border then
 		local cosine, sine = math.cos(facing), math.sin(facing)
+		if goal and goal.map == map then
+			local gx, gy = Project(goal, x, y, radius, cosine, sine)
+			self.fadeX, self.fadeY = (gx + 1) * width / 2, (gy - 1) * height / 2
+			self.fadeScaleX, self.fadeScaleY = 2 * radius / width, 2 * radius / height
+			self.loading.fadeX, self.loading.fadeY = self.fadeX, self.fadeY
+			self.loading.fadeScaleX, self.loading.fadeScaleY = self.fadeScaleX, self.fadeScaleY
+			local distance = math.sqrt((goal.x - x) ^ 2 + (goal.y - y) ^ 2)
+			-- The parent fades both pooled layers; the loading pulse keeps its independent alpha.
+			self:SetAlpha(math.max(0, math.min(1, (distance - 15) / 25)))
+		end
 		-- GetMinimapShape is an optional addon convention (HBD-Pins:215), not a Blizzard global.
 		local inset = 1 - border / math.min(width, height)
 		for _, path in ipairs(paths) do

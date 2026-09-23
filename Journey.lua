@@ -4,6 +4,7 @@ local _, ns = ...
 -- with the boats' live waits. Endpoint lower bounds prove the winning route before committing; chosen walks
 -- then get geometry without replanning. The tracker owns the list; closing the map leaves the journey running.
 local REPLAN_EVERY, REFRESH_EVERY = 5, 60
+local DRAW_EVERY = 0.5
 local PROBE_BUDGET = 60 -- ms before switching from candidate costs to shared endpoint searches
 local SCHEDULED = { boat = true, zeppelin = true, lift = true, tram = true }
 local VERB = {
@@ -30,6 +31,7 @@ local startBatch, goalBatch, startAt, refreshedAt
 local startCosts, goalCosts = {}, {}
 refreshedAt = 0
 local costError, goalError
+local costsWaiting
 -- Walking along a measured path from where you stood, how far off it you may stray and still be on it.
 local ON_PATH = 15
 -- Timed replans replace the followed route only for a worthwhile gain; endpoint costs stay unchanged between
@@ -109,13 +111,22 @@ local function LegTime(leg)
 	return text
 end
 
-local function Here()
+-- A missing/secret sample is not evidence that the journey is unreachable. Planning, Guide and lines share this gate.
+function ns.JourneyPosition()
 	local x, y, z, map = UnitPosition("player")
+	if not (canaccessvalue(x) and canaccessvalue(y) and canaccessvalue(map)) or not (x and y and map) then
+		return nil
+	end
+	return x, y, canaccessvalue(z) and z or nil, map
+end
+
+local function Here()
+	local x, y, z, map = ns.JourneyPosition()
 	return x and { map = map, x = x, y = y, z = z }
 end
 
 local function Near(node, reach)
-	local x, y, z, map = UnitPosition("player")
+	local x, y, z, map = ns.JourneyPosition()
 	return x
 		and map == node.map
 		and (x - node.x) ^ 2 + (y - node.y) ^ 2 <= (reach or ARRIVAL) ^ 2
@@ -179,7 +190,7 @@ local function OwnsWaypoint()
 	return true
 end
 
-local function GuideWaypoint(point)
+local function GuideWaypoint(point, fading)
 	if not guide then
 		return false
 	end
@@ -188,10 +199,19 @@ local function GuideWaypoint(point)
 	end
 	local uiMap = C_Map.GetBestMapForUnit("player")
 	local bend = guide.bend
-	if not bend or point.map ~= bend.map or point.x ~= bend.x or point.y ~= bend.y or uiMap ~= guide.uiMap then
+	if
+		not bend
+		or point.map ~= bend.map
+		or point.x ~= bend.x
+		or point.y ~= bend.y
+		or uiMap ~= guide.uiMap
+		or fading ~= guide.fading
+	then
 		guide.bend, guide.uiMap = { map = point.map, x = point.x, y = point.y }, uiMap
+		guide.fading = fading
 		local waypoint
-		if uiMap and C_Map.CanSetUserWaypointOnMap(uiMap) then
+		-- The native waypoint has no per-pin alpha; near the goal, use the fading fallback instead of stacking icons.
+		if not fading and uiMap and C_Map.CanSetUserWaypointOnMap(uiMap) then
 			local projectedMap, position =
 				C_Map.GetMapPosFromWorldPos(point.map, CreateVector2D(point.x, point.y), uiMap)
 			if projectedMap == uiMap and position then
@@ -234,6 +254,7 @@ end
 
 function ns.ClearJourney()
 	CancelPaths()
+	costsWaiting = nil
 	settleRound, costError, goalError = 0, nil, nil
 	walkCache, startCosts, goalCosts, startAt = {}, {}, {}, nil
 	StopGuide()
@@ -401,14 +422,19 @@ local function Refresh()
 		end
 		-- Draw the walk you are on from where you stand, not from where it was planned.
 		local leg, here = remaining.legs[1], Here()
-		if leg and leg.mode == "walk" and leg.walkPoints and here then
+		if here then
+			driver.drawAt, driver.drawX, driver.drawY, driver.drawZ, driver.drawMap =
+				GetTime(), here.x, here.y, here.z, here.map
+		end
+		if leg and leg.mode == "walk" and here then
+			local points = leg.walkPoints or ns.Planner.WalkPoints(leg.from, leg.to)
 			-- A walk still being searched may be the one it replaces, which you have strayed from: join it where it is
 			-- nearest.
-			local found = OnWalk(leg.walkPoints, here, not leg.measured and math.huge or nil)
+			local found = OnWalk(points, here, not leg.measured and math.huge or nil)
 			if found then
 				local ahead = { here }
-				for index = found, #leg.walkPoints do
-					ahead[#ahead + 1] = leg.walkPoints[index]
+				for index = found, #points do
+					ahead[#ahead + 1] = points[index]
 				end
 				remaining.legs[1] = setmetatable({ walkPoints = ahead }, { __index = leg })
 			end
@@ -826,6 +852,10 @@ local function RefreshCosts(includeGoal, forced)
 		if version ~= pathVersion or not goal then
 			return
 		end
+		if not ns.JourneyPosition() then
+			costsWaiting = true
+			return
+		end
 		if
 			(not startBatch.done and not (startBatch.job and startBatch.job.valid))
 			or (not goalBatch.done and not (goalBatch.job and goalBatch.job.valid))
@@ -980,6 +1010,17 @@ local function Update(self, elapsed)
 		return
 	end
 	self.progressElapsed = 0
+	local x, y, z, map = ns.JourneyPosition()
+	if not x then
+		return
+	end
+	if not startAt or costsWaiting then
+		costsWaiting = nil
+		-- Search callbacks may finish while position is unavailable; resume from readable endpoints.
+		if ns.Path then
+			RefreshCosts(true, true)
+		end
+	end
 	local index = progress.index
 	UpdateProgress()
 	if not goal then
@@ -1023,6 +1064,15 @@ local function Update(self, elapsed)
 	elseif index ~= progress.index then
 		Refresh()
 	end
+	-- Trimming is presentation work, independent of the five-second planning/search cadence.
+	if
+		goal
+		and result
+		and GetTime() - (self.drawAt or 0) >= DRAW_EVERY
+		and (x ~= self.drawX or y ~= self.drawY or z ~= self.drawZ or map ~= self.drawMap)
+	then
+		Refresh()
+	end
 end
 
 local function StartJourney(point)
@@ -1031,6 +1081,7 @@ local function StartJourney(point)
 	local previous = repeated and result
 	local index, departed = progress.index, progress.departed
 	CancelPaths()
+	costsWaiting = nil
 	settleRound, costError, goalError = 0, nil, nil
 	walkCache, startCosts, goalCosts, startAt = repeated and walkCache or {}, {}, {}, nil
 	if guide then
@@ -1054,7 +1105,7 @@ local function StartJourney(point)
 		Render(Plan())
 	end
 	-- Every journey starts guided; the tracker header turns it off.
-	if result then
+	if goal then
 		StartGuide()
 		RefreshTracker()
 	end
