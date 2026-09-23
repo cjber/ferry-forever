@@ -65,6 +65,115 @@ equal(API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5), nil, "unprojectable estimate")
 env.C_Map.GetWorldPosFromMapPos = project
 ns.ClearJourney()
 
+local stops = {
+	{ map = 1, x = 0.502, y = 0.5, title = "First" },
+	{ map = 1, x = 0.504, y = 0.5, title = "Second" },
+	{ map = 1, x = 0.506, y = 0.5, title = "Third" },
+	{ map = 1, x = 0.508, y = 0.5, title = "Last" },
+}
+driver.move({ map = 1, x = 0, y = 0 })
+equal(API.CurrentStop("AGF"), nil, "no current stop before starting")
+equal(API.NavigateRoute("AGF", stops), true, "start four-stop route")
+equal(API.CurrentStop("AGF"), 1, "first stop")
+equal(API.CurrentStop("OtherAddon"), nil, "foreign current stop")
+equal(API.CurrentStop(driver.secret), nil, "secret owner")
+equal(ns.JourneyInfo(), "Stop 1 of 4: First", "route progress title")
+for _, invalid in ipairs({
+	false,
+	{},
+	{ stops[1], false },
+	{ stops[1], { map = 1, x = 2, y = 0.5 } },
+	{ stops[1], { map = 1, x = 0.5, y = 0.5, title = {} } },
+	{ [1] = stops[1], [100] = stops[2] },
+}) do
+	equal(API.NavigateRoute("AGF", invalid), false, "invalid route")
+	equal(API.CurrentStop("AGF"), 1, "invalid route preserves ownership and progress")
+end
+local many = {}
+for i = 1, 65 do
+	many[i] = stops[1]
+end
+equal(API.NavigateRoute("AGF", many), false, "bounded stop count")
+equal(API.Cancel("OtherAddon"), false, "foreign cancel leaves whole route")
+stops[2].title, stops[2].x = "Changed by caller", 0.9
+-- The existing 15-yard arrival radius applies; merely passing a later stop cannot skip ahead.
+driver.move({ map = 1, x = 0, y = -400 })
+driver.update(0.1)
+equal(API.CurrentStop("AGF"), 1, "later stop does not skip current stop")
+driver.move({ map = 1, x = 0, y = -84 })
+driver.update(0.1)
+equal(API.CurrentStop("AGF"), 1, "outside arrival radius")
+driver.move({ map = 1, x = 0, y = -86 })
+driver.update(0.1)
+equal(API.CurrentStop("AGF"), 2, "arrival advances within radius")
+equal(ns.JourneyInfo(), "Stop 2 of 4: Second", "copied title and progress")
+local _, _, secondPlan = ns.JourneyInfo()
+near(secondPlan.legs[#secondPlan.legs].to.y, -200, "copied coordinates")
+env.InCombatLockdown = function()
+	return true
+end
+driver.move({ map = 1, x = 0, y = -200 })
+driver.update(0.1)
+equal(API.CurrentStop("AGF"), 2, "combat pauses stop advancement")
+equal(API.NavigateRoute("AGF", stops), false, "combat refuses replacement")
+env.InCombatLockdown = function()
+	return false
+end
+driver.update(0.1)
+equal(API.CurrentStop("AGF"), 3, "combat end resumes arrival")
+driver.move({ map = 1, x = 0, y = -300 })
+driver.update(0.1)
+equal(API.CurrentStop("AGF"), 4, "third arrival advances to last")
+equal(ns.JourneyInfo(), "Stop 4 of 4: Last", "last stop progress")
+driver.move({ map = 1, x = 0, y = -400 })
+driver.update(0.1)
+equal(API.CurrentStop("AGF"), nil, "final arrival releases ownership")
+equal(ns.HasJourney(), false, "final arrival ends journey")
+equal(driver.waypoint(), nil, "final arrival clears guidance")
+
+driver.move({ map = 1, x = 0, y = 0 })
+for _, startRoute in ipairs({
+	function()
+		return API.Navigate("AGF", 1, 0.502, 0.5, "Only")
+	end,
+	function()
+		return API.NavigateRoute("AGF", { { map = 1, x = 0.502, y = 0.5, title = "Only" } })
+	end,
+}) do
+	driver.move({ map = 1, x = 0, y = 0 })
+	equal(startRoute(), true, "one-stop form starts")
+	equal(API.CurrentStop("AGF"), 1, "one-stop index")
+	equal(ns.JourneyInfo(), "Journey to Only", "one-stop copy unchanged")
+	driver.move({ map = 1, x = 0, y = -100 })
+	driver.update(0.1)
+	equal(API.CurrentStop("AGF"), nil, "one-stop form finishes")
+end
+driver.move({ map = 1, x = 0, y = 0 })
+equal(API.NavigateRoute("AGF", stops), true, "restart route")
+equal(API.Navigate("AGF", 1, 0.51, 0.5), true, "same owner replaces route")
+equal(ns.JourneyStops(), nil, "one-stop replacement discards remaining stops")
+API.NavigateRoute("AGF", stops)
+driver.begin({ map = 1, x = 0, y = 0 }, { map = 1, x = 2000, y = 0 })
+equal(API.CurrentStop("AGF"), nil, "manual journey discards entire route")
+equal(API.Cancel("AGF"), false, "manual journey cannot be cancelled by former owner")
+API.NavigateRoute("AGF", stops)
+equal(API.Cancel("AGF"), true, "owner cancels entire route")
+driver.move({ map = 1, x = 0, y = -100 })
+driver.update(0.1)
+equal(ns.HasJourney(), false, "cancelled stops cannot restart")
+for i = 1, 64 do
+	many[i] = { map = 1, x = 0.502, y = 0.5 }
+end
+many[65] = nil
+equal(API.NavigateRoute("AGF", many), true, "coincident stops accepted")
+equal(API.CurrentStop("AGF"), 1, "coincident route does not recurse on start")
+driver.update(0.1)
+equal(API.CurrentStop("AGF"), 2, "at most one coincident stop starts per update")
+API.Cancel("AGF")
+driver.update(0.1)
+equal(API.CurrentStop("AGF"), nil, "cancel discards pending advancement")
+equal(ns.HasJourney(), false, "pending advancement stays cancelled")
+
 local planner, calls = ns.Planner.Plan, 0
 ns.Planner.Plan = function(options)
 	calls = calls + 1

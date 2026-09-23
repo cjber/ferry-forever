@@ -14,6 +14,7 @@ local PASSED = 25
 ---@field Icon Texture
 ---@field Arrow Texture
 ---@field Distance FontString
+---@field Progress FontString
 ---@field yards? number
 ---@type SPFArrowFrame
 local frame
@@ -85,6 +86,8 @@ local function Create()
 	frame.Arrow:SetAtlas("Navigation-Tracked-Arrow", true)
 	frame.Distance = frame:CreateFontString(nil, "BACKGROUND", "GameFontNormal")
 	frame.Distance:SetPoint("TOP", frame.Icon, "BOTTOM", 0, -8)
+	frame.Progress = frame:CreateFontString(nil, "BACKGROUND", "GameFontNormal")
+	frame.Progress:SetPoint("TOP", frame.Distance, "BOTTOM", 0, -4)
 	local elapsed = 0
 	frame:SetScript("OnUpdate", function(_, delta)
 		elapsed = elapsed + delta
@@ -146,6 +149,7 @@ function ns.PointGuideArrow(points, placeBend, stop, goal)
 	if not frame then
 		Create()
 	end
+	frame.Progress:SetText(goal and goal.routeTitle or "")
 	frame:Show()
 	Update()
 end

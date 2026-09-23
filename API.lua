@@ -46,7 +46,38 @@ local function Ready()
 end
 
 local function Owner(owner)
-	return type(owner) == "string" and owner:find("%S") ~= nil
+	return canaccessvalue(owner) and type(owner) == "string" and owner:find("%S") ~= nil
+end
+
+-- Only this module owns the caller's itinerary. Journey handles one destination at a time.
+---@type {owner: string, points: SPFPoint[], index: integer}?
+local route
+local MAX_STOPS = 64
+
+---@param point SPFPoint?
+function ns.JourneyChanged(point)
+	if not route then
+		return
+	end
+	if point and point == route.points[route.index + 1] then
+		route.index = route.index + 1
+	elseif not point or point ~= route.points[route.index] then
+		route = nil
+	end
+end
+
+---@param point SPFPoint
+---@return SPFPoint?
+function ns.NextJourneyStop(point)
+	return route and route.points[route.index] == point and route.points[route.index + 1] or nil
+end
+
+-- Internal read-only map view; the public API never exposes these private world points.
+---@return SPFPoint[]? points, integer? index
+function ns.JourneyStops()
+	if route and #route.points > 1 then
+		return route.points, route.index
+	end
 end
 
 ---@class SPFPublicAPI
@@ -150,20 +181,59 @@ function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
 	return seconds
 end
 
+function API.NavigateRoute(owner, stops)
+	if not Owner(owner) or not Ready() or not ns.db.journey or type(stops) ~= "table" then
+		return false
+	end
+	local count = #stops
+	if count < 1 or count > MAX_STOPS or not ns.JourneyPosition() then
+		return false
+	end
+	for key in pairs(stops) do
+		if not Number(key) or key % 1 ~= 0 or key < 1 or key > count then
+			return false
+		end
+	end
+	local points = {}
+	for index = 1, count do
+		local stop = stops[index]
+		if
+			type(stop) ~= "table"
+			or (stop.title ~= nil and not (canaccessvalue(stop.title) and type(stop.title) == "string"))
+		then
+			return false
+		end
+		local point = Point(stop.map, stop.x, stop.y)
+		if not point then
+			return false
+		end
+		point.label = stop.title
+		if count > 1 then
+			local location = not point.label and ns.Locate(point)
+			point.routeTitle =
+				string.format("Stop %d of %d: %s", index, count, point.label or location and location.zone or UNKNOWN)
+		end
+		points[index] = point
+	end
+	-- Validate and copy every stop before replacing guidance. Caller mutations cannot redirect a journey.
+	route = { owner = owner, points = points, index = 1 }
+	return ns.StartJourney(points[1])
+end
+
 function API.Navigate(owner, map, x, y, title)
-	if not Owner(owner) or not Ready() or not ns.db.journey or (title ~= nil and type(title) ~= "string") then
-		return false
-	end
-	local point = Point(map, x, y)
-	if not point or not ns.JourneyPosition() then
-		return false
-	end
-	point.label = title
-	return ns.StartJourney(point, owner)
+	return API.NavigateRoute(owner, { { map = map, x = x, y = y, title = title } })
+end
+
+function API.CurrentStop(owner)
+	return Owner(owner) and route and route.owner == owner and route.index or nil
 end
 
 function API.Cancel(owner)
-	return Owner(owner) and ns.CancelOwnedJourney(owner) or false
+	if not API.CurrentStop(owner) then
+		return false
+	end
+	ns.ClearJourney()
+	return true
 end
 
 ShortestPathForever = ShortestPathForever or {}

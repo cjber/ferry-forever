@@ -21,7 +21,7 @@ local COLORS = {
 	portal = CreateColor(0.85, 0.35, 1),
 	passage = CreateColor(0.85, 0.35, 1),
 }
-local provider, goal, result, paths
+local provider, goal, paths, worldPaths, stops, stopIndex
 ---@class SPFMinimapRoute : Frame
 ---@field lines Line[]
 ---@field underlines Line[]
@@ -164,7 +164,8 @@ end
 
 -- Clip before subdividing: even continent-sized walks need only the visible breadcrumbs. Dots sit at every SPACING
 -- along the whole walk, owner.walked carrying the distance across segment joins so bends never bunch them.
-local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale)
+-- A multi-stop preview may span the map dozens of times, so dashLimit caps its dots per segment.
+local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale, dashLimit)
 	local dx, dy = x2 - x1, y2 - y1
 	local length = math.sqrt(dx * dx + dy * dy) * scale
 	if length == 0 then
@@ -184,7 +185,8 @@ local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale)
 	end
 	-- Only dots whose rim fits inside the clipped span, so none overhangs the map's edge or the minimap's rim.
 	local half, reach = DOT / 2 / length, DOT / 2 + RIM
-	for distance = math.ceil((start + low * length + reach) / SPACING) * SPACING - start, high * length - reach, SPACING do
+	local spacing = dashLimit and math.max(SPACING, (high - low) * length / dashLimit) or SPACING
+	for distance = math.ceil((start + low * length + reach) / spacing) * spacing - start, high * length - reach, spacing do
 		local t = distance / length
 		Stroke(
 			owner,
@@ -275,7 +277,7 @@ function ShortestPathForeverRoutePinMixin:OnLoad()
 	self.lines, self.underlines, self.dots, self.walked = {}, {}, {}, 0
 end
 
-function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
+function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed, dashLimit)
 	local low, high = ClipAxis(x1, x2 - x1, 0, 1, 0, 1)
 	if low then
 		low, high = ClipAxis(y1, y2 - y1, low, high, 0, 1)
@@ -290,7 +292,8 @@ function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
 		high,
 		color,
 		dashed,
-		self:GetEffectiveScale()
+		self:GetEffectiveScale(),
+		dashLimit
 	)
 end
 
@@ -432,7 +435,11 @@ function ShortestPathForeverRoutePinMixin:Draw()
 			if path.mode == "portal" or path.mode == "passage" then
 				self:Mark(x, y, color)
 			elseif previous then
-				if previous.jump or previous.map ~= point.map then
+				if path.preview then
+					if px and x then
+						self:Line(px, py, x, y, color, true, math.max(4, math.floor(128 / #path.points)))
+					end
+				elseif previous.jump or previous.map ~= point.map then
 					if path.mode == "boat" or path.mode == "zeppelin" then
 						Bridge(self, path.points, index, px, py, x, y, color)
 					else
@@ -503,6 +510,8 @@ end
 
 ---@class SPFGoalPin : SPFMapPin
 ---@field Texture Texture
+---@field Number FontString
+---@field stopTitle? string
 ShortestPathForeverGoalPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function ShortestPathForeverGoalPinMixin:OnLoad()
@@ -513,11 +522,15 @@ function ShortestPathForeverGoalPinMixin:OnLoad()
 	local atlas = C_Texture.GetAtlasInfo(GOAL_ATLAS)
 	self:SetSize(atlas.width * GOAL_SCALE, atlas.height * GOAL_SCALE)
 	self.Texture:SetAtlas(GOAL_ATLAS)
+	self.Number = self:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+	self.Number:SetPoint("CENTER", self, "CENTER", 0, 2)
 	self:SetScript("OnHide", self.OnMouseLeave)
 end
 
-function ShortestPathForeverGoalPinMixin:OnAcquired(x, y)
+function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, number, title)
 	self:SetPosition(x, y)
+	self.Number:SetText(number or "")
+	self.stopTitle = title
 end
 
 function ShortestPathForeverGoalPinMixin:OnMouseEnter()
@@ -526,8 +539,8 @@ function ShortestPathForeverGoalPinMixin:OnMouseEnter()
 		return
 	end
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-	GameTooltip_SetTitle(GameTooltip, title)
-	for _, row in ipairs(rows) do
+	GameTooltip_SetTitle(GameTooltip, self.stopTitle or title)
+	for _, row in ipairs(not self.stopTitle and rows or {}) do
 		GameTooltip_AddColoredLine(GameTooltip, row.text, row.current and HIGHLIGHT_FONT_COLOR or NORMAL_FONT_COLOR)
 	end
 	GameTooltip_AddNormalLine(GameTooltip, "Right-click to clear")
@@ -553,6 +566,7 @@ end
 
 function ShortestPathForeverGoalPinMixin:OnReleased()
 	self:OnMouseLeave()
+	self.stopTitle = nil
 	MapCanvasPinMixin.OnReleased(self)
 end
 
@@ -677,12 +691,15 @@ function ProviderMixin:RefreshAllData()
 	if not (mapID and map:IsVisible() and ns.db.journey and goal) then
 		return
 	end
-	if result then
-		map:AcquirePin(LINE_TEMPLATE, paths)
+	if #worldPaths > 0 then
+		map:AcquirePin(LINE_TEMPLATE, worldPaths)
 	end
-	local x, y = MapPosition(goal, mapID)
-	if x and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
-		map:AcquirePin(GOAL_TEMPLATE, x, y)
+	for index = stopIndex or 1, stops and #stops or 1 do
+		local point = stops and stops[index] or goal
+		local x, y = MapPosition(point, mapID)
+		if x and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
+			map:AcquirePin(GOAL_TEMPLATE, x, y, stops and index, point.routeTitle)
+		end
 	end
 end
 
@@ -839,7 +856,7 @@ end
 ---@param destination SPFPoint?
 ---@param route SPFPlan?
 function ns.SetJourneyRoute(destination, route)
-	goal, result = destination, route
+	goal = destination
 	geometryRevision = geometryRevision + 1
 	paths = {}
 	for _, leg in ipairs(route and route.legs or {}) do
@@ -847,6 +864,23 @@ function ns.SetJourneyRoute(destination, route)
 			mode = leg.mode,
 			points = ns.Planner.LegPoints(leg, ns.Routes),
 		}
+	end
+	stops, stopIndex = nil, nil
+	if destination and ns.JourneyStops then
+		stops, stopIndex = ns.JourneyStops()
+	end
+	worldPaths = paths
+	if stops then
+		worldPaths = {}
+		for _, path in ipairs(paths) do
+			worldPaths[#worldPaths + 1] = path
+		end
+		-- Later legs are only an itinerary preview. Search the current leg and keep its minimap guidance exact.
+		local points = {}
+		for index = stopIndex, #stops do
+			points[#points + 1] = stops[index]
+		end
+		worldPaths[#worldPaths + 1] = { mode = "walk", points = points, preview = true }
 	end
 	-- The map refreshes every provider when it opens, so a closed one is left until then.
 	if provider and (WorldMapFrame:IsShown() or not destination) then
