@@ -104,10 +104,10 @@ end
 
 -- The reason tells a caller whether asking again later can help: after combat, never for bad input, or when the
 -- player's known flight paths or boat timings change.
+-- The planner options from here and now; a changed context drops every cached estimate.
 ---@param from SPFPoint
 ---@param to SPFPoint
----@param key string
-local function Answer(from, to, key)
+local function Options(from, to)
 	local known = ns.KnownTaxiNodes()
 	-- Discovery updates the same saved table in place; topology identity alone cannot detect it.
 	local changed = Differs(known, knownSnapshot)
@@ -166,6 +166,14 @@ local function Answer(from, to, key)
 		end
 		context = options
 	end
+	return options, now
+end
+
+---@param from SPFPoint
+---@param to SPFPoint
+---@param key string
+local function Answer(from, to, key)
+	local options, now = Options(from, to)
 	local cached = estimates[key]
 	if cached and now >= cached.at and now - cached.at < CACHE_MS then
 		if cached.seconds then
@@ -201,14 +209,14 @@ local function Lookup(fromMap, fromX, fromY, toMap, toX, toY)
 	return Answer(from, to, string.format("%d:%.4f:%.4f:%d:%.17g:%.17g", fromMap, fromX, fromY, toMap, toX, toY))
 end
 
--- Itinerary.lua draws the hops between later stops with this cheap planner; no terrain searches.
+-- Itinerary.lua draws the hops between later stops with this cheap planner; no terrain searches. It keeps each
+-- hop's legs itself, so they stay out of the estimate cache the public API answers from.
 ---@param from SPFPoint
 ---@param to SPFPoint
 ---@return SPFLeg[]?
 function ns.EstimateLegs(from, to)
-	local key = string.format("route:%d:%.17g:%.17g:%d:%.17g:%.17g", from.map, from.x, from.y, to.map, to.x, to.y)
-	local entry = Answer(from, to, key)
-	return entry and entry.legs
+	local plan = ns.Planner.Plan((Options(from, to)))
+	return plan and plan.legs
 end
 
 function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)

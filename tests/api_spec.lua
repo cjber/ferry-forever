@@ -45,6 +45,21 @@ why("unreachable", "no detail across unconnected continents", API.EstimateDetail
 why("invalid", "no detail for a bad coordinate", API.EstimateDetail(1, 2, 0.5, 1, 0.5, 0.5))
 why("unreachable", "unconnected continents", API.Estimate(1, 0.5, 0.5, 2, 0.5, 0.5))
 why("unreachable", "cached unconnected continents", API.Estimate(1, 0.5, 0.5, 2, 0.5, 0.5))
+-- The itinerary keeps its own hop legs; a long route's hops never push the API's estimates out of the cache.
+do
+	local plan, plans = ns.Planner.Plan, 0
+	ns.Planner.Plan = function(options)
+		plans = plans + 1
+		return plan(options)
+	end
+	for hop = 1, 300 do
+		equal(ns.EstimateLegs({ map = 1, x = hop, y = 0 }, { map = 1, x = hop + 20, y = 0 }) ~= nil, true, "hop legs")
+	end
+	equal(plans, 300, "every hop is planned")
+	near(API.Estimate(1, 0.5, 0.5, 1, 0.5014, 0.5), 10, "estimate after a long route's hops")
+	equal(plans, 300, "the API's cached estimate survives the hops")
+	ns.Planner.Plan = plan
+end
 for _, value in ipairs({ -1, 1.01, math.huge, 0 / 0, "0.5", false, driver.secret }) do
 	why("invalid", "bad coordinate", API.Estimate(1, value, 0.5, 1, 0.5, 0.5))
 	equal(API.Navigate("AGF", 1, value, 0.5), false, "bad navigation coordinate")
