@@ -7,9 +7,11 @@
 ---@field y number normalized 0-1
 ---@field title? string
 
+---@alias SPFAPINoRoute "combat"|"invalid"|"unreachable"
+
 ---@class SPFPublicAPI
 ---@field version integer 1
----@field Estimate fun(fromMap: integer, fromX: number, fromY: number, toMap: integer, toX: number, toY: number): number? seconds, nil when unknown or in combat
+---@field Estimate fun(fromMap: integer, fromX: number, fromY: number, toMap: integer, toX: number, toY: number): seconds: number?, reason: SPFAPINoRoute? nil seconds come with the reason
 ---@field Navigate fun(owner: string, map: integer, x: number, y: number, title?: string): boolean starts/replaces guidance outside combat when journeys are enabled
 ---@field NavigateRoute fun(owner: string, stops: SPFAPIStop[]): boolean starts/replaces guidance through 1-64 stops in order; false leaves the current journey intact
 ---@field CurrentStop fun(owner: string): integer? 1-based current stop, nil unless owner owns the active journey

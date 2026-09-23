@@ -10,15 +10,20 @@ local function near(actual, expected, label)
 	checks = checks + 1
 	assert(type(actual) == "number" and math.abs(actual - expected) < 1e-6, label)
 end
+local function why(expected, label, value, reason)
+	equal(value, nil, label)
+	equal(reason, expected, label .. " reason")
+end
 
 equal(API.version, 1, "version")
 near(API.Estimate(1, 0.5, 0.5, 1, 0.5014, 0.5), 10, "world conversion and milliseconds to seconds")
-equal(API.Estimate(1, 0.5, 0.5, 2, 0.5, 0.5), nil, "unconnected continents")
+why("unreachable", "unconnected continents", API.Estimate(1, 0.5, 0.5, 2, 0.5, 0.5))
+why("unreachable", "cached unconnected continents", API.Estimate(1, 0.5, 0.5, 2, 0.5, 0.5))
 for _, value in ipairs({ -1, 1.01, math.huge, 0 / 0, "0.5", false, driver.secret }) do
-	equal(API.Estimate(1, value, 0.5, 1, 0.5, 0.5), nil, "bad coordinate")
+	why("invalid", "bad coordinate", API.Estimate(1, value, 0.5, 1, 0.5, 0.5))
 	equal(API.Navigate("AGF", 1, value, 0.5), false, "bad navigation coordinate")
 end
-equal(API.Estimate(0, 0.5, 0.5, 1, 0.5, 0.5), nil, "invalid UI map")
+why("invalid", "invalid UI map", API.Estimate(0, 0.5, 0.5, 1, 0.5, 0.5))
 equal(API.Navigate("", 1, 0.6, 0.5), false, "empty owner")
 equal(API.Navigate(" ", 1, 0.6, 0.5), false, "blank owner")
 equal(API.Navigate("AGF", 1, 0.6, 0.5, {}), false, "invalid title")
@@ -52,16 +57,20 @@ env.InCombatLockdown = function()
 	return true
 end
 equal(API.Navigate("AGF", 1, 0.6, 0.5), false, "combat navigation deferred to caller")
-equal(API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5), nil, "no combat search")
+why("combat", "no combat search", API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5))
 env.InCombatLockdown = function()
 	return false
 end
+local db = ns.db
+ns.db = nil
+why("invalid", "not loaded yet", API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5))
+ns.db = db
 local project = env.C_Map.GetWorldPosFromMapPos
 env.C_Map.GetWorldPosFromMapPos = function()
 	return nil
 end
 equal(API.Navigate("AGF", 1, 0.6, 0.5), false, "unprojectable destination")
-equal(API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5), nil, "unprojectable estimate")
+why("invalid", "unprojectable estimate", API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5))
 env.C_Map.GetWorldPosFromMapPos = project
 ns.ClearJourney()
 

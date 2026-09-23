@@ -83,13 +83,15 @@ end
 ---@class SPFPublicAPI
 local API = { version = 1 }
 
+-- The reason tells a caller whether asking again later can help: after combat, never for bad input, or when the
+-- player's known flight paths or boat timings change.
 function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
 	if not Ready() then
-		return nil
+		return nil, InCombatLockdown() and "combat" or "invalid"
 	end
 	local from, to = Point(fromMap, fromX, fromY), Point(toMap, toX, toY)
 	if not from or not to then
-		return nil
+		return nil, "invalid"
 	end
 	local known = ns.KnownTaxiNodes()
 	-- Discovery updates the same saved table in place; topology identity alone cannot detect it.
@@ -166,7 +168,10 @@ function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
 	local key = string.format("%d:%.4f:%.4f:%d:%.17g:%.17g", fromMap, fromX, fromY, toMap, toX, toY)
 	local cached = estimates[key]
 	if cached and now >= cached.at and now - cached.at < CACHE_MS then
-		return cached.seconds or nil
+		if cached.seconds then
+			return cached.seconds
+		end
+		return nil, "unreachable"
 	end
 	local plan = ns.Planner.Plan(options)
 	local seconds = plan and math.max(0, (plan.arrive - now) / 1000) or nil
@@ -178,7 +183,10 @@ function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
 		slot = slot % CACHE_LIMIT + 1
 	end
 	estimates[key] = { at = now, seconds = seconds or false }
-	return seconds
+	if seconds then
+		return seconds
+	end
+	return nil, "unreachable"
 end
 
 function API.NavigateRoute(owner, stops)
