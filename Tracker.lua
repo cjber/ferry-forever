@@ -274,7 +274,8 @@ ns.Init(function()
 	module.blocks = {}
 	module.section = ModuleMixin.headerText
 	module:SetHeader(ModuleMixin.headerText)
-	module.uiOrder = -2
+	-- Above quests, below SkillUp Forever (-2) and Legacy Here (0, -1): each needs its own slot.
+	module.uiOrder = -3
 	module.Header:EnableMouse(true)
 	module.Header:SetScript("OnMouseUp", function(_, button)
 		if button == "LeftButton" then
