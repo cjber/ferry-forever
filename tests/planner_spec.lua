@@ -275,7 +275,7 @@ only(Plan(flight), "flight")
 -- Directed portals cannot be reversed, restricted entries cannot be assumed usable.
 local portal = options()
 portal.to = point(2)
-portal.portals = { { kind = "portal", from = point(1), to = point(2), seconds = 5 } }
+portal.portals = { { name = "Portal to Test", kind = "portal", from = point(1), to = point(2), seconds = 5 } }
 near(only(Plan(portal), "portal").arrive, 6000)
 portal.from, portal.to = portal.to, portal.from
 assert(Plan(portal) == nil)

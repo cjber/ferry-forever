@@ -558,7 +558,10 @@ function ShortestPathForeverPortalPinMixin:OnMouseEnter()
 	local destination = ns.Locate(portal.to)
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 	GameTooltip_SetTitle(GameTooltip, portal.name)
-	GameTooltip_AddNormalLine(GameTooltip, "to " .. (destination and destination.zone or UNKNOWN))
+	GameTooltip_AddNormalLine(
+		GameTooltip,
+		"to " .. (destination and destination.zone or ns.Planner.PortalDestination(portal))
+	)
 	AddEndsLine(self:GetEnds())
 	GameTooltip:Show()
 end

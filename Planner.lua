@@ -233,11 +233,18 @@ function Planner.Places(options)
 	end
 	for id, portal in ipairs(options.portals or {}) do
 		if not portal.requires and Eligible(portal, options) then
-			add("portal", id * 2 - 1, portal.from)
-			add("portal", id * 2, portal.to, portal.name and portal.name:gsub("^%a+ to ", ""))
+			-- Named from the portal itself: an end inside an instance such as the Deeprun Tram has no zone to fall
+			-- back on.
+			add("portal", id * 2 - 1, portal.from, assert(portal.name, "every portal needs a name"))
+			add("portal", id * 2, portal.to, Planner.PortalDestination(portal))
 		end
 	end
 	return places
+end
+
+-- "Passage to Stormwind" leads to Stormwind.
+function Planner.PortalDestination(portal)
+	return (portal.name:gsub("^%a+ to ", ""))
 end
 
 -- A cheaper arrival only dominates another if it leaves at least the same onward choices. The no-revisit

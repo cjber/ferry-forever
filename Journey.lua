@@ -91,6 +91,7 @@ local function CancelPaths()
 	pathJobs, walkPending, pendingWalks, pendingCosts = {}, {}, 0, 0
 end
 
+-- A place with no kind is the destination point as clicked or picked from a quest.
 local function NodeLabel(node, mode)
 	if node.kind == "start" then
 		return "your position"
@@ -98,11 +99,13 @@ local function NodeLabel(node, mode)
 		return (mode == "boat" or mode == "zeppelin") and ns.DockLabel(node.id) or ns.DockTitle(node.id)
 	elseif node.kind == "taxi" then
 		return ns.TaxiNodes[node.id].name
-	elseif node.label then
+	elseif node.kind == "portal" then
 		return node.label
+	elseif node.kind == "goal" or node.kind == nil then
+		local location = not node.label and ns.Locate(node)
+		return node.label or location and location.zone or UNKNOWN
 	end
-	local location = ns.Locate(node)
-	return location and location.zone or UNKNOWN
+	error("unknown journey node kind " .. tostring(node.kind))
 end
 
 -- Whether walks may cross water, and the spell to cast first when none is up.
