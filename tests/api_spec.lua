@@ -1,6 +1,7 @@
 local driver = assert(loadfile("tests/journey_driver.lua"))()
 local ns, env, checks = driver.ns, driver.env, 0
 driver.load("API.lua")
+driver.load("Itinerary.lua")
 local API = env.ShortestPathForever.API
 local function equal(actual, expected, label)
 	checks = checks + 1

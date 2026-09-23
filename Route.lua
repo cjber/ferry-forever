@@ -451,7 +451,7 @@ function ShortestPathForeverRoutePinMixin:Draw()
 				self:Mark(x, y, color)
 			elseif previous then
 				if path.preview then
-					-- An unplanned crossing has no geometry to draw; a straight line would cross the sea.
+					-- A hop still planning has no geometry to draw; a straight line would cross the sea.
 					if previous.map ~= point.map then
 						self:Mark(px, py, color)
 						self:Mark(x, y, color)
@@ -892,7 +892,7 @@ local function UpdateMinimap(self, elapsed)
 	end
 end
 
--- Later legs are only an itinerary preview. Search the current leg and keep its minimap guidance exact.
+-- The world map adds the later hops as Itinerary.lua plans them; the minimap guides along the current leg only.
 local function WorldPaths()
 	worldPaths = paths
 	if stops then
@@ -906,7 +906,7 @@ local function WorldPaths()
 	end
 end
 
--- A crossing between later stops finished planning; only the world map draws the itinerary.
+-- A later hop, or one of its walks, finished planning; only the world map draws the itinerary.
 function ns.RefreshJourneyPreview()
 	if not stops then
 		return
