@@ -17,7 +17,10 @@ local ns = select(2, ...)
 -- sending the same stops again. Only the current route's hops are kept, at most one per stop (64).
 ---@type table<string, SPFHop>
 local hops = {}
-local scheduled, wait
+local scheduled, wait, dirty
+-- Redrawing the map's route line redraws every hop, so ready hops are drawn together at most once a second, in a
+-- frame of their own, and once more when nothing is left to do.
+local DRAW_EVERY, drawnAt = 1, -math.huge
 ---@type SPFPathJob?, SPFHop?
 local job, searching
 local Step
@@ -33,10 +36,8 @@ local function Schedule()
 	end
 end
 
-local function Refresh()
-	if ns.RefreshJourneyPreview then
-		ns.RefreshJourneyPreview()
-	end
+local function DrawDue()
+	return dirty and GetTime() - drawnAt >= DRAW_EVERY
 end
 
 -- The journey's own searches (the current leg) always come first.
@@ -93,11 +94,12 @@ SearchWalk = function(hop)
 		-- An unreachable walk keeps its straight placeholder rather than vanishing.
 		if points and #points > 1 then
 			walk.path.points, walk.path.preview = points, nil
-			Refresh()
+			dirty = true
 		end
-		-- Queued from this callback, the next walk keeps the search queue from draining, which frees the grids.
+		-- Queued from this callback, the next walk keeps the search queue from draining, which frees the grids. A
+		-- due redraw waits for a free frame instead, so it never adds to a search slice.
 		local following, plan = Next()
-		if following and not plan and not Settling() then
+		if following and not plan and not Settling() and not DrawDue() then
 			SearchWalk(following)
 		end
 		Schedule()
@@ -138,10 +140,16 @@ Step = function()
 		return
 	end
 	local hop, plan = Next()
-	if plan then
+	if dirty and (DrawDue() or not hop) then
+		dirty, drawnAt = false, GetTime()
+		if ns.RefreshJourneyPreview then
+			ns.RefreshJourneyPreview()
+		end
+		Schedule()
+	elseif plan then
 		---@cast hop -?
 		PlanHop(hop)
-		Refresh()
+		dirty = true
 		Schedule()
 	elseif hop then
 		SearchWalk(hop)

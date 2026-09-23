@@ -54,7 +54,7 @@ local function drain()
 		assert(count < 20000, "the itinerary never settled")
 	end
 end
-local refreshed, planned, searched = 0, {}, 0
+local refreshed, planned, searched, plannedIn = 0, {}, 0, nil
 local plan = ns.Planner.Plan
 ns.Planner.Plan = function(options)
 	local started = os.clock()
@@ -62,6 +62,7 @@ ns.Planner.Plan = function(options)
 	-- Only the itinerary's estimates plan without endpoint walks.
 	if not options.walks then
 		planned[#planned + 1] = string.format("%.2f", (os.clock() - started) * 1000)
+		plannedIn = frame
 	end
 	return result
 end
@@ -80,8 +81,11 @@ ns.Path.Find = function(map, from, to, callback, waterWalking)
 		return callback(...)
 	end, waterWalking)
 end
+-- Redrawing every later hop is a frame's work of its own: never inside a search slice's callback, nor after a plan.
 ns.RefreshJourneyPreview = function()
 	refreshed = refreshed + 1
+	check(not debug.traceback():find("Path.lua", 1, true), "no redraw inside a search callback")
+	check(plannedIn ~= frame, "no redraw in a hop plan's frame")
 end
 ns.faction, ns.speed, ns.known = "Alliance", 7, {}
 local API = env.ShortestPathForever.API
@@ -157,6 +161,7 @@ check(searched > before, "later walks were searched")
 for index = 2, #walked do
 	check(walked[index].queued == walked[index - 1].finished, "each later walk is queued as the one before finishes")
 end
+check(refreshed == 2, "within a second, drawn once for the first hop and once when every hop is ready")
 check(not first.preview and #first.points > 2, "the placeholder is replaced by the walking-map path")
 check(ns.JourneyPreview()[1] == first, "the planned hop draws in place of its placeholder")
 check(#loaded == 1 and loaded[1] == "ShortestPathForever_Nav0", "Redridge's walks load their walking map on demand")
