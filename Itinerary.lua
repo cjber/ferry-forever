@@ -58,9 +58,30 @@ local function PlanHop(hop)
 	end
 end
 
+-- The next piece of work, and whether it is a plan. Every hop is planned before any walk is searched, so the walks
+-- run back to back, and one hop's last walk and the next hop's first, which meet at a stop, share decoded grids.
+---@return SPFHop?, boolean?
+local function Next()
+	local points, index = ns.JourneyStops()
+	if not (points and index) then
+		return nil
+	end
+	local walk
+	for stop = index, #points - 1 do
+		local hop = hops[Key(points[stop], points[stop + 1])]
+		if hop and hop.paths == nil then
+			return hop, true
+		end
+		walk = walk or hop and hop.walks[1] and hop
+	end
+	return walk, false
+end
+
+local SearchWalk
+
 -- The search loads the continent's walking map on demand, like the current leg's.
 ---@param hop SPFHop
-local function SearchWalk(hop)
+SearchWalk = function(hop)
 	local walk = hop.walks[1]
 	searching = hop
 	job = ns.Path.Find(walk.leg.from.map, walk.leg.from, walk.leg.to, function(points, _, finished)
@@ -73,6 +94,11 @@ local function SearchWalk(hop)
 		if points and #points > 1 then
 			walk.path.points, walk.path.preview = points, nil
 			Refresh()
+		end
+		-- Queued from this callback, the next walk keeps the search queue from draining, which frees the grids.
+		local following, plan = Next()
+		if following and not plan and not Settling() then
+			SearchWalk(following)
 		end
 		Schedule()
 	end, (ns.JourneyWaterWalking()))
@@ -111,18 +137,15 @@ Step = function()
 		Schedule()
 		return
 	end
-	for stop = index, #points - 1 do
-		local hop = hops[Key(points[stop], points[stop + 1])]
-		if hop and hop.paths == nil then
-			PlanHop(hop)
-			Refresh()
-			Schedule()
-			return
-		elseif hop and hop.walks[1] then
-			SearchWalk(hop)
-			Schedule()
-			return
-		end
+	local hop, plan = Next()
+	if plan then
+		---@cast hop -?
+		PlanHop(hop)
+		Refresh()
+		Schedule()
+	elseif hop then
+		SearchWalk(hop)
+		Schedule()
 	end
 end
 

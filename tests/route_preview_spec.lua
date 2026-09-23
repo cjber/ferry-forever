@@ -35,10 +35,10 @@ ns.Path.after = function(fn)
 	frames[#frames + 1] = fn
 end
 -- The walking map's own load is one atomic client call the search gives a frame of its own; it is left out.
-local slowest = 0
+local slowest, frame = 0, 0
 local function step()
 	local due, started, loads = frames, os.clock(), #loaded
-	frames = {}
+	frames, frame = {}, frame + 1
 	for _, fn in ipairs(due) do
 		fn()
 	end
@@ -66,9 +66,19 @@ ns.Planner.Plan = function(options)
 	return result
 end
 local find = ns.Path.Find
-ns.Path.Find = function(...)
+-- The frames each later walk was queued and finished in.
+local walked = {}
+ns.Path.Find = function(map, from, to, callback, waterWalking)
 	searched = searched + 1
-	return find(...)
+	if not debug.traceback():find("Itinerary.lua", 1, true) then
+		return find(map, from, to, callback, waterWalking)
+	end
+	local entry = { queued = frame }
+	walked[#walked + 1] = entry
+	return find(map, from, to, function(...)
+		entry.finished = frame
+		return callback(...)
+	end, waterWalking)
 end
 ns.RefreshJourneyPreview = function()
 	refreshed = refreshed + 1
@@ -144,6 +154,9 @@ check(first.points[1].map == first.points[2].map, "a same-continent hop is plann
 local before = searched
 drain()
 check(searched > before, "later walks were searched")
+for index = 2, #walked do
+	check(walked[index].queued == walked[index - 1].finished, "each later walk is queued as the one before finishes")
+end
 check(not first.preview and #first.points > 2, "the placeholder is replaced by the walking-map path")
 check(ns.JourneyPreview()[1] == first, "the planned hop draws in place of its placeholder")
 check(#loaded == 1 and loaded[1] == "ShortestPathForever_Nav0", "Redridge's walks load their walking map on demand")
