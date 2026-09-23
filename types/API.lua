@@ -29,6 +29,7 @@
 ---@field NavigateRoute fun(owner: string, stops: SPFAPIStop[]): boolean starts/replaces guidance through 1-64 stops in order; false leaves the current journey intact
 ---@field CurrentStop fun(owner: string): integer? 1-based current stop, nil unless owner owns the active journey
 ---@field Cancel fun(owner: string): boolean true only when this owner's current journey was cancelled
+---@field Active fun(): boolean true while any journey is guiding, whoever started it
 
 ---@class SPFPublicAddon
 ---@field API SPFPublicAPI

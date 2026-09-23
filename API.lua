@@ -280,5 +280,10 @@ function API.Cancel(owner)
 	return true
 end
 
+-- Anyone's journey counts, the player's own included, so a caller can ask before replacing it.
+function API.Active()
+	return ns.IsJourneyGuided() == true
+end
+
 ShortestPathForever = ShortestPathForever or {}
 ShortestPathForever.API = API
