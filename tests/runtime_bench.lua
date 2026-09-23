@@ -36,6 +36,8 @@ return {
  ns = ns,
  stats = plannerStats,
  move = function(point) posX, posY, posMap = point.x, point.y, point.map end,
+ wake = function() fireEvent("PLAYER_ENTERING_WORLD") end,
+ moving = function() moving = true fireEvent("PLAYER_STARTED_MOVING") end,
  begin = function(point)
   mapID = point.map == 0 and 1415 or 1414
   cursorX, cursorY = 0.5 - point.y / 25000, 0.5 - point.x / 25000
@@ -50,7 +52,7 @@ return {
    if f:IsShown() and f.scripts.OnUpdate
     and (miniEnabled or f ~= ShortestPathForeverMinimapRoute) then f.scripts.OnUpdate(f, 1/60) end
   end
-  for _, t in ipairs(tickers) do if T >= t.next then t.next = T + t.every t.fn() end end
+  for _, t in ipairs(tickers) do if not t.cancelled and T >= t.next then t.next = T + t.every t.fn() end end
  end,
  pending = function() return nextFrame end,
  shown = function() return displayed end,
@@ -101,6 +103,7 @@ local function drain()
 end
 local from, to = ns.TaxiNodes[26], ns.TaxiNodes[scenario == "cross" and 67 or 39]
 driver.move(from)
+driver.wake()
 if scenario == "aboard" then
 	driver.move(ns.Docks[1])
 	driver.begin(ns.Docks[2])
@@ -149,6 +152,9 @@ elseif scenario == "closed" or scenario == "open" or scenario == "minimap" or sc
 	local a, b = walk[1], walk[2]
 	local length = math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2)
 	local point = { map = a.map, x = a.x, y = a.y }
+	if scenario ~= "stationary" then
+		driver.moving()
+	end
 	if arg[2] ~= "gc" then
 		collectgarbage("stop")
 	end
@@ -179,6 +185,9 @@ else
 	end
 	local point = { map = 1, x = from.x, y = from.y }
 	local route = ns.Routes[241]
+	if scenario == "observer" then
+		driver.moving()
+	end
 	for i = 1, 1800 do
 		if scenario == "observer" then
 			point.x = point.x + 7 / 60

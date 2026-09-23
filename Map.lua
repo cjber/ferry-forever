@@ -301,8 +301,13 @@ end
 
 -- Whether a dock has any route the filters still show.
 local function DockShown(dockID)
-	local departures = ns.DockDepartures(dockID)
-	return #departures > 0 and ns.KindShown(departures[1].kind)
+	for _, visit in ipairs(ns.DockVisits(dockID)) do
+		local route = ns.Routes[visit.route]
+		if ns.RouteShown(route) and ns.KindShown(route.kind) then
+			return true
+		end
+	end
+	return false
 end
 
 -- A world point's position on this map, in map fractions, or nil when it is off the map.
@@ -376,7 +381,7 @@ local function Clusters(map, docks)
 		for _, dock in ipairs(cluster.docks) do
 			x, y = x + dock.x, y + dock.y
 			ids[#ids + 1] = dock.id
-			local kind = ns.DockDepartures(dock.id)[1].kind
+			local kind = ns.DockKind(dock.id)
 			cluster.kinds = cluster.kinds or {}
 			cluster.kinds[kind] = true
 			cluster.kind = cluster.kind or kind
@@ -401,10 +406,10 @@ function ProviderMixin:RefreshAllData()
 		wanted[cluster.key] = cluster
 	end
 	-- Rebuild only when the set of pins changed (a new map, a zoom that merged or split docks, a filter), so a
-	-- hovered pin keeps its tooltip through the once-a-second refresh.
+	-- hovered pin keeps its tooltip through repeated canvas refreshes.
 	local same = self.pins ~= nil and mapID == self.mapID
-	for key in pairs(self.pins or {}) do
-		same = same and wanted[key] ~= nil
+	for key, pin in pairs(self.pins or {}) do
+		same = same and pin.cluster ~= nil and wanted[key] ~= nil
 	end
 	for key in pairs(wanted) do
 		same = same and self.pins[key] ~= nil
@@ -606,9 +611,15 @@ ns.Init(function()
 	local taxiEvents = CreateFrame("Frame")
 	taxiEvents:RegisterEvent("TAXI_NODE_STATUS_CHANGED")
 	taxiEvents:RegisterEvent("TAXIMAP_OPENED")
+	local taxiPending
 	taxiEvents:SetScript("OnEvent", function()
+		if taxiPending or not WorldMapFrame:IsVisible() then
+			return
+		end
+		taxiPending = true
 		-- Let Taxi.lua finish updating the known-set before recolouring the pins.
 		C_Timer.After(0, function()
+			taxiPending = nil
 			flightProvider:RefreshAllData()
 		end)
 	end)
@@ -617,6 +628,13 @@ ns.Init(function()
 	WorldMapFrame:AddDataProvider(provider)
 	WorldMapFrame:AddDataProvider(portalProvider)
 	Menu.ModifyMenu("MENU_WORLD_MAP_TRACKING", AddFilters)
-	ns.OnChange(ns.RefreshMap)
+	ns.OnChange(function()
+		-- Sightings change countdowns, never the set of docks, portals, flights or route geometry.
+		for _, pin in pairs(provider.pins or {}) do
+			if GameTooltip:IsOwned(pin) and GameTooltip:IsShown() then
+				pin:RefreshTooltip()
+			end
+		end
+	end)
 	ns.RefreshMap()
 end)

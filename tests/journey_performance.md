@@ -1,3 +1,149 @@
+# Idle and event audit — 2026-09-23
+
+Baseline: `a29b6a7` on `cb/ferry`; after: this uncommitted working tree. All tests are offline. No client,
+windows, input or SavedVariables were accessed. The earlier search report is retained below.
+
+## What the audit proved
+
+- The suspected unconditional tracker relayout was **already prevented**: `Tracker.lua` compared
+  structure, edited countdown lines in place and dirtied only structure/wrapping changes. Baseline
+  `activity_bench.lua idle` recorded **189 timer callbacks, 177 position reads, zero MarkDirty calls**
+  in 60 seconds. Rebuilding the empty block list still allocated 0.061 KB/s. A scalar signature now
+  exits before formatting/allocating; the dormant travel clock eliminates those callbacks altogether.
+- Observer, tracker, alerts and dock requests had independent permanent tickers. One shared 1 s clock
+  now runs only while moving, within 200 yards of a landing, observing a ride, following a journey or
+  tracing debug samples. Movement, world/zone changes, regained control and player vehicle exit wake
+  it. Two samples after waking detect passive movement even after a mid-crossing reload. A ride keeps
+  sampling until its existing 30 s gap expires. All dock consumers share one proximity lookup.
+- A sighting called `RefreshMap`, rebuilding portal/flight/transport pins despite unchanged geometry.
+  Sightings now refresh only an owned tooltip and tracker data. Dock filtering reads cached static
+  visits instead of constructing/sorting live departures. Taxi event bursts coalesce while the map
+  is visible. External pin-pool release invalidates retained dock pins before reacquisition.
+- Journey, arrow and compass frames were already hidden when unused; minimap updates were already
+  removed on clear. Their idle OnUpdates were **not** a root cause. The waypoint-provider hook remains
+  a constant-time Guide guard; the minimap hook exits before any lookup unless Shift-left-clicked.
+  Arrow/compass distance text now changes only when the displayed yard value changes.
+- The 510 shared terrain-link masks were built at file load; they now materialize on first use,
+  preserving the nil representation of an empty mask. Walking-map strings remain load-on-demand.
+  Combat pauses the search queue until `PLAYER_REGEN_ENABLED`, hides the journey driver, and defers
+  tracker work and quadratic ride fitting. Necessary ride samples continue; arrival alerts and dock
+  queries are suppressed during combat.
+
+## Paired measurements
+
+`luajit -joff tests/activity_bench.lua <scenario>`: three fresh processes per version/scenario, alternating
+before/after, simulated 60 Hz, 40 s warm-up then 60 s measured. GC is stopped during allocation measurement.
+CPU below times only invoked addon callbacks (including the forced tracker layout in `panel`); the
+harness also prints dispatcher-inclusive time, about 0.03–0.07 ms/s, dominated by stub iteration/noise.
+KB/s is heap growth, **not** retained memory. Panel churn forces 20 tracker layouts/s plus profession,
+bag and unrelated-unit events; it measures this module's contribution, not Blizzard's whole tracker.
+
+| Scenario | Addon ms/s before → after | Allocated KB/s before → after |
+| --- | ---: | ---: |
+| Idle, away from docks | 0.0031 → 0.0000 | 0.061 → 0.000 |
+| Near Ratchet dock, timed boat | 0.0082 → 0.0033 | 2.318 → 1.735 |
+| Walking, no journey | 0.0065 → 0.0052 | 0.061 → 0.017 |
+| Passive route 241 ride | 0.0248 → 0.0245 | 0.956 → 0.797 |
+| Panel-like tracker churn | 0.0065 → 0.0036 | 0.061 → 0.000 |
+| Stationary combat, away from docks | 0.0029 → 0.0000 | 0.061 → 0.000 |
+
+After warm-up, idle has **zero timer/frame callbacks, position reads and MarkDirty calls**. Dock/walk/ride
+scenarios use 59 shared timer callbacks instead of 189 independent callbacks. The ride benchmark asserts
+route 241 is actually recognized, so sleeping through a ride cannot produce a false gain.
+
+Login medians across those 18 processes per version (TOC Lua parsing/execution, then ADDON_LOADED and
+PLAYER_ENTERING_WORLD, with nav unloaded): **5.415 → 5.316 ms load; 0.084 → 0.084 ms init**. Allocations:
+**2,831.4 → 2,770.0 KB load; 38.1 → 40.9 KB init**. Post-GC addon load/init growth: **1,295.5 → 1,224.6 KB**.
+These include stub frame/settings creation, not engine XML work, rendering or disk cold-cache guarantees.
+Static route/taxi/walk tables still parse at login; no nav decode or planner graph is built there. The
+normal one-time 15 s guild/group timing request is excluded from steady-state measurements.
+
+`runtime_bench.lua` uses the same paired three-process method. The table retains full-frame timings;
+max is the largest frame in all three runs. Active journeys remain within their previous performance range.
+
+| Scenario | Mean ms/frame before → after | Max ms before → after | KB/frame before → after |
+| --- | ---: | ---: | ---: |
+| Walking, map closed, minimap disabled | 0.0059 → 0.0059 | 1.185 → 1.273 | 0.591 → 0.582 |
+| Walking, world map + minimap | 0.0094 → 0.0099 | 1.518 → 1.291 | 1.563 → 1.554 |
+| Stationary journey + minimap | 0.0061 → 0.0061 | 1.651 → 1.731 | 0.612 → 0.599 |
+| Aboard journey + minimap | 0.0032 → 0.0034 | 0.467 → 0.439 | 0.589 → 0.585 |
+| Tanaris search | 2.9273 → 2.9934 | 3.311 → 3.339 | 453.988 → 458.487 |
+| Cross-continent search | 2.9568 → 3.0158 | 3.272 → 3.197 | 447.109 → 468.819 |
+| Unchanged map refresh (per call) | 0.2078 → 0.1117 | 0.430 → 0.221 | 104.573 → 71.448 |
+
+Search work is unchanged; per-frame allocation varies with how much work fits the slice. Deferred masks
+shift some allocations from login to the first search. Runtime harness/addon base falls 1,509.6 → 1,438.7 KB;
+including that base, retained Tanaris state is 13,914.8 → 13,911.3 KB and walking with the map open is
+16,927.9 → 16,937.6 KB. Dock caches add about 13 KB once all pins have been used. No collector tuning or
+forced collection was added to the addon.
+
+`journey_bench.lua` before/after: 7/6/12/8 searches, 3/3/7/3 planner calls, one settling round and zero
+straight resets for Tanaris/Eastern Plaguelands/Thunder Bluff/Menethil. Example frame counts were
+19/23/19/15 → 18/24/19/15; CPU-dependent slice boundaries vary. `walk_sim.lua` keeps zero route flips.
+
+## API evidence and prior art
+
+Client source was read from `~/drive/proj/wow-handoff/blizzard-ui/Interface/AddOns/`:
+
+- `Blizzard_ObjectiveTrackerModule.lua:86,126` and `Blizzard_ObjectiveTrackerContainer.lua:65`:
+  MarkDirty propagates to the container; clean complete modules can skip dirty-only layouts, while
+  full layouts replay contents. `Blizzard_ProfessionsRecipeTracker.lua:11` subscribes to currency,
+  recipe and delayed bag changes. Hence cached rendered blocks, unchanged-text checks and no hooks on
+  the tracker update path. Offline tests cannot prove absence of client taint or native layout cost.
+- `Blizzard_MapCanvas/MapCanvas_DataProviderBase.lua:34,84` requires refreshes to tolerate a blank map;
+  OnMapChanged refreshes the provider. `Blizzard_MapCanvas.lua:357,673,699` releases pools and fans out
+  refreshes. Hence no blind "same map" early return after pins are released, and no full refresh on a sighting.
+- Generated `MapDocumentation.lua:437` returns a Vector2DMixin value from GetPlayerMapPosition;
+  `UnitDocumentation.lua:2714` returns four numbers from UnitPosition. The travel loop uses the latter.
+  `SimpleFrameAPIDocumentation.lua:1063` supports unit-filtered registration. `GlobalCallbackRegistry.lua`
+  reference-counts frame events and `CallbackRegistry.lua` dispatches owned callbacks; direct narrow
+  registrations suffice here. AREA_POIS changes map POIs, not fixed transport proximity, so it is not registered.
+- Generated `AddOnProfilerDocumentation.lua` and `AddOnProfilerConstantsDocumentation.lua`: GetAddOnMetric
+  time metrics are milliseconds, RecentAverageTime covers 60 ticks, PeakTime covers the session, and
+  CountTimeOver5Ms is a count. `/path perf` uses these enums with API guards; memory refresh is explicit only
+  and includes the three nav addons. It does not enable scriptProfile or reset global measurements.
+- [Questie's compiler](https://github.com/Questie/Questie/blob/master/Database/compiler.lua) batches/yields
+  compilation and pauses in combat; its [map queues](https://github.com/Questie/Questie/blob/master/Modules/Map/QuestieMap.lua)
+  throttle drawing and batch minimap work. This supports lazy masks and event-resumed search work, while
+  retaining the existing budgeted/nav-on-demand architecture.
+- [WeakAuras](https://github.com/WeakAuras/WeakAuras2/blob/main/WeakAuras/GenericTrigger.lua) removes OnUpdate
+  when its last consumer unregisters and filters unit events; [Plater](https://github.com/Tercioo/Plater-Nameplates/blob/master/Plater.lua)
+  throttles plate work with per-frame limits. Hence demand-driven travel polling, narrow events and retained
+  search budgets. [Details](https://github.com/Tercioo/Details-Damage-Meter/blob/master/functions/profiles.lua)
+  also separates display refresh with an update interval; it does not justify polling inactive features.
+- [HandyNotes](https://github.com/Nevcairiel/HandyNotes/blob/master/HandyNotes.lua) refreshes the affected
+  plugin's pins on notification. [TomTom's arrow](https://github.com/MURPHYENGINEERING/tomtom/blob/master/TomTom_CrazyArrow.lua)
+  (public mirror) hides when unused, keeps a title dirty flag and throttles ETA. These informed scoped map
+  invalidation and preserving active arrow motion while avoiding unchanged distance text writes.
+
+## Verification and reproduction
+
+The UI fixture gained cancellable tickers, unit-filtered events, movement/combat/height stubs and proper
+ADDON_LOADED dispatch. `activity_spec.lua` asserts sleep/wake, unrelated events, countdown line reuse,
+wrapping, combat recovery, passive boat/lift sync, external pin release, sighting scope, suspended search
+recovery, and profiler present/absent behavior. `nav_compare.lua` can compare both old and packed link formats.
+
+```sh
+luacheck . -q
+stylua --check .
+for spec in tests/*_spec.lua; do luajit "$spec" || exit; done
+luajit tests/walk_sim.lua
+luajit tests/nav_compare.lua /tmp/spf-a29b6a7
+luajit -joff tests/journey_bench.lua /tmp/spf-a29b6a7
+luajit -joff tests/journey_bench.lua
+luajit ~/drive/proj/wow-handoff/scratch/harness2.lua
+luajit -joff ~/drive/proj/wow-handoff/scratch/harness2.lua
+for s in idle dock walking ride panel combat; do luajit -joff tests/activity_bench.lua "$s"; done
+```
+
+The baseline is a plain source copy captured before editing, without changing git state. Run the current
+benchmark script by absolute path with that copy as cwd for the before result; use the same updated fixture
+for both. Real profession-panel latency, transport event timing, rendering, taint and profiler readings
+still require owner testing in game with `/path perf`; the offline results do not claim to explain all
+client hitches.
+
+---
+
 # Runtime verification — 2026-09-23
 
 Baseline: `9921ef4` on `cb/ferry`; after: the uncommitted runtime changes. All work and verification were offline. No client or SavedVariables access was used.

@@ -212,18 +212,22 @@ end
 -- the few nodes with additional explicit links copy on write.
 local linkSets, directionBits = {}, {}
 for _, layer in ipairs({ -1, 1 }) do
-	local set = {}
-	linkSets[layer] = set
-	for mask = 1, 255 do
-		local links, bits = { shared = layer, mask = mask }, mask
-		for d = 0, 7 do
-			if bits % 2 == 1 then
-				links[#links + 1] = d + 8 * (layer + 1)
+	linkSets[layer] = setmetatable({}, {
+		__index = function(set, mask)
+			if mask == 0 then
+				return nil
 			end
-			bits = floor(bits / 2)
-		end
-		set[mask] = links
-	end
+			local links, bits = { shared = layer, mask = mask }, mask
+			for d = 0, 7 do
+				if bits % 2 == 1 then
+					links[#links + 1] = d + 8 * (layer + 1)
+				end
+				bits = floor(bits / 2)
+			end
+			set[mask] = links
+			return links
+		end,
+	})
 end
 for d = 0, 7 do
 	directionBits[d] = 2 ^ d
@@ -1516,7 +1520,7 @@ end
 -- Round-robin slices share one frame budget, including callbacks that replan from newly settled costs.
 local queue = {}
 local scheduled = false
-local pump
+local pump, combatWait
 
 local function notify(job, callback, points, cost)
 	if callback then
@@ -1541,6 +1545,17 @@ end
 
 pump = function()
 	scheduled = false
+	if InCombatLockdown and InCombatLockdown() then
+		if not combatWait then
+			combatWait = CreateFrame("Frame")
+			combatWait:SetScript("OnEvent", function(self)
+				self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+				schedule()
+			end)
+		end
+		combatWait:RegisterEvent("PLAYER_REGEN_ENABLED")
+		return
+	end
 	local finish = clock() + Path.budget
 	repeat
 		local job = table.remove(queue, 1)

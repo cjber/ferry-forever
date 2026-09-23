@@ -27,6 +27,7 @@ local env = setmetatable({
 		return true
 	end,
 	UnitOnTaxi = noop,
+	InCombatLockdown = noop,
 	UnitFactionGroup = function()
 		return ns.faction or "Alliance"
 	end,
@@ -72,6 +73,7 @@ end
 ns.Init = function(fn)
 	fn()
 end
+ns.WakeTravel = noop
 ns.NowMs = function()
 	return now
 end

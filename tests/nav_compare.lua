@@ -28,9 +28,12 @@ local function loader(root)
 	for _, map in ipairs({ 0, 1, 2991 }) do
 		setfenv(assert(loadfile(root .. "/ShortestPathForever_Nav" .. map .. "/Nav" .. map .. ".lua")), env)()
 	end
-	return assert(upvalue(ns.Path.FindSync, "State")), assert(upvalue(ns.Path.FindSync, "decodeGrid"))
+	return assert(upvalue(ns.Path.FindSync, "State")),
+		assert(upvalue(ns.Path.FindSync, "decodeGrid")),
+		upvalue(ns.Path.FindSync, "linkSets") ~= nil
 end
-local oldState, oldDecode = loader(assert(arg[1], "usage: luajit tests/nav_compare.lua <baseline-source-tree>"))
+local oldState, oldDecode, oldPacked =
+	loader(assert(arg[1], "usage: luajit tests/nav_compare.lua <baseline-source-tree>"))
 local newState, newDecode = loader(".")
 local function equal(a, b)
 	for key, v in pairs(a) do
@@ -45,16 +48,23 @@ for _, map in ipairs({ 0, 1, 2991 }) do
 	local old, new = oldState(map), newState(map)
 	for index in pairs(old.D.grid) do
 		local k = index - 1
-		local val = oldDecode(old, k)
+		local val, om, oz, oat, ol = oldDecode(old, k)
+		om, oz, oat, ol = om or old.moves[k], oz or old.z[k], oat or old.at[k], ol or old.links[k]
 		local nval, m, z, at, links = newDecode(new, k)
 		equal(val, nval)
-		equal(old.moves[k], m)
-		equal(old.z[k], z)
-		equal(old.at[k], at)
-		for node, l in pairs(old.links[k]) do
+		equal(om, m)
+		equal(oz, z)
+		equal(oat, at)
+		for node, l in pairs(ol) do
 			local a, b = {}, {}
-			for i = 1, #l, 2 do
-				a[l[i] + 8 * (l[i + 1] + 1)] = true
+			if oldPacked then
+				for _, v in ipairs(l) do
+					a[v] = true
+				end
+			else
+				for i = 1, #l, 2 do
+					a[l[i] + 8 * (l[i + 1] + 1)] = true
+				end
 			end
 			for _, v in ipairs(links[node] or {}) do
 				b[v] = true
@@ -62,7 +72,7 @@ for _, map in ipairs({ 0, 1, 2991 }) do
 			equal(a, b)
 		end
 		for node in pairs(links) do
-			assert(old.links[k][node])
+			assert(ol[node])
 		end
 		old.val[k], old.moves[k], old.z[k], old.at[k], old.links[k] = nil, nil, nil, nil, nil
 		count = count + 1

@@ -28,22 +28,21 @@ local function Due(ms, lead)
 	return ms <= lead and ms > lead - 5000
 end
 
-local function Check()
-	if not ns.db.alerts then
+local function Check(dockID, yards)
+	if not ns.db.alerts or InCombatLockdown() then
 		return
 	end
 	local riding = ns.CurrentRide()
 	if riding then
-		local dockID, arriveIn = ns.NextStop(riding)
-		if dockID and Due(arriveIn, ON_BOARD) then
+		local nextDock, arriveIn = ns.NextStop(riding)
+		if nextDock and Due(arriveIn, ON_BOARD) then
 			Alert(
-				riding .. ":" .. dockID,
-				"Arriving at " .. ns.DockLabel(dockID) .. " in " .. ns.FormatCountdown(arriveIn)
+				riding .. ":" .. nextDock,
+				"Arriving at " .. ns.DockLabel(nextDock) .. " in " .. ns.FormatCountdown(arriveIn)
 			)
 		end
 		return
 	end
-	local dockID, yards = ns.NearestDock()
 	if not dockID or yards > RADIUS then
 		return
 	end
@@ -63,5 +62,5 @@ local function Check()
 end
 
 ns.Init(function()
-	C_Timer.NewTicker(1, Check)
+	ns.OnTravelTick(Check)
 end)

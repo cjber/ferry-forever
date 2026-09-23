@@ -42,7 +42,11 @@ local function Update()
 	for i = index + 1, #path do
 		distance = distance + math.sqrt((path[i].x - path[i - 1].x) ^ 2 + (path[i].y - path[i - 1].y) ^ 2)
 	end
-	frame.Distance:SetFormattedText("%d yd", distance)
+	local yards = math.floor(distance)
+	if yards ~= frame.yards then
+		frame.yards = yards
+		frame.Distance:SetFormattedText("%d yd", yards)
+	end
 end
 
 local function Create()

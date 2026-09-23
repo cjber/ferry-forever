@@ -58,6 +58,7 @@ local env = setmetatable({
 		}
 	end,
 }, { __index = _G })
+ns.OnTravelTick = noop
 ns.Init = function(fn)
 	fn()
 end

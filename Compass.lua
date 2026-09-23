@@ -66,7 +66,11 @@ local function Update()
 	Place(frame.Stop, stop, x, y, map, facing)
 	Place(frame.Next, nextBend, x, y, map, facing)
 	if Place(frame.Bend, bend, x, y, map, facing) then
-		frame.Distance:SetFormattedText("%d yd", math.sqrt((bend.x - x) ^ 2 + (bend.y - y) ^ 2))
+		local yards = math.floor(math.sqrt((bend.x - x) ^ 2 + (bend.y - y) ^ 2))
+		if yards ~= frame.yards then
+			frame.yards = yards
+			frame.Distance:SetFormattedText("%d yd", yards)
+		end
 		frame.Distance:Show()
 	else
 		frame.Distance:Hide()

@@ -189,11 +189,10 @@ local function OnMessage(prefix, message, chatType, sender)
 end
 
 -- Near a dock with a boat nobody has timed yet, ask whoever is around.
-local function AskAtDock()
-	if not ns.db.share or IsInInstance() or GetTime() - lastAsk < ASK_EVERY then
+local function AskAtDock(dockID, yards)
+	if not ns.db.share or InCombatLockdown() or IsInInstance() or GetTime() - lastAsk < ASK_EVERY then
 		return
 	end
-	local dockID, yards = ns.NearestDock()
 	if not dockID or yards > ASK_RANGE then
 		return
 	end
@@ -221,5 +220,5 @@ ns.Init(function()
 			Ask(Untimed(), Distributions(false))
 		end
 	end)
-	C_Timer.NewTicker(5, AskAtDock)
+	ns.OnTravelTick(AskAtDock)
 end)

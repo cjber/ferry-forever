@@ -50,6 +50,15 @@ local WALK_FAILURE = {
 	error = "walking search failed",
 }
 
+local function RefreshTracker()
+	ns.journeyVersion = (ns.journeyVersion or 0) + 1
+	ns.RefreshTracker()
+end
+
+function ns.HasJourney()
+	return goal ~= nil
+end
+
 local function CancelPaths()
 	pathVersion = pathVersion + 1
 	for job in pairs(pathJobs) do
@@ -232,7 +241,7 @@ function ns.ClearJourney()
 	progress.index, progress.departed = 1, false
 	driver:Hide()
 	ns.SetJourneyRoute(nil)
-	ns.RefreshTracker()
+	RefreshTracker()
 end
 
 local function UpdateProgress()
@@ -308,7 +317,7 @@ function ns.ToggleJourneyGuide()
 	elseif result then
 		StartGuide()
 	end
-	ns.RefreshTracker()
+	RefreshTracker()
 end
 
 function ns.ShowJourneyMap()
@@ -329,6 +338,7 @@ function ns.JourneyInfo()
 		else
 			title = title .. " · " .. ns.FormatCountdown(math.max(0, result.arrive - ns.NowMs()))
 		end
+		local _, spell = WaterWalking()
 		for index = progress.index, #result.legs do
 			local leg = result.legs[index]
 			local text = string.format("%d. %s %s", index, VERB[leg.mode], NodeLabel(leg.to, leg.mode))
@@ -343,7 +353,6 @@ function ns.JourneyInfo()
 			elseif leg.mode == "walk" and ns.Path and not leg.measured then
 				text = text .. " (finding walking path)"
 			end
-			local _, spell = WaterWalking()
 			if spell and leg.wet and leg.wet >= WATER_HINT then
 				text = text .. " (cast " .. C_Spell.GetSpellName(spell) .. ")"
 			end
@@ -406,7 +415,7 @@ local function Refresh()
 		end
 	end
 	ns.SetJourneyRoute(goal, remaining)
-	ns.RefreshTracker()
+	RefreshTracker()
 end
 
 -- The rest of the chosen walk in its own running yards, so water keeps its search weight.
@@ -958,6 +967,9 @@ local function RefreshCosts(includeGoal, forced)
 end
 
 local function Update(self, elapsed)
+	if InCombatLockdown() then
+		return
+	end
 	if not ns.db.journey then
 		ns.ClearJourney()
 		return
@@ -1028,7 +1040,10 @@ local function StartJourney(point)
 	result = previous
 	progress.index, progress.departed = previous and index or 1, previous and departed or false
 	driver.elapsed, driver.progressElapsed = 0, 0
-	driver:Show()
+	if not InCombatLockdown() then
+		driver:Show()
+	end
+	ns.WakeTravel()
 	waterMode = mode
 	if ns.Path then
 		if not ns.Path.LowerBound then
@@ -1041,7 +1056,7 @@ local function StartJourney(point)
 	-- Every journey starts guided; the tracker header turns it off.
 	if result then
 		StartGuide()
-		ns.RefreshTracker()
+		RefreshTracker()
 	end
 	return true
 end
@@ -1142,11 +1157,18 @@ end
 ns.Init(function()
 	driver = CreateFrame("Frame", "ShortestPathForeverJourneyDriver", UIParent)
 	driver:SetScript("OnUpdate", Update)
+	driver:RegisterEvent("PLAYER_REGEN_DISABLED")
+	driver:RegisterEvent("PLAYER_REGEN_ENABLED")
 	driver:RegisterEvent("QUEST_TURNED_IN")
 	driver:RegisterEvent("QUEST_REMOVED")
 	driver:RegisterEvent("SUPER_TRACKING_CHANGED")
 	driver:RegisterEvent("USER_WAYPOINT_UPDATED")
-	driver:SetScript("OnEvent", function(_, event, questID)
+	driver:SetScript("OnEvent", function(self, event, questID)
+		if event == "PLAYER_REGEN_DISABLED" then
+			self:Hide()
+		elseif event == "PLAYER_REGEN_ENABLED" and goal then
+			self:Show()
+		end
 		if (event == "QUEST_TURNED_IN" or event == "QUEST_REMOVED") and guide and guide.previousQuest == questID then
 			guide.previousQuest = nil
 		end
@@ -1158,7 +1180,7 @@ ns.Init(function()
 			and (event == "SUPER_TRACKING_CHANGED" or event == "USER_WAYPOINT_UPDATED")
 		then
 			if not OwnsWaypoint() then
-				ns.RefreshTracker()
+				RefreshTracker()
 			elseif event == "SUPER_TRACKING_CHANGED" and not SameTracking(guide) then
 				-- A quest/map-pin click belongs to the player. Keep the route arrow, but never retake tracking.
 				guide.yielded = true

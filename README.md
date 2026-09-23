@@ -49,6 +49,10 @@ load only when a route needs them.
 Settings: `/path`, or *Options → AddOns → Shortest Path Forever*. Every feature above has its own switch there.
 `/path debug` keeps a trace of your position and ride matching in the saved variables, for reporting a ride
 that did not sync.
+`/path perf` prints this addon's recent/session CPU averages, last tick, session peak and ticks over 5 ms
+from the client's `C_AddOnProfiler`, plus memory for the addon and its walking maps. It reports when
+profiling is unavailable. Compare readings while idle, opening panels and following a journey; memory
+accounting runs only when you request it. Searches and tracker updates wait until combat ends.
 
 ## How the times work
 
@@ -73,4 +77,6 @@ luajit tests/path_many_spec.lua      # exact costs, frontier bounds, interleavin
 luajit tests/journey_optimal_spec.lua # 30 seeded full-search comparisons and cache invalidation
 luajit -joff tests/journey_bench.lua  # searches, rounds and frames at the 3 ms budget
 luajit tests/walk_sim.lua            # follow four real routes; assert zero route flips
+luajit tests/activity_spec.lua       # idle sleep, passive rides, combat, tracker and profiler
+luajit -joff tests/activity_bench.lua idle # offline CPU/allocation and login cost (also dock/walking/ride/panel/combat)
 ```

@@ -67,8 +67,14 @@ function ns.Sighted(routeID, anchor)
 		return false
 	end
 	anchors[routeID] = { epoch = anchor.epoch, seen = anchor.seen, source = anchor.source }
+	ns.sightingVersion = (ns.sightingVersion or 0) + 1
 	Changed()
 	return true
+end
+
+function ns.FreshAnchor(routeID)
+	local anchor = Anchors()[routeID]
+	return anchor and GetServerTime() - anchor.seen <= Model.MAX_AGE and anchor or nil
 end
 
 -- Sightings still fresh enough to count down from (and to share).
@@ -138,10 +144,14 @@ function ns.DockTitle(dockID)
 	return dock.site and dock.site .. ", " .. dock.name or ns.DockPierName(dockID)
 end
 
+local dockX, dockY, dockZ, dockMap, nearestDock, nearestYards
 function ns.NearestDock()
 	local x, y, z, map = UnitPosition("player")
 	if not x then
 		return nil
+	end
+	if x == dockX and y == dockY and z == dockZ and map == dockMap then
+		return nearestDock, nearestYards
 	end
 	-- Height counts where it is known, so a lift's top and bottom landings stay apart.
 	local nearest, yards
@@ -153,6 +163,8 @@ function ns.NearestDock()
 			end
 		end
 	end
+	dockX, dockY, dockZ, dockMap = x, y, z, map
+	nearestDock, nearestYards = nearest, yards
 	return nearest, yards
 end
 
@@ -174,22 +186,39 @@ function ns.KindShown(kind)
 	return ns.db[FILTER[kind] or error("unknown route kind " .. tostring(kind))]
 end
 
-function ns.DockDepartures(dockID)
-	local departures, fresh, now = {}, ns.FreshAnchors(), ns.NowMs()
-	for routeID, route in pairs(ns.Routes) do
-		for index, stop in ipairs(ns.RouteShown(route) and route.stops or {}) do
-			if stop.dock == dockID then
-				local anchor = fresh[routeID]
-				local departure = { route = routeID, kind = route.kind, to = Model.Onward(route, index), known = false }
-				if anchor then
-					local phase = (now - anchor.epoch) % route.period
-					departure.known = true
-					departure.docked, departure.arriveIn, departure.departIn = Model.Visit(route, stop, phase)
-					departure.seen = GetServerTime() - anchor.seen
-					departure.source = anchor.source
+-- Timetable topology never changes with sightings; build it only when a dock first needs it.
+local dockVisits = {}
+function ns.DockVisits(dockID)
+	if not dockVisits[dockID] then
+		local visits = {}
+		for routeID, route in pairs(ns.Routes) do
+			for index, stop in ipairs(route.stops) do
+				if stop.dock == dockID then
+					visits[#visits + 1] = { route = routeID, stop = stop, to = Model.Onward(route, index) }
 				end
-				departures[#departures + 1] = departure
 			end
+		end
+		dockVisits[dockID] = visits
+	end
+	return dockVisits[dockID]
+end
+
+function ns.DockDepartures(dockID)
+	local departures, now = {}, ns.NowMs()
+	for _, visit in ipairs(ns.DockVisits(dockID)) do
+		local routeID = visit.route
+		local route = ns.Routes[routeID]
+		if ns.RouteShown(route) then
+			local anchor = ns.FreshAnchor(routeID)
+			local departure = { route = routeID, kind = route.kind, to = visit.to, known = false }
+			if anchor then
+				local phase = (now - anchor.epoch) % route.period
+				departure.known = true
+				departure.docked, departure.arriveIn, departure.departIn = Model.Visit(route, visit.stop, phase)
+				departure.seen = GetServerTime() - anchor.seen
+				departure.source = anchor.source
+			end
+			departures[#departures + 1] = departure
 		end
 	end
 	table.sort(departures, SoonestFirst)
@@ -219,7 +248,7 @@ end
 
 -- Where the route being ridden calls next, and in how many ms, when its schedule is known.
 function ns.NextStop(routeID)
-	local anchor = ns.FreshAnchors()[routeID]
+	local anchor = ns.FreshAnchor(routeID)
 	if not anchor then
 		return nil
 	end
@@ -263,4 +292,63 @@ frame:SetScript("OnEvent", function(self, _, name)
 		Start(fn)
 	end
 	pending = nil
+end)
+
+-- Passive boat/lift motion need not fire player movement events. Keep sampling near a landing and
+-- through a ride; elsewhere movement/world events wake one shared clock instead of four idle tickers.
+local travelListeners, travelTicker = {}, nil
+local moving, probes = false, 0
+function ns.OnTravelTick(fn)
+	travelListeners[#travelListeners + 1] = fn
+end
+
+local function TravelTick()
+	local dockID, yards = ns.NearestDock()
+	for _, fn in ipairs(travelListeners) do
+		fn(dockID, yards)
+	end
+	local near = yards and yards <= 200
+	local observing = ns.IsObservingRide and ns.IsObservingRide()
+	local journey = ns.HasJourney and ns.HasJourney()
+	probes = math.max(0, probes - 1)
+	local active = near or observing or journey or ns.db.debug or moving or probes > 0
+	if not active and travelTicker then
+		travelTicker:Cancel()
+		travelTicker = nil
+	end
+end
+
+function ns.WakeTravel()
+	-- Two position samples also detect a reload/zone change in the middle of a crossing.
+	probes = 2
+	if not travelTicker then
+		travelTicker = C_Timer.NewTicker(1, TravelTick)
+	end
+end
+
+ns.Init(function()
+	local travel = CreateFrame("Frame")
+	for _, event in ipairs({
+		"PLAYER_ENTERING_WORLD",
+		"PLAYER_CONTROL_GAINED",
+		"ZONE_CHANGED",
+		"ZONE_CHANGED_INDOORS",
+		"ZONE_CHANGED_NEW_AREA",
+		"PLAYER_STARTED_MOVING",
+		"PLAYER_STOPPED_MOVING",
+		"PLAYER_REGEN_ENABLED",
+	}) do
+		travel:RegisterEvent(event)
+	end
+	travel:RegisterUnitEvent("UNIT_EXITED_VEHICLE", "player")
+	travel:SetScript("OnEvent", function(_, event)
+		if event == "PLAYER_STARTED_MOVING" then
+			moving = true
+		elseif event == "PLAYER_STOPPED_MOVING" then
+			moving = false
+		elseif event == "PLAYER_ENTERING_WORLD" then
+			moving = IsPlayerMoving()
+		end
+		ns.WakeTravel()
+	end)
 end)

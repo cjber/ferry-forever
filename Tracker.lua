@@ -69,23 +69,43 @@ local function RideRows(routeID)
 	return { { key = routeID, text = text } }, kind, dockID
 end
 
-function ns.RefreshTracker()
-	if not module then
+local function RefreshTracker(dockID, yards)
+	if not module or InCombatLockdown() then
 		return
 	end
-	local dockID, yards, rows, kind, title, blockKey, mapDock
+	local rows, kind, title, blockKey, mapDock
 	if ns.db.tracker then
-		dockID, yards = ns.NearestDock()
 		local radius = module.dockID and 160 or 120
 		if not yards or yards > radius then
 			dockID = nil
 		end
+	else
+		dockID = nil
 	end
+	local riding = ns.db.tracker and ns.CurrentRide()
+	local journey = ns.HasJourney()
+	local second = (dockID or riding or journey) and math.floor(GetTime()) or 0
+	-- Compare scalar render inputs before allocating blocks or formatting rows. Unrelated tracker
+	-- layouts can replay the saved blocks; they never need to query timetables or rebuild the model.
+	if
+		module.dockID == dockID
+		and module.riding == riding
+		and module.second == second
+		and module.journeyVersion == ns.journeyVersion
+		and module.sightingVersion == ns.sightingVersion
+		and module.tracker == ns.db.tracker
+		and module.otherFaction == ns.db.otherFaction
+	then
+		return
+	end
+	module.riding, module.second = riding, second
+	module.journeyVersion, module.sightingVersion = ns.journeyVersion, ns.sightingVersion
+	module.tracker, module.otherFaction = ns.db.tracker, ns.db.otherFaction
 	if dockID then
 		rows, kind = DockRows(dockID)
 		title, blockKey, mapDock = ns.DockTitle(dockID), "dock" .. dockID, dockID
-	elseif ns.db.tracker and ns.CurrentRide() then
-		rows, kind, mapDock = RideRows(ns.CurrentRide())
+	elseif riding then
+		rows, kind, mapDock = RideRows(riding)
 		if rows then
 			title, blockKey = "On board to " .. ns.DockTitle(mapDock), "ride" .. mapDock
 		end
@@ -155,6 +175,10 @@ function ns.RefreshTracker()
 	end
 end
 
+function ns.RefreshTracker()
+	RefreshTracker(ns.NearestDock())
+end
+
 local function Attach()
 	if ObjectiveTrackerManager:GetContainerForModule(module) ~= ObjectiveTrackerFrame then
 		ObjectiveTrackerManager:SetModuleContainer(module, ObjectiveTrackerFrame)
@@ -189,6 +213,6 @@ ns.Init(function()
 	end)
 	Attach()
 	ns.OnChange(ns.RefreshTracker)
-	C_Timer.NewTicker(1, ns.RefreshTracker)
+	ns.OnTravelTick(RefreshTracker)
 	ns.RefreshTracker()
 end)

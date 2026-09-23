@@ -35,13 +35,16 @@ end
 
 -- Record the route the ride was on, once it is clear which one.
 local function Record()
+	if InCombatLockdown() then
+		return
+	end
 	local fits = Fits()
 	local routeID = Model.RideRoute(fits)
 	if not routeID then
 		return
 	end
 	local now = GetServerTime()
-	local held = ns.FreshAnchors()[routeID]
+	local held = ns.FreshAnchor(routeID)
 	local routine = held and held.source == "you" and now - held.seen < QUIET
 	ride.announced = routeID
 	if ns.Sighted(routeID, { epoch = fits[routeID].epoch, seen = now, source = "you" }) and not routine then
@@ -65,6 +68,10 @@ end
 -- The route the player is riding, once the ride has shown which.
 function ns.CurrentRide()
 	return ride and ride.announced
+end
+
+function ns.IsObservingRide()
+	return ride ~= nil
 end
 
 local phaseScratch = {}
@@ -96,14 +103,14 @@ local function Sample()
 			end
 		end
 	end
-	if ride and now - ride.last > RIDE_GAP then
+	if ride and now - ride.last > RIDE_GAP and not InCombatLockdown() then
 		Record()
 		ride = nil
 	end
 	-- `/path debug` also keeps the raw samples in the saved variables, to diagnose a ride that did not sync.
 	if ns.db.debug then
 		-- Fitting is the costly part, so the trace refits on the same cadence as syncing.
-		if ride and (not ride.traceFits or ride.count % FIT_EVERY == 0) then
+		if ride and not InCombatLockdown() and (not ride.traceFits or ride.count % FIT_EVERY == 0) then
 			local fits = {}
 			for routeID, samples in pairs(ride.samples) do
 				local epoch, support = Model.FitEpoch(ns.Routes[routeID], samples)
@@ -147,7 +154,7 @@ ns.Init(function()
 	if ns.db.debug then
 		ns.db.trace = ns.db.trace or {}
 	end
-	C_Timer.NewTicker(1, Sample)
+	ns.OnTravelTick(Sample)
 	-- A /reload or logout on board would otherwise drop the ride so far (it lives only in memory).
 	local frame = CreateFrame("Frame")
 	frame:RegisterEvent("PLAYER_LEAVING_WORLD")

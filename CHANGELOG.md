@@ -11,6 +11,12 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+Background polling now sleeps when you are stationary away from travel activity. Docks and passive boat
+or lift rides still wake the countdowns and observation; unchanged tracker content is reused, and shared
+sightings no longer rebuild unrelated map layers. Walking searches and tracker updates wait through
+combat. Less terrain bookkeeping is built at login, and `/path perf` shows the client's measured CPU cost
+and addon memory for checking performance in game.
+
 The first release, a route finder for WoW: Forever: pick a spot on the map or a quest and it plans the
 fastest way there and walks you to it. Every boat and zeppelin, including the new Forever crossings to Southshore,
 Riverglades and Zephras Isle, has its dock marked on the world map, a ferry for boats and a zeppelin drawn
