@@ -141,11 +141,53 @@ local function SameWaypoint(a, b)
 	if a == b then
 		return true
 	end
-	if not (a and b and a.uiMapID == b.uiMapID) then
+	if not (a and b) then
 		return false
 	end
 	-- C_Map.GetUserWaypoint's position is a plain { x, y } table, not a Vector2D (WaypointLocationDataProvider.lua:183).
-	return math.abs(a.position.x - b.position.x) < 0.000001 and math.abs(a.position.y - b.position.y) < 0.000001
+	if a.uiMapID == b.uiMapID and a.position.x == b.position.x and a.position.y == b.position.y then
+		return true
+	end
+	local aMap, aWorld = C_Map.GetWorldPosFromMapPos(a.uiMapID, CreateVector2D(a.position.x, a.position.y))
+	local bMap, bWorld = C_Map.GetWorldPosFromMapPos(b.uiMapID, CreateVector2D(b.position.x, b.position.y))
+	-- Map changes can reproject or round the read-back. One yard absorbs that without claiming a different pin.
+	return aWorld and bWorld and aMap == bMap and (aWorld.x - bWorld.x) ^ 2 + (aWorld.y - bWorld.y) ^ 2 <= 1
+end
+
+local waypointProviders = {}
+
+-- Guide's waypoint only steers the native marker; our own pins already draw the route and destination.
+local function HideGuideWaypointPin(provider)
+	if provider.pin then
+		local owned = guide and (guide.writingWaypoint or guide.waypoint)
+		provider.pin:SetShown(not (owned and SameWaypoint(C_Map.GetUserWaypoint(), owned)))
+	end
+end
+
+local function RefreshWaypointPins()
+	-- Events may be deferred; a closed map is unsubscribed and may not have initialized its canvas yet.
+	for _, provider in ipairs(waypointProviders) do
+		if provider:GetMap():IsVisible() then
+			provider:RefreshAllData()
+		else
+			provider:RemoveAllData()
+		end
+	end
+end
+
+local function ClearOrphanWaypoint()
+	local saved = ns.charDB.guideWaypoint
+	if guide or not saved then
+		return
+	end
+	-- Journeys do not survive reloads, but the client saves user waypoints independently of this addon.
+	ns.charDB.guideWaypoint = nil
+	local point = UiMapPoint.CreateFromCoordinates(saved.uiMapID, saved.x, saved.y)
+	if SameWaypoint(C_Map.GetUserWaypoint(), point) then
+		C_Map.ClearUserWaypoint()
+		C_SuperTrack.SetSuperTrackedUserWaypoint(false)
+		RefreshWaypointPins()
+	end
 end
 
 local function RememberTracking(state)
@@ -164,25 +206,33 @@ local function StopGuide()
 	local previous = guide
 	guide = nil
 	ns.PointGuideArrow(nil)
+	if previous then
+		ns.charDB.guideWaypoint = nil
+	end
 	if
 		not previous
 		or not previous.hasDriven
 		or not SameWaypoint(C_Map.GetUserWaypoint(), previous.expectedWaypoint)
 	then
+		RefreshWaypointPins()
 		return
 	end
 	local ownsTracking = not previous.yielded and SameTracking(previous)
-	if previous.previousWaypoint then
-		C_Map.SetUserWaypoint(previous.previousWaypoint)
-	elseif previous.waypoint then
+	local restored = previous.previousWaypoint and C_Map.SetUserWaypoint(previous.previousWaypoint)
+	-- A rejected restoration must still remove our bend, rather than leave it behind without an ownership record.
+	if not restored and previous.waypoint then
 		C_Map.ClearUserWaypoint()
 	end
 	if ownsTracking then
-		C_SuperTrack.SetSuperTrackedUserWaypoint(previous.previousTrackedWaypoint)
-		if not previous.previousTrackedWaypoint then
+		local tracked = restored and previous.previousTrackedWaypoint or false
+		C_SuperTrack.SetSuperTrackedUserWaypoint(tracked)
+		if not tracked then
 			C_SuperTrack.SetSuperTrackedQuestID(previous.previousQuest or 0)
 		end
+	elseif not restored and C_SuperTrack.IsSuperTrackingUserWaypoint() then
+		C_SuperTrack.SetSuperTrackedUserWaypoint(false)
 	end
+	RefreshWaypointPins()
 end
 
 local function OwnsWaypoint()
@@ -194,9 +244,37 @@ local function OwnsWaypoint()
 	return true
 end
 
+local function ClearGuideWaypoint()
+	-- Synchronous clear events must see an internal write, and deferred events must see the empty expected point.
+	guide.writing = true
+	C_Map.ClearUserWaypoint()
+	C_SuperTrack.SetSuperTrackedUserWaypoint(false)
+	guide.waypoint, guide.expectedWaypoint = nil, nil
+	ns.charDB.guideWaypoint = nil
+	RememberTracking(guide)
+	guide.writing = nil
+	RefreshWaypointPins()
+end
+
+local function YieldGuide()
+	-- A quest/map-pin click belongs to the player. Keep the route arrow, but never retake tracking.
+	guide.yielded = true
+	if guide.waypoint then
+		ClearGuideWaypoint()
+	end
+end
+
 local function GuideWaypoint(point, fading)
 	if not guide then
 		return false
+	end
+	-- The bend callback can run before deferred notifications of a player's waypoint or tracking change.
+	if not OwnsWaypoint() then
+		RefreshTracker()
+		return false
+	end
+	if not guide.yielded and not SameTracking(guide) then
+		YieldGuide()
 	end
 	if guide.yielded then
 		return false
@@ -227,21 +305,22 @@ local function GuideWaypoint(point, fading)
 		end
 		-- These APIs may dispatch events synchronously. Only our own writes bypass ownership checks.
 		guide.writing = true
-		-- The native map pin marks the next bend; our destination pin still marks the final goal.
+		guide.writingWaypoint = waypoint
 		if waypoint and C_Map.SetUserWaypoint(waypoint) then
-			guide.waypoint = C_Map.GetUserWaypoint()
-			guide.expectedWaypoint = guide.waypoint
+			guide.waypoint, guide.expectedWaypoint = waypoint, waypoint
+			ns.charDB.guideWaypoint = { uiMapID = waypoint.uiMapID, x = waypoint.position.x, y = waypoint.position.y }
 			guide.hasDriven = true
 			C_SuperTrack.SetSuperTrackedUserWaypoint(true)
 		elseif guide.waypoint then
 			-- Never leave a stale native marker pointing at the preceding bend when projection fails.
-			C_Map.ClearUserWaypoint()
-			C_SuperTrack.SetSuperTrackedUserWaypoint(false)
-			guide.waypoint, guide.expectedWaypoint = nil, nil
+			ClearGuideWaypoint()
 		end
 		-- Deferred events from our own writes must also agree with the expected tracking state.
 		RememberTracking(guide)
-		guide.writing = nil
+		guide.writing, guide.writingWaypoint = nil, nil
+		for _, provider in ipairs(waypointProviders) do
+			HideGuideWaypointPin(provider)
+		end
 	end
 	return guide.waypoint ~= nil and C_SuperTrack.IsSuperTrackingUserWaypoint()
 end
@@ -316,13 +395,6 @@ local function UpdateProgress()
 	ns.ClearJourney()
 end
 
--- Guide's waypoint only steers the native marker; our own pins already draw the route and destination.
-local function HideGuideWaypointPin(provider)
-	if provider.pin and guide and (guide.writing or SameWaypoint(C_Map.GetUserWaypoint(), guide.expectedWaypoint)) then
-		provider.pin:Hide()
-	end
-end
-
 function ns.IsJourneyGuided()
 	return guide ~= nil
 end
@@ -332,6 +404,7 @@ function ns.JourneyStatus()
 end
 
 local function StartGuide()
+	ClearOrphanWaypoint()
 	local previous = C_Map.HasUserWaypoint() and C_Map.GetUserWaypoint()
 	local saved = previous
 		and UiMapPoint.CreateFromCoordinates(previous.uiMapID, previous.position.x, previous.position.y, previous.z)
@@ -1383,8 +1456,12 @@ ns.Init(function()
 	driver:RegisterEvent("QUEST_REMOVED")
 	driver:RegisterEvent("SUPER_TRACKING_CHANGED")
 	driver:RegisterEvent("USER_WAYPOINT_UPDATED")
+	driver:RegisterEvent("PLAYER_LOGIN")
+	driver:RegisterEvent("PLAYER_ENTERING_WORLD")
 	driver:SetScript("OnEvent", function(self, event, questID)
-		if event == "PLAYER_REGEN_DISABLED" then
+		if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+			ClearOrphanWaypoint()
+		elseif event == "PLAYER_REGEN_DISABLED" then
 			self:Hide()
 		elseif event == "PLAYER_REGEN_ENABLED" and goal then
 			self:Show()
@@ -1402,8 +1479,7 @@ ns.Init(function()
 			if not OwnsWaypoint() then
 				RefreshTracker()
 			elseif event == "SUPER_TRACKING_CHANGED" and not SameTracking(guide) then
-				-- A quest/map-pin click belongs to the player. Keep the route arrow, but never retake tracking.
-				guide.yielded = true
+				YieldGuide()
 			end
 		end
 	end)
@@ -1411,6 +1487,7 @@ ns.Init(function()
 	WorldMapFrame:AddCanvasClickHandler(OnCanvasClick)
 	for provider in pairs(WorldMapFrame.dataProviders) do
 		if provider.RefreshAllData == WaypointLocationDataProviderMixin.RefreshAllData then
+			waypointProviders[#waypointProviders + 1] = provider
 			hooksecurefunc(provider, "RefreshAllData", HideGuideWaypointPin)
 		end
 	end
