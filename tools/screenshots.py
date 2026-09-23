@@ -2,7 +2,7 @@
 """Reproduce Shortest Path Forever with Pillow and the pinned client's own art.
 
     python3 tools/screenshots.py
-    python3 tools/screenshots.py --scenes tracker boats
+    python3 tools/screenshots.py --scenes tracker minimap
     python3 tools/screenshots.py --verify --refs /path/to/refs
 
 WOWMOCK overrides ~/.claude/skills/wow-mock-screenshots. First use downloads assets
@@ -425,7 +425,7 @@ def map_canvas(ui, map_id=947, alpha=1, hover=False):
     return canvas, hover_point
 
 
-def render_map(ui, map_id=947):
+def render_map(ui, map_id):
     canvas, _ = map_canvas(ui, map_id)
     return scene(ui, [(canvas, 0, 0)])
 
@@ -444,7 +444,7 @@ def render_docks(ui):
         [
             TooltipLine("Boats"),
             TooltipLine(labels[8]),
-            TooltipLine("to Teldrassil", NORMAL, "no sighting yet", (0.5, 0.5, 0.5)),
+            TooltipLine("to Teldrassil", NORMAL, "arrives 1:07 · leaves 2:07"),
             TooltipLine(labels[10]),
             TooltipLine("to Wetlands", NORMAL, "arrives 3:23 · leaves 4:23"),
             TooltipLine("to Wetlands, then Hillsbrad Foothills", NORMAL, "no sighting yet", (0.5, 0.5, 0.5)),
@@ -457,30 +457,17 @@ def render_docks(ui):
     return scene(ui, [(canvas, 0, 0), (tip, pin[0] + 10, pin[1] - 10 - tip.height)])
 
 
-def tracker_canvas(ui, seconds=0, boats=False, settling=False):
-    if boats:
-        module = TrackerModule(
-            "Boats",
-            [
-                TrackerBlock(
-                    dock_title(8),
-                    [
-                        f"Teldrassil   arrives {countdown(203 - seconds)} · leaves {countdown(263 - seconds)}",
-                    ],
-                )
-            ],
-        )
-    else:
-        # Reference 21 is a captured itinerary, not a new optimality claim for these timings.
-        rows = [
-            colored(f"1. Walk to {dock_title(10)}   {countdown(120 - seconds)}", WHITE),
-            "2. Boat to Wetlands (no sighting yet)   wait 2:28 · 1:20",
-            f"3. Walk to {dock_title(5)}   1:31",
-            "4. Boat to Dustwallow Marsh (no sighting yet)   wait 2:45 · 1:44",
-            "5. Walk to Silithus   33:02",
-        ]
-        title = "Journey to Silithus" + (" · finding the fastest way..." if settling else "")
-        module = TrackerModule(f"Journey  {countdown(2687 - seconds)} · 9.2k yd", [TrackerBlock(title, rows)])
+def tracker_canvas(ui, seconds=0, settling=False):
+    # Reference 21 is a captured itinerary, not a new optimality claim for these timings.
+    rows = [
+        colored(f"1. Walk to {dock_title(10)}   {countdown(120 - seconds)}", WHITE),
+        "2. Boat to Wetlands   wait 2:28 · 1:20",
+        f"3. Walk to {dock_title(5)}   1:31",
+        "4. Boat to Dustwallow Marsh   wait ~2:45 · 1:44",
+        "5. Walk to Silithus   33:02",
+    ]
+    title = "Journey to Silithus" + (" · finding the fastest way..." if settling else "")
+    module = TrackerModule(f"Journey  {countdown(2687 - seconds)} · 9.2k yd", [TrackerBlock(title, rows)])
     return objective_tracker(ui, [module], container=False)[0]
 
 
@@ -488,8 +475,8 @@ def countdown(seconds):
     return f"{max(0, seconds) // 60}:{max(0, seconds) % 60:02d}"
 
 
-def render_tracker(ui, boats=False):
-    return scene(ui, [(tracker_canvas(ui, boats=boats), 0, 0)])
+def render_tracker(ui):
+    return scene(ui, [(tracker_canvas(ui), 0, 0)])
 
 
 def compass_canvas(ui, facing=math.pi - 0.2, distance=780):
@@ -613,12 +600,10 @@ def render_demo(ui):
 
 
 SCENES = {
-    "world-map": lambda ui: render_map(ui),
     "kalimdor": lambda ui: render_map(ui, 1414),
     "darkshore": lambda ui: render_map(ui, 1439),
     "docks": render_docks,
     "tracker": render_tracker,
-    "boats": lambda ui: render_tracker(ui, boats=True),
     "minimap": render_minimap,
     "compass": render_compass,
 }

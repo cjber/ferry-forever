@@ -40,7 +40,6 @@ Each feature has more detail in [docs/features.md](docs/features.md).
   masters, known and undiscovered, use the game's own icons. Each layer has a switch in the map's filter menu.
 - **Next departures.** At a dock, lift or tram station, a tracker section above your quests counts down to every
   arrival and departure; on board, it shows the next call.
-  ![Next arrival and departure at Auberdine northeast pier](docs/screenshots/boats.png)
 - **Arrival alerts.** A raid-warning banner, a sound and a flashing taskbar icon half a minute before your boat
   arrives, for anyone waiting AFK.
 - **Times from real rides, shared.** One ride, yours or another player's, times a boat for hours. Sightings pass

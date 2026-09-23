@@ -11,6 +11,10 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+A journey step on a boat, lift or tram that nobody has timed yet no longer says “no sighting yet” beside a
+wait it cannot know. Its wait carries a tilde instead, such as *wait ~2:45*: half the loop, the average
+wait. Timed crossings show their real wait as before.
+
 Guide keeps its map pin hidden and removes it when a journey ends, tracking changes or you reload, while
 preserving your own pins and tracking choices.
 

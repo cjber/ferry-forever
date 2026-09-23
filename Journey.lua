@@ -122,10 +122,12 @@ local function WaterWalking()
 	return false
 end
 
+-- A transport nobody has timed yet waits half its round trip on average; the tilde marks that guess.
 local function LegTime(leg)
 	local text = ns.FormatCountdown(leg.arrive - leg.depart)
 	if leg.wait and leg.wait > 0 then
-		text = "wait " .. ns.FormatCountdown(leg.wait) .. " · " .. text
+		local guess = leg.estimated and SCHEDULED[leg.mode] and "~" or ""
+		text = "wait " .. guess .. ns.FormatCountdown(leg.wait) .. " · " .. text
 	end
 	return text
 end
@@ -466,9 +468,6 @@ function ns.JourneyInfo()
 			local text = string.format("%d. %s %s", index, VERB[leg.mode], NodeLabel(leg.to, leg.mode))
 			if leg.mode == "walk" and leg.to.undiscovered then
 				text = text .. " (new flight path)"
-			end
-			if leg.estimated and SCHEDULED[leg.mode] then
-				text = text .. " (no sighting yet)"
 			end
 			if leg.walkError then
 				text = text .. " (" .. (WALK_FAILURE[leg.walkError] or "walking search failed") .. ")"
