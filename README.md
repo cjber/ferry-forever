@@ -27,7 +27,7 @@ Each feature has more detail in [docs/features.md](docs/features.md).
   ![Journey steps from Auberdine to Silithus with time and distance remaining](docs/screenshots/tracker.png)
 - **Guide.** The game's own waypoint marker leads you along the route turn by turn, round walls rather than straight at
   the stop, and hands your tracked quest back when you arrive. Click the tracker header to turn it off.
-  ![Dashed minimap route and Guide’s native waypoint at Auberdine](docs/screenshots/minimap.png)
+  ![Auberdine’s piers on the minimap, with the dashed route and Guide’s native waypoint](docs/screenshots/minimap.png)
 - **Optional compass.** A slim strip at the top of the screen marks Guide's next two turns, the next stop and your
   destination. Turn it on in `/path`.
   ![The optional compass strip with the next turns and destination](docs/screenshots/compass.png)
@@ -38,9 +38,10 @@ Each feature has more detail in [docs/features.md](docs/features.md).
 - **Lifts, the Deeprun Tram and portals** count down like the boats; portals are marked with where they go, and
   clicking a station or portal opens the map where it comes out. Flight
   masters, known and undiscovered, use the game's own icons. Each layer has a switch in the map's filter menu.
+  Docks, lifts, stations and portals show on the minimap too, with the same tooltips; *Transport* in the minimap's
+  tracking menu turns them off there.
 - **Next departures.** At a dock, lift or tram station, a tracker section above your quests counts down to every
   arrival and departure; on board, it shows the next call.
-  ![Next arrival and departure at Auberdine northeast pier](docs/screenshots/boats.png)
 - **Arrival alerts.** A raid-warning banner, a sound and a flashing taskbar icon half a minute before your boat
   arrives, for anyone waiting AFK.
 - **Times from real rides, shared.** One ride, yours or another player's, times a boat for hours. Sightings pass

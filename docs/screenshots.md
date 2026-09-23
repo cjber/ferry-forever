@@ -21,13 +21,11 @@ pixels never enter product media.
 
 | File in `screenshots/` | Content |
 | --- | --- |
-| `world-map.png` | Auberdine → Menethil, then a measured walk into Wetlands |
 | `kalimdor.png` | Auberdine → Menethil → Theramore → Cenarion Hold, Silithus |
 | `darkshore.png` | A measured walk south from Auberdine to the Grove of the Ancients |
 | `docks.png` | Auberdine's clustered piers; arrivals/departures and destination glows |
 | `tracker.png` | Capture 21's five Auberdine → Silithus steps, with the current totals header |
-| `boats.png` | Separate idle-at-dock state at Auberdine northeast pier |
-| `minimap.png` | Auberdine terrain, dashed approach to the south pier, native Guide waypoint |
+| `minimap.png` | Auberdine's piers as minimap pins, the last dashed stretch to the south pier, native Guide waypoint |
 | `compass.png` | Current optional compass, enabled for this scene |
 | `demo.gif` | Eight-second montage: route pulse/settle, tracker countdown and gliding compass; under 0.5 MB |
 

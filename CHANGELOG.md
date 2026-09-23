@@ -11,6 +11,18 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+Docks, lifts, tram stations and portals now show on the minimap with the world map's icons, and hovering one
+gives the same departures tooltip. They vanish at the minimap's rim like the game's own tracking icons, and
+cost nothing away from them. *Transport* in the minimap's tracking menu, or the new setting in `/path`, turns
+them off.
+
+A journey step on a boat, lift or tram that nobody has timed yet no longer says “no sighting yet” beside a
+wait it cannot know. Its wait reads *wait about 2:45* instead: half the loop, the average wait. Timed
+crossings show their real wait as before.
+
+Journeys through the Deeprun Tram no longer tell you to walk to “Unknown”. A step towards a passage or portal
+names it, such as *Walk to Passage to Stormwind*, and a tram passage's map pin says where it leads.
+
 Guide keeps its map pin hidden and removes it when a journey ends, tracking changes or you reload, while
 preserving your own pins and tracking choices.
 

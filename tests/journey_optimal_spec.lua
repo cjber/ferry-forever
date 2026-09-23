@@ -170,3 +170,30 @@ for _, pair in ipairs({ { 26, 39 }, { 26, 67 }, { 25, 22 }, { 6, 7 } }) do
 	end
 end
 print("baked endpoint bounds: four journeys, both water modes, exact full-search costs: ok")
+
+-- The Deeprun Tram's instance has no world map, so a step there cannot fall back to a zone name.
+local locate = ns.Locate
+driver.env.UNKNOWN = "Unknown"
+ns.Locate = function(point)
+	return point.map ~= 369 and locate(point) or nil
+end
+ns.faction, ns.water, ns.speed, ns.known = "Alliance", false, 7, {}
+driver.begin(ns.TaxiNodes[6], ns.TaxiNodes[2])
+drain()
+local modes = {}
+for _, leg in ipairs(driver.shown().legs) do
+	modes[leg.mode] = true
+end
+assert(modes.tram and modes.passage, "Ironforge to Stormwind should ride the Deeprun Tram")
+for _, row in ipairs((select(2, ns.JourneyInfo()))) do
+	print("  " .. row.text)
+	assert(not row.text:find("Unknown", 1, true), "unnamed step: " .. row.text)
+end
+ns.ClearJourney()
+ns.Locate = locate
+-- Docks inside instances (the tram's stations) need a name and a pin on a mapped continent.
+for id, dock in pairs(ns.Docks) do
+	local mapped = { [0] = true, [1] = true, [2991] = true }
+	assert(mapped[dock.map] or dock.name and dock.pin and mapped[dock.pin.map], "dock " .. id .. " has no place name")
+end
+print("tram journey: every step is named: ok")

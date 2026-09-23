@@ -470,7 +470,10 @@ def main():
     portal_lines = header("AreaTrigger source positions + classic-db areatrigger_teleport destinations.")
     portal_lines += [
         "-- Loading-screen allowance: 5 s. Only these public transitions are included.",
-        "-- Excludes GM/test 1103/1104 and dungeon/raid triggers.",
+        "-- Excludes GM/test 1103/1104 and dungeon/raid triggers (Blizzard's own map shows those entrances).",
+        "-- Excludes Stormwind's Wizard's Sanctum 702/704: a hop up and down one tower, 12 yd apart on the map,",
+        "-- that never shortens a flat route and would stack two pins. Also the unused vault 107/109 (map 35), the",
+        "-- Leap of Faith fall 943, and PvP barracks 2527-2534, which have no AreaTrigger in this build.",
         "-- Skyborne Dalaran <-> Stormwind omitted: eligibility is documented, exact endpoints are not sourced.",
         "-- https://benjamh681.github.io/wow-forever-atlas/guide.html (Alliance Skyborne only).",
         "",

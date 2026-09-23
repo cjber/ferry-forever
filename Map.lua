@@ -46,7 +46,8 @@ end
 -- map's floor-change arrows; portals its arcane door.
 ---@param texture Texture
 ---@param kind SPFMode
-function ns.SetTransportIcon(texture, kind)
+---@param size number?
+function ns.SetTransportIcon(texture, kind, size)
 	if kind == "boat" then
 		texture:SetAtlas("flightmasterferry")
 	elseif kind == "zeppelin" then
@@ -61,7 +62,7 @@ function ns.SetTransportIcon(texture, kind)
 		error("unknown route kind " .. tostring(kind))
 	end
 	-- The floor arrows fill their square where the ferry has a margin, so they draw smaller to match.
-	local size = (kind == "lift" or kind == "tram") and ARROW_SIZE or PIN_SIZE
+	size = (size or PIN_SIZE) * ((kind == "lift" or kind == "tram") and ARROW_SIZE / PIN_SIZE or 1)
 	texture:SetSize(size, size)
 end
 
@@ -194,9 +195,10 @@ function ns.DockPierName(dockID)
 	return dockNames[dockID]
 end
 
--- Titled by what the pin is, not where: the map already names the zone.
-function ShortestPathForeverDockPinMixin:RefreshTooltip()
-	local cluster, all = self.cluster, {}
+-- Titled by what the pin is, not where: the map already names the zone. Shared with the minimap's pins, whose
+-- clusters carry the same fields.
+function ns.AddDockTooltip(cluster)
+	local all = {}
 	local groups = {}
 	for _, dock in ipairs(cluster.docks) do
 		local departures = ns.ByDestination(ns.DockDepartures(dock.id))
@@ -240,6 +242,10 @@ function ShortestPathForeverDockPinMixin:RefreshTooltip()
 		)
 		GameTooltip_AddNormalLine(GameTooltip, GRAY_FONT_COLOR:WrapTextInColorCode(text))
 	end
+end
+
+function ShortestPathForeverDockPinMixin:RefreshTooltip()
+	ns.AddDockTooltip(self.cluster)
 	AddEndsLine(self:GetEnds())
 	GameTooltip:Show()
 end
@@ -341,7 +347,7 @@ local function IsDockMap(location, mapID)
 end
 
 -- Whether a dock has any route the filters still show.
-local function DockShown(dockID)
+function ns.DockShown(dockID)
 	for _, visit in ipairs(ns.DockVisits(dockID)) do
 		local route = ns.Routes[visit.route]
 		if ns.RouteShown(route) and ns.KindShown(route.kind) then
@@ -432,7 +438,7 @@ local function MapDocks(mapID)
 	table.sort(ids)
 	for _, dockID in ipairs(ids) do
 		local location = ns.DockLocation(dockID)
-		if location and (ns.Docks[dockID].site or IsDockMap(location, mapID)) and DockShown(dockID) then
+		if location and (ns.Docks[dockID].site or IsDockMap(location, mapID)) and ns.DockShown(dockID) then
 			local x, y = MapPosition(ns.DockPoint(dockID), mapID)
 			if x then
 				docks[#docks + 1] = { id = dockID, x = x, y = y }
@@ -553,12 +559,18 @@ function ShortestPathForeverPortalPinMixin:OnAcquired(portal, x, y)
 	self:SetPosition(x, y)
 end
 
-function ShortestPathForeverPortalPinMixin:OnMouseEnter()
-	local portal = self.portal
+function ns.AddPortalTooltip(portal)
 	local destination = ns.Locate(portal.to)
-	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 	GameTooltip_SetTitle(GameTooltip, portal.name)
-	GameTooltip_AddNormalLine(GameTooltip, "to " .. (destination and destination.zone or UNKNOWN))
+	GameTooltip_AddNormalLine(
+		GameTooltip,
+		"to " .. (destination and destination.zone or ns.Planner.PortalDestination(portal))
+	)
+end
+
+function ShortestPathForeverPortalPinMixin:OnMouseEnter()
+	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	ns.AddPortalTooltip(self.portal)
 	AddEndsLine(self:GetEnds())
 	GameTooltip:Show()
 end
@@ -576,7 +588,7 @@ function ShortestPathForeverPortalPinMixin:OnMouseLeave()
 end
 
 -- Portals are faction-locked, unlike boats; the tram's entrances already show as tram pins.
-local function PortalShown(portal)
+function ns.PortalShown(portal)
 	return portal.kind == "portal" and (not portal.faction or portal.faction == UnitFactionGroup("player"))
 end
 
@@ -594,7 +606,7 @@ function PortalProviderMixin:RefreshAllData()
 		return
 	end
 	for _, portal in ipairs(ns.Portals) do
-		local location = PortalShown(portal) and ns.Locate(portal.from)
+		local location = ns.PortalShown(portal) and ns.Locate(portal.from)
 		if location and IsDockMap(location, mapID) then
 			local x, y = MapPosition(portal.from, mapID)
 			if x then
@@ -690,6 +702,7 @@ function ns.RefreshMap()
 		flightProvider:RefreshAllData()
 		ns.RefreshTransportRoutes()
 	end
+	ns.RefreshMinimapPins()
 end
 
 -- The world map's Map Filter ("Show:") menu gets the same switches as the settings panel.

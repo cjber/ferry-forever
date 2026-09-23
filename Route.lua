@@ -674,6 +674,9 @@ local function MinimapView()
 	return radius, 0
 end
 
+-- The minimap's transport pins share the route's projection.
+ns.MinimapView, ns.MinimapProject = MinimapView, Project
+
 -- The world point under the cursor on the minimap, undoing Project; nil off its face.
 function ns.MinimapPoint()
 	local x, y, _, map = ns.JourneyPosition()

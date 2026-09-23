@@ -99,6 +99,7 @@
 ---@field pins? boolean
 ---@field transit? boolean
 ---@field portals? boolean
+---@field minimapPins? boolean
 ---@field mapFlightMasters? boolean
 ---@field mapRoutes? boolean
 ---@field otherFaction? boolean

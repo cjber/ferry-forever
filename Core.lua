@@ -7,6 +7,7 @@ local DEFAULTS = {
 	pins = true,
 	transit = true,
 	portals = true,
+	minimapPins = true,
 	mapFlightMasters = true,
 	mapRoutes = true,
 	otherFaction = true,
