@@ -101,9 +101,7 @@ function ns.PointGuideArrow(points, placeBend, stop, goal)
 	end
 	placeTarget = placeBend
 	stepEnd, destination = stop, goal
-	if ns.RefreshCompass then
-		ns.RefreshCompass()
-	end
+	ns.RefreshCompass()
 	if not points then
 		native = nil
 		if frame then
