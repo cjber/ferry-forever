@@ -220,13 +220,15 @@ def walk_dots(strokes, spacing):
     return dots
 
 
-def flush_strokes(canvas):
+def flush_strokes(canvas, small=False):
     # ARTWORK sublevel -1 puts every outline and rim beneath every core, including at bends and crossings.
     # Sizes in UI units draw at that many units' worth of pixels at every UI scale, so they widen with the render
-    # scale like everything else: 2-unit lines in 4-unit outlines, and 4-unit dots in 6-unit rims, 9 apart.
+    # scale like everything else: 2-unit lines in 4-unit outlines, and dots in rims one unit wider on every side:
+    # 4-unit dots 9 apart, or 3-unit dots 7 apart on world and continent maps (Route.lua's SMALL_DOT).
     k = canvas.ui.scale
+    dot, spacing = (3, 7) if small else (4, 9)
     strokes = getattr(canvas, "strokes", [])
-    dots = walk_dots(strokes, 9 * k)
+    dots = walk_dots(strokes, spacing * k)
     for under in (True, False):
         layer = Image.new("RGBA", canvas.image.size)
         draw = ImageDraw.Draw(layer)
@@ -235,7 +237,7 @@ def flush_strokes(canvas):
                 rgba = (0.04, 0.04, 0.04, alpha * 0.5) if under else (*color, alpha)
                 draw.line(line, fill=rgba255(rgba), width=round((4 if under else 2) * k))
         for x, y, color, alpha in dots:
-            r = (3 if under else 2) * k
+            r = (dot / 2 + (1 if under else 0)) * k
             rgba = (0.04, 0.04, 0.04, alpha * 0.5) if under else (*color, alpha)
             draw.ellipse((x - r, y - r, x + r, y + r), fill=rgba255(rgba))
         canvas.image.alpha_composite(layer)
@@ -434,7 +436,7 @@ def map_canvas(ui, map_id=947, alpha=1, hover=False):
             route_crossing(route, projection(ui, boat[0], map_id), projection(ui, boat[-1], map_id), BOAT_COLOR, alpha)
         else:
             path(boat, BOAT_COLOR, False)
-    flush_strokes(route)
+    flush_strokes(route, small=map_id in (947, 1414))  # Azeroth and Kalimdor: world and continent maps
     canvas.paste(route, mx, my)
     map_landmarks(canvas, map_id, rects["map"])
     hover_point = map_dock_pins(canvas, map_id, rects["map"], hover)
