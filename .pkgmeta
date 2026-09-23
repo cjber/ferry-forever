@@ -19,3 +19,4 @@ ignore:
   - media/icon-400.png
   - .luacheckrc
   - stylua.toml
+  - ruff.toml

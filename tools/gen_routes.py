@@ -95,7 +95,7 @@ def evaluate(points, t):
 
 def segment_lengths(controls):
     """Length of each spline segment between consecutive controls, as the server measures it."""
-    first = tuple(2 * a - b for a, b in zip(controls[0], controls[1]))
+    first = tuple(2 * a - b for a, b in zip(controls[0], controls[1], strict=False))
     points = [first, *controls, controls[-1]]
     lengths = []
     for i in range(1, len(controls)):

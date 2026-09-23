@@ -23,6 +23,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           version: 2.5.2
           args: --check .
+      - run: pipx run ruff==0.16.8 check .
+      - run: pipx run ruff==0.16.8 format --check .
 
   workflows:
     runs-on: ubuntu-latest
