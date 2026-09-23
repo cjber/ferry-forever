@@ -173,4 +173,4 @@ for _, target in ipairs({
 	assert(done)
 end
 
-print("path_spec ok")
+print("path_spec: ok")

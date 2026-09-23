@@ -83,7 +83,7 @@ straight resets for Tanaris/Eastern Plaguelands/Thunder Bluff/Menethil. Example 
 
 ## API evidence and prior art
 
-Client source was read from `~/drive/proj/wow-handoff/blizzard-ui/Interface/AddOns/`:
+Client source was read from `Interface/AddOns/` of [Gethe/wow-ui-source](https://github.com/Gethe/wow-ui-source/tree/forever), branch `forever`:
 
 - `Blizzard_ObjectiveTrackerModule.lua:86,126` and `Blizzard_ObjectiveTrackerContainer.lua:65`:
   MarkDirty propagates to the container; clean complete modules can skip dirty-only layouts, while
@@ -131,8 +131,8 @@ luajit tests/walk_sim.lua
 luajit tests/nav_compare.lua /tmp/spf-a29b6a7
 luajit -joff tests/journey_bench.lua /tmp/spf-a29b6a7
 luajit -joff tests/journey_bench.lua
-luajit ~/drive/proj/wow-handoff/scratch/harness2.lua
-luajit -joff ~/drive/proj/wow-handoff/scratch/harness2.lua
+luajit "$SPF_HARNESS"
+luajit -joff "$SPF_HARNESS"
 for s in idle dock walking ride panel combat; do luajit -joff tests/activity_bench.lua "$s"; done
 ```
 
@@ -150,7 +150,7 @@ Baseline: `9921ef4` on `cb/ferry`; after: the uncommitted runtime changes. All w
 
 ## Frame time, allocation and retained memory
 
-`tests/runtime_bench.lua` uses the UI stubs from `~/drive/proj/wow-handoff/scratch/harness2.lua`, `luajit -joff` and simulated 60 Hz frames. Each version/scenario runs in three fresh processes, serially, alternating before/after. Means, allocations and resident sizes below are medians; **worst is the largest frame across all three runs**. Times cover addon Lua and stub calls, not client rendering. CPU frequency and slice boundaries affect timings.
+`tests/runtime_bench.lua` uses the UI stubs from the offline harness (`$SPF_HARNESS`, kept outside the repo; see `tests/ui.sh`), `luajit -joff` and simulated 60 Hz frames. Each version/scenario runs in three fresh processes, serially, alternating before/after. Means, allocations and resident sizes below are medians; **worst is the largest frame across all three runs**. Times cover addon Lua and stub calls, not client rendering. CPU frequency and slice boundaries affect timings.
 
 Allocation runs stop GC during the measured interval. KB/frame is the resulting heap growth, not live memory. Resident KB is the post-full-GC increase above the initialized harness/addon, including loaded nav strings, retained endpoint searches and UI geometry. The excluded harness/addon base is approximately 1,407 KB before and 1,506 KB after (including shared link masks). Zero means no additional retained scenario state.
 
@@ -220,8 +220,8 @@ stylua --check .
 for spec in tests/*_spec.lua; do luajit "$spec" || exit; done
 luajit -joff tests/journey_optimal_spec.lua
 luajit tests/walk_sim.lua
-luajit ~/drive/proj/wow-handoff/scratch/harness2.lua
-luajit -joff ~/drive/proj/wow-handoff/scratch/harness2.lua
+luajit "$SPF_HARNESS"
+luajit -joff "$SPF_HARNESS"
 ```
 
 The measured baseline also had a single `Path.decodes` counter added to `decodeGrid` for the cache-tradeoff audit; it does not change search decisions. Absolute results differ from the supplied audit because these scenarios drive the complete stubbed frame and report the maximum across three runs.
@@ -279,8 +279,9 @@ The external harness contains newer UI assertions that old revisions fail before
 
 ```sh
 python3 - <<'PYCODE'
+import os
 from pathlib import Path
-source = Path.home() / "drive/proj/wow-handoff/scratch/harness2.lua"
+source = Path(os.environ["SPF_HARNESS"])
 s = source.read_text()
 s = s[:s.index("-- Round 6:")] + s[s.index("-- Real Kalimdor searches"):]
 s = s[:s.index("-- Search state chooses a pooled layer")]
@@ -299,8 +300,8 @@ stylua --check .
 for spec in tests/*_spec.lua; do luajit "$spec" || exit; done
 luajit tests/walk_sim.lua
 luajit -joff tests/journey_optimal_spec.lua
-luajit ~/drive/proj/wow-handoff/scratch/harness2.lua
-luajit -joff ~/drive/proj/wow-handoff/scratch/harness2.lua
+luajit "$SPF_HARNESS"
+luajit -joff "$SPF_HARNESS"
 ```
 
 `journey_optimal_spec.lua` compares 30 seeded EK/Kalimdor pairs against full forward/reverse `FindMany`, with a frozen timetable, both water modes, speeds 7/14 and flight-knowledge variations; ten pairs disable probes to exercise pure bounded Dijkstra. It also checks repeated-goal geometry and cache invalidation. `path_many_spec.lua` checks 452 forward/reverse costs and geometric bounds, shipped graph symmetry, every published frontier, pause/resume and concurrent geometry with a four-cluster cache. The four walking simulations finish without route flips. Real client frame pacing and visual appearance remain unverified offline.

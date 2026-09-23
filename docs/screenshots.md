@@ -98,6 +98,6 @@ python3 tools/screenshots.py --refs /path/to/refs --tooltip-ref /tmp/tooltip-ref
 
 Live timings, engine rendering and interaction remain unverified in game, by design.
 All required offline checks passed: `luacheck . -q`, `stylua --check .`, the model,
-path and planner LuaJIT suites, and `../wow-handoff/scratch/harness2.lua` (exit 0).
+path and planner LuaJIT suites, and the offline UI-stub harness (`$SPF_HARNESS`, exit 0).
 The harness confirms route pixel sizing, overview/edge curves, native waypoints,
 tracker totals/countdowns and compass bearings. `.pkgmeta` now ignores all of `docs`.
