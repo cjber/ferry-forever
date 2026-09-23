@@ -7,6 +7,7 @@ globals = {
 	"ShortestPathForeverDB",
 	"ShortestPathForeverDockPinMixin",
 	"ShortestPathForeverGoalPinMixin",
+	"ShortestPathForever_OnAddonCompartmentClick",
 	"ShortestPathForeverPortalPinMixin",
 	"ShortestPathForeverRoutePinMixin",
 	"SLASH_SHORTESTPATHFOREVER1",

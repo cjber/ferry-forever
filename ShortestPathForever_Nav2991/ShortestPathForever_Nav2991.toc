@@ -4,5 +4,6 @@
 ## LoadOnDemand: 1
 ## Dependencies: ShortestPathForever
 ## X-License: GPL-3.0-or-later
+## IconTexture: Interface\AddOns\ShortestPathForever\media\Icon
 
 Nav2991.lua

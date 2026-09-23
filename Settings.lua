@@ -134,4 +134,7 @@ ns.Init(function()
 		end
 		Settings.OpenToCategory(category:GetID())
 	end
+	ShortestPathForever_OnAddonCompartmentClick = function()
+		Settings.OpenToCategory(category:GetID())
+	end
 end)

@@ -11,6 +11,7 @@
 ## SavedVariables: ShortestPathForeverDB
 ## SavedVariablesPerCharacter: ShortestPathForeverCharDB
 ## IconTexture: Interface\AddOns\ShortestPathForever\media\Icon
+## AddonCompartmentFunc: ShortestPathForever_OnAddonCompartmentClick
 
 Data\Routes.lua
 Data\Transports.lua

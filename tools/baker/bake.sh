@@ -72,6 +72,7 @@ for m in $MAPS; do
 ## LoadOnDemand: 1
 ## Dependencies: ShortestPathForever
 ## X-License: GPL-3.0-or-later
+## IconTexture: Interface\AddOns\ShortestPathForever\media\Icon
 
 Nav$m.lua
 TOC

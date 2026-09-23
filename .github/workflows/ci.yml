@@ -62,3 +62,16 @@ jobs:
           persist-credentials: false
       - run: pipx run --spec actionlint-py==1.7.12.25 actionlint
       - run: pipx run zizmor==1.30.1 --offline .github
+
+  agents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # sift's AGENTS.md check, pinned by commit and sha256 (WFA-17).
+      - name: AGENTS.md is complete and current
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/agents.py" https://raw.githubusercontent.com/cjber/sift/56425ec49b5605feb20481c1eb65a23021d7b1bf/skills/sift/scripts/agents.py
+          echo "8ddabf0f671d502f974790c51c926b82a41fc7f375009f19551250b889b12f23  $RUNNER_TEMP/agents.py" | sha256sum -c -
+          python3 "$RUNNER_TEMP/agents.py" check
