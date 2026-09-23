@@ -6,6 +6,7 @@
 ## Category: Map
 ## X-License: GPL-3.0-or-later
 ## X-Website: https://github.com/cjber/shortest-path-forever
+## X-Curse-Project-ID: 1708599
 ## X-Wago-ID: b6Xy1wKp
 ## SavedVariables: ShortestPathForeverDB
 ## SavedVariablesPerCharacter: ShortestPathForeverCharDB
