@@ -86,18 +86,17 @@ read_globals = {
 }
 files["tests/"] = { std = "+luajit", globals = { "arg" } }
 
--- Round 3: native flight pins, tracker colours and context menus.
+-- Native flight pins, tracker colours and context menus.
 globals[#globals + 1] = "ShortestPathForeverFlightPinMixin"
 globals[#globals + 1] = "ShortestPathForeverTransportPinMixin"
 read_globals[#read_globals + 1] = "FlightPointPinMixin"
 read_globals[#read_globals + 1] = "FlightPointDataProviderMixin"
 read_globals[#read_globals + 1] = "OBJECTIVE_TRACKER_COLOR"
-read_globals[#read_globals + 1] = "MenuUtil"
 -- Shared-workspace arrow: Blizzard_QuestNavigation/SuperTrackedFrame.lua:291.
 read_globals[#read_globals + 1] = "C_Navigation"
 -- Blizzard_SharedXMLBase/Color.lua:3, saturated route colours.
 read_globals[#read_globals + 1] = "CreateColor"
--- Round 5: native quest menus, locations and MapCanvas's consuming pin-click handler.
+-- Native quest menus, locations and MapCanvas's consuming pin-click handler.
 read_globals[#read_globals + 1] = "C_QuestLog"
 read_globals[#read_globals + 1] = "GetQuestUiMapID"
 read_globals[#read_globals + 1] = "GetMouseFoci"
