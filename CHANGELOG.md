@@ -12,11 +12,12 @@ verbatim rather than rewritten as the addon moves.
 ## [Unreleased]
 
 Walking legs are round breadcrumb dots, evenly spaced around every bend, instead of dashes, on the map and
-the minimap alike. Boats, zeppelins and flights keep their solid coloured lines.
+the minimap alike, a little smaller on continent and world maps. Boats, zeppelins and flights keep their solid
+coloured lines.
 
 **Other addons can offer Shortest Path guidance.** The version 1 public API estimates travel time and starts
 journeys through one or several stops in order. Numbered map pins, drawn as the Adventure Guide's gold-numbered
-rings that glow when you hover them, and dashed previews show the remaining stops,
+rings that glow when you hover them, and dotted previews show the remaining stops,
 while guidance advances on arrival and shows your progress. An addon can check the current stop and cancel
 only its own whole route, preserving a journey you start yourself.
 

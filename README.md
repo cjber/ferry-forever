@@ -13,7 +13,7 @@ the flight points you know, boats and zeppelins with their live departure times,
 walks you there with the game's own navigation marker. Walking maps cover Eastern Kingdoms, Kalimdor and Zephras Isle;
 they come in the same download and load only when a route needs them.
 
-![A journey from Auberdine through Menethil and Theramore to Silithus](docs/screenshots/kalimdor.png)
+![Eight-second demo of a route settling, the countdown and the optional compass](docs/screenshots/demo.gif)
 
 ## Features
 
@@ -47,7 +47,7 @@ Each feature has more detail in [docs/features.md](docs/features.md).
 - **Times from real rides, shared.** One ride, yours or another player's, times a boat for hours. Sightings pass
   quietly over guild, party and yell at the docks; turn sharing off in the settings.
 
-![Eight-second demo of a route settling, the countdown and the optional compass](docs/screenshots/demo.gif)
+![A journey from Auberdine through Menethil and Theramore to Silithus](docs/screenshots/kalimdor.png)
 
 ## Install
 
@@ -85,7 +85,7 @@ Addons can use `ShortestPathForever.API` (`version = 1`) with uiMapIDs and norma
 `Estimate(fromMap, fromX, fromY, toMap, toX, toY)` returns travel seconds or `nil` without changing guidance;
 it omits endpoint terrain searches and caches estimates for five seconds, rounding origins to 0.0001.
 `NavigateRoute(owner, stops)` guides through 1–64 `{map, x, y, title}` stops in order, advancing on arrival
-and ending after the last. Remaining stops have numbered map pins and dashed previews; the tracker and
+and ending after the last. Remaining stops have numbered map pins and dotted previews; the tracker and
 arrow show “Stop 2 of 4: …”. `Navigate(owner, map, x, y, title)` is the one-stop form. Both return a boolean;
 invalid input, combat or disabled Journeys return `false` without replacing guidance. Titles are optional.
 `CurrentStop(owner)` returns the current 1-based stop or `nil`; `Cancel(owner)` returns `true` only when it

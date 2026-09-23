@@ -8,8 +8,8 @@ local GOAL_TEMPLATE = "ShortestPathForeverGoalPinTemplate"
 -- atlas is mostly transparent and turned into a thin core inside a heavy border. Walks are round breadcrumbs, each
 -- a dot-textured line one diameter long over a slightly larger dark dot, spaced evenly across the walk's bends.
 local THICKNESS, DOT, RIM, SPACING = 2, 4, 1, 9
--- How far a dot's rim reaches from its centre: callers clip walks this far inside their frame.
-local REACH = DOT / 2 + RIM
+-- Continent and world maps show a whole journey at a fraction of a zone's scale, so their dots are smaller.
+local SMALL_DOT, SMALL_SPACING = 3, 7
 local DOT_TEXTURE = "Interface\\AddOns\\ShortestPathForever\\media\\Dot"
 local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
 local GOAL_ATLAS, GOAL_SCALE = "Waypoint-MapPin-Tracked", 0.8
@@ -30,6 +30,8 @@ local provider, goal, paths, worldPaths, stops, stopIndex
 ---@field underlines Line[]
 ---@field dots boolean[]
 ---@field walked number
+---@field dot number
+---@field spacing number
 ---@field used number
 ---@field Goal Texture
 ---@field strokeLayer SPFStrokeLayer
@@ -150,13 +152,13 @@ local function Stroke(owner, x1, y1, x2, y2, color, scale, dot)
 		ux, uy = (x2 - x1) / length * RIM / scale, (y2 - y1) / length * RIM / scale
 	end
 	underline:SetAlpha(alpha * UNDER_ALPHA)
-	underline:SetThickness((dot and DOT + RIM * 2 or UNDER_THICKNESS) / scale)
+	underline:SetThickness((dot and owner.dot + RIM * 2 or UNDER_THICKNESS) / scale)
 	underline:SetStartPoint("TOPLEFT", owner, x1 - ux, y1 - uy)
 	underline:SetEndPoint("TOPLEFT", owner, x2 + ux, y2 + uy)
 	underline:Show()
 	line:SetVertexColor(color:GetRGBA())
 	line:SetAlpha(alpha)
-	line:SetThickness((dot and DOT or THICKNESS) / scale)
+	line:SetThickness((dot and owner.dot or THICKNESS) / scale)
 	line:SetStartPoint("TOPLEFT", owner, x1, y1)
 	line:SetEndPoint("TOPLEFT", owner, x2, y2)
 	line:Show()
@@ -167,8 +169,7 @@ end
 
 -- Clip before subdividing: even continent-sized walks need only the visible breadcrumbs. Dots sit at every SPACING
 -- along the whole walk, owner.walked carrying the distance across segment joins so bends never bunch them.
--- A multi-stop preview may span the map dozens of times, so dashLimit caps its dots per segment.
-local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale, dashLimit)
+local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale)
 	local dx, dy = x2 - x1, y2 - y1
 	local length = math.sqrt(dx * dx + dy * dy) * scale
 	if length == 0 then
@@ -186,11 +187,12 @@ local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale, d
 	if not low then
 		return
 	end
-	-- The caller clipped a walk REACH inside its frame, so every dot's rim fits and joints need no trim, which would
-	-- drop the dots at each bend. The far end is exclusive so a dot on a joint is drawn once.
-	local half = DOT / 2 / length
-	local spacing = dashLimit and math.max(SPACING, (high - low) * length / dashLimit) or SPACING
-	for distance = math.ceil((start + low * length) / spacing) * spacing - start, high * length - 0.001, spacing do
+	-- The caller clipped a walk a dot's reach inside its frame, so every rim fits and joints need no trim, which
+	-- would drop the dots at each bend. A dot on a joint belongs to the later segment: both ends share a tolerance,
+	-- so rounding in the running total cannot push it out of both.
+	local half, spacing = owner.dot / 2 / length, owner.spacing
+	local first = math.ceil((start + low * length - 0.001) / spacing) * spacing - start
+	for distance = first, high * length - 0.001, spacing do
 		local t = distance / length
 		Stroke(
 			owner,
@@ -270,6 +272,8 @@ end
 ---@class SPFRoutePin : SPFMapPin
 ---@field dots boolean[]
 ---@field walked number
+---@field dot number
+---@field spacing number
 ---@field strokeLayer? SPFStrokeLayer
 ---@field UpdateAlpha? fun(self: SPFRoutePin)
 ShortestPathForeverRoutePinMixin = CreateFromMixins(MapCanvasPinMixin)
@@ -279,12 +283,14 @@ function ShortestPathForeverRoutePinMixin:OnLoad()
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScaleStyle(AM_PIN_SCALE_STYLE_WITH_TERRAIN)
 	self.lines, self.underlines, self.dots, self.walked = {}, {}, {}, 0
+	self.dot, self.spacing = DOT, SPACING
 end
 
-function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed, dashLimit)
+function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
 	local scale = self:GetEffectiveScale()
-	local mx = dashed and REACH / scale / self:GetWidth() or 0
-	local my = dashed and REACH / scale / self:GetHeight() or 0
+	local reach = self.dot / 2 + RIM
+	local mx = dashed and reach / scale / self:GetWidth() or 0
+	local my = dashed and reach / scale / self:GetHeight() or 0
 	local low, high = ClipAxis(x1, x2 - x1, 0, 1, mx, 1 - mx)
 	if low then
 		low, high = ClipAxis(y1, y2 - y1, low, high, my, 1 - my)
@@ -299,8 +305,7 @@ function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed, da
 		high,
 		color,
 		dashed,
-		scale,
-		dashLimit
+		scale
 	)
 end
 
@@ -426,6 +431,9 @@ function ShortestPathForeverRoutePinMixin:Draw()
 		map:GetMapID(), canvas:GetWidth(), canvas:GetHeight(), self:GetEffectiveScale()
 	self:SetSize(canvas:GetWidth(), canvas:GetHeight())
 	self:SetPosition(0.5, 0.5)
+	local info = C_Map.GetMapInfo(map:GetMapID())
+	local small = info and info.mapType <= Enum.UIMapType.Continent
+	self.dot, self.spacing = small and SMALL_DOT or DOT, small and SMALL_SPACING or SPACING
 	self.used = 0
 	if self.hits then
 		self.hits = {}
@@ -444,7 +452,7 @@ function ShortestPathForeverRoutePinMixin:Draw()
 			elseif previous then
 				if path.preview then
 					if px and x then
-						self:Line(px, py, x, y, color, true, math.max(4, math.floor(128 / #path.points)))
+						self:Line(px, py, x, y, color, true)
 					end
 				elseif previous.jump or previous.map ~= point.map then
 					if path.mode == "boat" or path.mode == "zeppelin" then
@@ -842,7 +850,7 @@ local function DrawMinimap(self)
 						local ax, ay = Project(a, x, y, radius, cosine, sine)
 						local bx, by = Project(b, x, y, radius, cosine, sine)
 						local walk = path.mode == "walk"
-						local within = walk and inset - 2 * REACH / scale / math.min(width, height) or inset
+						local within = walk and inset - (self.dot + RIM * 2) / scale / math.min(width, height) or inset
 						local low, high = ClipMinimap(ax, ay, bx - ax, by - ay, within, square)
 						Segment(
 							self,
@@ -938,6 +946,7 @@ ns.Init(function()
 	minimap:SetAllPoints(Minimap)
 	minimap:EnableMouse(false)
 	minimap.lines, minimap.underlines, minimap.dots, minimap.walked, minimap.used = {}, {}, {}, 0, 0
+	minimap.dot, minimap.spacing = DOT, SPACING
 	StrokeLayer(minimap)
 	minimap.Goal = Minimap:CreateTexture(nil, "OVERLAY")
 	minimap.Goal:SetAtlas(GOAL_ATLAS)
