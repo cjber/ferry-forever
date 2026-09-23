@@ -1639,10 +1639,9 @@ pump = function()
 	schedule()
 end
 
--- Idle work waits while searches hold frames, so the two never share one frame budget. A search that ran since
--- the last call may have spent this frame's budget just before the caller.
+-- Idle work skips frames a queued search holds or one since the last call spent, so they never share a budget.
 function Path.Busy()
-	local busy = scheduled or pumped or #queue > 0
+	local busy = pumped or #queue > 0
 	pumped = false
 	return busy
 end
@@ -1653,12 +1652,18 @@ function Path.after(fn)
 	C_Timer.After(0, fn)
 end
 
+local function enqueue(job)
+	job.co, job.frames, job.cpu = coroutine.create(start), 0, 0
+	queue[#queue + 1] = job
+	schedule()
+	return job
+end
+
 -- Search coroutine-sliced over frames between two { x, y, z } points (z optional: it picks the floor to start or end
 -- on). callback(points, cost, job) or callback(nil, reason, job): points are { map, x, y, z } from the start to the
 -- goal, with points.wet the drawn yards over water. Cost is the abstract route in running yards, not the smoothed
--- polyline length; a swum grid yard counts as the
--- data's swim (so routes keep out of water) unless waterWalking, when water is ground. reason is "nodata",
--- "outside", "offmesh", "unreachable" or "error". Returns a handle for Path.Cancel.
+-- polyline length; a swum grid yard counts as the data's swim (so routes keep out of water) unless waterWalking, when
+-- water is ground. reason is "nodata", "outside", "offmesh", "unreachable" or "error". Returns a Cancel handle.
 ---@param map number
 ---@param from SPFPoint
 ---@param to SPFPoint
@@ -1666,19 +1671,13 @@ end
 ---@param waterWalking? boolean
 ---@return SPFPathJob
 function Path.Find(map, from, to, callback, waterWalking)
-	local job = {
+	return enqueue({
 		map = map,
 		from = from,
 		to = to,
 		waterWalking = waterWalking,
 		callback = callback,
-		co = coroutine.create(start),
-		frames = 0,
-		cpu = 0,
-	}
-	queue[#queue + 1] = job
-	schedule()
-	return job
+	})
 end
 
 -- A candidate can be ruled in or out without refining all its intermediate clusters into drawing points.
@@ -1708,7 +1707,7 @@ end
 ---@param progress? fun(costs: (number|false)[], reason: nil, job: SPFPathJob)
 ---@return SPFPathJob
 function Path.FindMany(map, from, targets, callback, waterWalking, reverse, progress)
-	local job = {
+	return enqueue({
 		map = map,
 		from = from,
 		targets = targets,
@@ -1719,13 +1718,7 @@ function Path.FindMany(map, from, targets, callback, waterWalking, reverse, prog
 		radius = 0,
 		revision = 0,
 		callback = callback,
-		co = coroutine.create(start),
-		frames = 0,
-		cpu = 0,
-	}
-	queue[#queue + 1] = job
-	schedule()
-	return job
+	})
 end
 
 -- Paused batches retain their settled costs and frontier for later replans, without consuming frames.
@@ -1773,7 +1766,6 @@ function Path.Cancel(job)
 	job.cancelled, job.scratch, job.co = true, nil, nil
 end
 
--- The walkable height at a global cell nearest height h, within ZTOL.
 ---@param map number
 ---@return boolean
 function Path.HasData(map)
