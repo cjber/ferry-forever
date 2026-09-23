@@ -9,11 +9,11 @@ OUT=${OUT:-$HERE/work}
 WOW=${WOW:-"$HOME/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft"}
 PRODUCT=${PRODUCT:-wow_classic_beta}
 MAPS=${MAPS:-"0 1 2991"}
-THREADS=${THREADS:-8}     # bake threads; peak RSS is ~5-9 GB at 8
-JOBS=${JOBS:-6}           # gen_nav rasterizer processes
-MAPPSTER_REV=d93fd3b347d8c63663cff536955e3cae97fa28a6   # F0RSV1NNA/Mappster, MIT
-CASCLIB_REV=2a280f5a231966dc5d1b534978dd9f9f04a374cd    # ladislav-zezula/CascLib, MIT
-DBD_REV=7539907c14f9ac88c6db20f5fa699425ad35ac84        # wowdev/WoWDBDefs, CC BY-SA 4.0 (fetched, never committed)
+THREADS=${THREADS:-8}                                 # bake threads; peak RSS is ~5-9 GB at 8
+JOBS=${JOBS:-6}                                       # gen_nav rasterizer processes
+MAPPSTER_REV=d93fd3b347d8c63663cff536955e3cae97fa28a6 # F0RSV1NNA/Mappster, MIT
+CASCLIB_REV=2a280f5a231966dc5d1b534978dd9f9f04a374cd  # ladislav-zezula/CascLib, MIT
+DBD_REV=7539907c14f9ac88c6db20f5fa699425ad35ac84      # wowdev/WoWDBDefs, CC BY-SA 4.0 (fetched, never committed)
 declare -A DBD_SHA=(
 	[Map]=c879e3d74284fa9096e49feecc984fe56fd9e12e61b4cf5525854829e1c45f05
 	[LiquidType]=06dd61c3a20a18d56781fa45fe3c896a64baf191deed9a8feaeeb8aad3e4db0b
@@ -65,7 +65,7 @@ for m in $MAPS; do
 	addon=$OUT/addons/ShortestPathForever_Nav$m
 	mkdir -p "$addon"
 	NAV_MM=$OUT/mm$m NAV_JOBS=$JOBS python3 "$HERE/gen_nav.py" "$addon/Nav$m.lua" --map "$m" --name "$name"
-	cat > "$addon/ShortestPathForever_Nav$m.toc" <<TOC
+	cat >"$addon/ShortestPathForever_Nav$m.toc" <<TOC
 ## Interface: 16001
 ## Title: Shortest Path Forever - Walking map ($name)
 ## Notes: Walkable ground for Shortest Path Forever's walking routes on $name. Loaded when a route needs it.
