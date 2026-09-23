@@ -85,6 +85,20 @@ end
 ---@class SPFPublicAPI
 local API = { version = 1 }
 
+local function Differs(a, b)
+	for key, value in pairs(a) do
+		if b[key] ~= value then
+			return true
+		end
+	end
+	for key, value in pairs(b) do
+		if a[key] ~= value then
+			return true
+		end
+	end
+	return false
+end
+
 -- The reason tells a caller whether asking again later can help: after combat, never for bad input, or when the
 -- player's known flight paths or boat timings change.
 local function Lookup(fromMap, fromX, fromY, toMap, toX, toY)
@@ -97,21 +111,7 @@ local function Lookup(fromMap, fromX, fromY, toMap, toX, toY)
 	end
 	local known = ns.KnownTaxiNodes()
 	-- Discovery updates the same saved table in place; topology identity alone cannot detect it.
-	local changed = false
-	for id, value in pairs(known) do
-		if knownSnapshot[id] ~= value then
-			changed = true
-			break
-		end
-	end
-	if not changed then
-		for id, value in pairs(knownSnapshot) do
-			if known[id] ~= value then
-				changed = true
-				break
-			end
-		end
-	end
+	local changed = Differs(known, knownSnapshot)
 	if changed then
 		plannerCache, knownSnapshot = {}, {}
 		for id, value in pairs(known) do
