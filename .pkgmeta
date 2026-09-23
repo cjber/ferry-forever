@@ -11,11 +11,9 @@ manual-changelog:
   markup-type: markdown
 
 ignore:
-  - .release-notes.md
   - tools
   - tests
   - media/icon.svg
   - media/icon-400.png
-  - .luacheckrc
   - stylua.toml
   - ruff.toml
