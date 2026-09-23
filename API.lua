@@ -101,14 +101,10 @@ end
 
 -- The reason tells a caller whether asking again later can help: after combat, never for bad input, or when the
 -- player's known flight paths or boat timings change.
-local function Lookup(fromMap, fromX, fromY, toMap, toX, toY)
-	if not Ready() then
-		return nil, InCombatLockdown() and "combat" or "invalid"
-	end
-	local from, to = Point(fromMap, fromX, fromY), Point(toMap, toX, toY)
-	if not from or not to then
-		return nil, "invalid"
-	end
+---@param from SPFPoint
+---@param to SPFPoint
+---@param key string
+local function Answer(from, to, key)
 	local known = ns.KnownTaxiNodes()
 	-- Discovery updates the same saved table in place; topology identity alone cannot detect it.
 	local changed = Differs(known, knownSnapshot)
@@ -155,8 +151,8 @@ local function Lookup(fromMap, fromX, fromY, toMap, toX, toY)
 		baked = ns.Walks,
 		waterWalking = ns.JourneyWaterWalking(),
 	}
-	for _, key in ipairs(CONTEXT_KEYS) do
-		if context[key] ~= options[key] then
+	for _, name in ipairs(CONTEXT_KEYS) do
+		if context[name] ~= options[name] then
 			changed = true
 		end
 	end
@@ -167,7 +163,6 @@ local function Lookup(fromMap, fromX, fromY, toMap, toX, toY)
 		end
 		context = options
 	end
-	local key = string.format("%d:%.4f:%.4f:%d:%.17g:%.17g", fromMap, fromX, fromY, toMap, toX, toY)
 	local cached = estimates[key]
 	if cached and now >= cached.at and now - cached.at < CACHE_MS then
 		if cached.seconds then
@@ -190,6 +185,17 @@ local function Lookup(fromMap, fromX, fromY, toMap, toX, toY)
 		return entry
 	end
 	return nil, "unreachable"
+end
+
+local function Lookup(fromMap, fromX, fromY, toMap, toX, toY)
+	if not Ready() then
+		return nil, InCombatLockdown() and "combat" or "invalid"
+	end
+	local from, to = Point(fromMap, fromX, fromY), Point(toMap, toX, toY)
+	if not from or not to then
+		return nil, "invalid"
+	end
+	return Answer(from, to, string.format("%d:%.4f:%.4f:%d:%.17g:%.17g", fromMap, fromX, fromY, toMap, toX, toY))
 end
 
 function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
