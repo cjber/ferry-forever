@@ -6,14 +6,14 @@ The detail behind each feature in the [README](../README.md).
   stand: walking, the flight points you know, boats and zeppelins with their live waits, lifts, the tram and
   portals, including a flight master you haven't found yet if walking to it pays off. Walks go through
   tunnels and between a city's levels, such as Dun Algaz and the Undercity, and walks keep out of water, which is slow and risky, unless you have Water Walking or Levitate (the step asks you to cast it). The route is drawn
-  on the map and minimap, walking legs dashed, and the steps sit in the objective tracker like a tracked
+  on the map and minimap, walking legs dotted, and the steps sit in the objective tracker like a tracked
   quest. It replans as you move but only switches to a clearly faster way (at least 20 seconds or a tenth of the time left), and stays aboard if you are already riding. **Guide**, on from the start
   of every journey (click the tracker header to turn it off), moves the game's own waypoint marker along the route turn by turn, so it leads you round walls
   rather than straight at the stop (or, with *Guide marks only where each step ends* in `/path`, straight at the next boat, lift or flight master), and hands your tracked quest back when you finish. To head for a quest, pick **Plan journey** from its right-click menu in the objective
   tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
   ![Journey steps from Auberdine to Silithus with time and distance remaining](screenshots/tracker.png)
 
-  ![Auberdine’s piers on the minimap, with the dashed route and Guide’s native waypoint](screenshots/minimap.png)
+  ![Auberdine’s piers on the minimap, with the dotted route and Guide’s native waypoint](screenshots/minimap.png)
 
 - **Finding the fastest way.** While a new journey is checked, the map shows only its destination pin and the
   tracker the Group Finder spinner; the route, steps and totals then appear together. A search that takes more than

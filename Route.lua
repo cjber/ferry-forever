@@ -5,8 +5,10 @@ local LINE_TEMPLATE = "ShortestPathForeverRoutePinTemplate"
 local TRANSPORT_TEMPLATE = "ShortestPathForeverTransportPinTemplate"
 local GOAL_TEMPLATE = "ShortestPathForeverGoalPinTemplate"
 -- A solid colour line with a slim dark border, so it reads on parchment and minimap alike; the taxi line
--- atlas is mostly transparent and turned into a thin core inside a heavy border. Walks are short breadcrumbs.
-local THICKNESS, DASH, GAP = 2, 6, 5
+-- atlas is mostly transparent and turned into a thin core inside a heavy border. Walks are round breadcrumbs, each
+-- a dot-textured line one diameter long over a slightly larger dark dot, spaced evenly across the walk's bends.
+local THICKNESS, DOT, RIM, SPACING = 2, 4, 1, 9
+local DOT_TEXTURE = "Interface\\AddOns\\ShortestPathForever\\media\\Dot"
 local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
 local GOAL_ATLAS, GOAL_SCALE = "Waypoint-MapPin-Tracked", 0.8
 local COLORS = {
@@ -23,6 +25,8 @@ local provider, goal, result, paths
 ---@class SPFMinimapRoute : Frame
 ---@field lines Line[]
 ---@field underlines Line[]
+---@field dots boolean[]
+---@field walked number
 ---@field used number
 ---@field Goal Texture
 ---@field strokeLayer SPFStrokeLayer
@@ -95,7 +99,25 @@ local function ClipAxis(start, delta, low, high, minimum, maximum)
 	end
 end
 
-local function Stroke(owner, x1, y1, x2, y2, color, scale)
+-- Pooled lines swap between a flat colour and the dot texture only when their use changes.
+local function Paint(owner, index, dot)
+	if owner.dots[index] == dot then
+		return
+	end
+	owner.dots[index] = dot
+	local line, underline = owner.lines[index], owner.underlines[index]
+	if dot then
+		line:SetTexture(DOT_TEXTURE)
+		underline:SetTexture(DOT_TEXTURE)
+		underline:SetVertexColor(0.04, 0.04, 0.04)
+	else
+		line:SetColorTexture(1, 1, 1, 1)
+		underline:SetColorTexture(0.04, 0.04, 0.04, 1)
+		underline:SetVertexColor(1, 1, 1)
+	end
+end
+
+local function Stroke(owner, x1, y1, x2, y2, color, scale, dot)
 	-- Client regions cannot be destroyed. Bound each reusable pool even after extreme map zooms.
 	if owner.used >= 4096 then
 		return
@@ -108,24 +130,30 @@ local function Stroke(owner, x1, y1, x2, y2, color, scale)
 		underline = layer:CreateLine(nil, "ARTWORK", nil, -1)
 		underline:SetColorTexture(0.04, 0.04, 0.04, 1)
 		line = layer:CreateLine(nil, "ARTWORK")
-		line:SetColorTexture(1, 1, 1, 1)
 		owner.lines[owner.used] = line
 		owner.underlines[owner.used] = underline
 	end
+	Paint(owner, owner.used, dot or false)
 	local alpha = owner.strokeAlpha or 1
 	if owner.fadeX then
 		local dx = ((x1 + x2) / 2 - owner.fadeX) * owner.fadeScaleX
 		local dy = ((y1 + y2) / 2 - owner.fadeY) * owner.fadeScaleY
 		alpha = alpha * math.min(1, math.sqrt(dx * dx + dy * dy) / 30)
 	end
+	-- A dot's rim reaches RIM past it on every side, so its underline is longer as well as thicker.
+	local ux, uy = 0, 0
+	if dot then
+		local length = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+		ux, uy = (x2 - x1) / length * RIM / scale, (y2 - y1) / length * RIM / scale
+	end
 	underline:SetAlpha(alpha * UNDER_ALPHA)
-	underline:SetThickness(UNDER_THICKNESS / scale)
-	underline:SetStartPoint("TOPLEFT", owner, x1, y1)
-	underline:SetEndPoint("TOPLEFT", owner, x2, y2)
+	underline:SetThickness((dot and DOT + RIM * 2 or UNDER_THICKNESS) / scale)
+	underline:SetStartPoint("TOPLEFT", owner, x1 - ux, y1 - uy)
+	underline:SetEndPoint("TOPLEFT", owner, x2 + ux, y2 + uy)
 	underline:Show()
 	line:SetVertexColor(color:GetRGBA())
 	line:SetAlpha(alpha)
-	line:SetThickness(THICKNESS / scale)
+	line:SetThickness((dot and DOT or THICKNESS) / scale)
 	line:SetStartPoint("TOPLEFT", owner, x1, y1)
 	line:SetEndPoint("TOPLEFT", owner, x2, y2)
 	line:Show()
@@ -134,23 +162,40 @@ local function Stroke(owner, x1, y1, x2, y2, color, scale)
 	end
 end
 
--- Clip before subdividing: even continent-sized walks need only the visible breadcrumbs.
+-- Clip before subdividing: even continent-sized walks need only the visible breadcrumbs. Dots sit at every SPACING
+-- along the whole walk, owner.walked carrying the distance across segment joins so bends never bunch them.
 local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale)
 	local dx, dy = x2 - x1, y2 - y1
 	local length = math.sqrt(dx * dx + dy * dy) * scale
-	if not low or length == 0 then
+	if length == 0 then
 		return
 	end
 	if not dashed then
-		Stroke(owner, x1 + low * dx, y1 + low * dy, x1 + high * dx, y1 + high * dy, color, scale)
+		owner.walked = 0
+		if low then
+			Stroke(owner, x1 + low * dx, y1 + low * dy, x1 + high * dx, y1 + high * dy, color, scale)
+		end
 		return
 	end
-	local first, last = low * length, high * length
-	for distance = math.floor(first / (DASH + GAP)) * (DASH + GAP), last, DASH + GAP do
-		local a, b = math.max(first, distance) / length, math.min(last, distance + DASH) / length
-		if a < b then
-			Stroke(owner, x1 + a * dx, y1 + a * dy, x1 + b * dx, y1 + b * dy, color, scale)
-		end
+	local start = owner.walked
+	owner.walked = start + length
+	if not low then
+		return
+	end
+	-- Only dots whose rim fits inside the clipped span, so none overhangs the map's edge or the minimap's rim.
+	local half, reach = DOT / 2 / length, DOT / 2 + RIM
+	for distance = math.ceil((start + low * length + reach) / SPACING) * SPACING - start, high * length - reach, SPACING do
+		local t = distance / length
+		Stroke(
+			owner,
+			x1 + (t - half) * dx,
+			y1 + (t - half) * dy,
+			x1 + (t + half) * dx,
+			y1 + (t + half) * dy,
+			color,
+			scale,
+			true
+		)
 	end
 end
 
@@ -217,6 +262,8 @@ function ns.RefreshJourneyPulse(shown)
 end
 
 ---@class SPFRoutePin : SPFMapPin
+---@field dots boolean[]
+---@field walked number
 ---@field strokeLayer? SPFStrokeLayer
 ---@field UpdateAlpha? fun(self: SPFRoutePin)
 ShortestPathForeverRoutePinMixin = CreateFromMixins(MapCanvasPinMixin)
@@ -225,7 +272,7 @@ function ShortestPathForeverRoutePinMixin:OnLoad()
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_QUEST_BLOB")
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScaleStyle(AM_PIN_SCALE_STYLE_WITH_TERRAIN)
-	self.lines, self.underlines = {}, {}
+	self.lines, self.underlines, self.dots, self.walked = {}, {}, {}, 0
 end
 
 function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
@@ -376,6 +423,7 @@ function ShortestPathForeverRoutePinMixin:Draw()
 	for _, path in ipairs(self.paths) do
 		local color = COLORS[path.mode]
 		self.drawingRoute = path.route
+		self.walked = 0
 		local previous, px, py
 		local crossing = OverviewCrossing(self, path, color)
 		for index = 1, crossing and 0 or #path.points do
@@ -744,6 +792,7 @@ local function DrawMinimap(self)
 		-- GetMinimapShape is an optional addon convention (HBD-Pins:215), not a Blizzard global.
 		local inset = 1 - border / math.min(width, height)
 		for _, path in ipairs(paths) do
+			self.walked = 0
 			if path.mode ~= "portal" and path.mode ~= "passage" then
 				for index = 2, #path.points do
 					local a, b = path.points[index - 1], path.points[index]
@@ -827,7 +876,7 @@ ns.Init(function()
 	minimap = minimapRoute
 	minimap:SetAllPoints(Minimap)
 	minimap:EnableMouse(false)
-	minimap.lines, minimap.underlines, minimap.used = {}, {}, 0
+	minimap.lines, minimap.underlines, minimap.dots, minimap.walked, minimap.used = {}, {}, {}, 0, 0
 	StrokeLayer(minimap)
 	minimap.Goal = Minimap:CreateTexture(nil, "OVERLAY")
 	minimap.Goal:SetAtlas(GOAL_ATLAS)

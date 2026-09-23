@@ -25,7 +25,7 @@ pixels never enter product media.
 | `darkshore.png` | A measured walk south from Auberdine to the Grove of the Ancients |
 | `docks.png` | Auberdine's clustered piers; arrivals/departures and destination glows |
 | `tracker.png` | Capture 21's five Auberdine → Silithus steps, with the current totals header |
-| `minimap.png` | Auberdine's piers as minimap pins, the last dashed stretch to the south pier, native Guide waypoint |
+| `minimap.png` | Auberdine's piers as minimap pins, the last dotted stretch to the south pier, native Guide waypoint |
 | `compass.png` | Current optional compass, enabled for this scene |
 | `demo.gif` | Eight-second montage: route pulse/settle, tracker countdown and gliding compass; under 0.5 MB |
 
@@ -40,7 +40,7 @@ remains 8,000 ms. The animation uses fixed time steps, never the wall clock.
   supplies boat geometry: route 295, docks 10 → 9, and route 292, docks 5 → 6.
   The final Silithus destination is Alliance taxi node 73 from `Data/Taxi.lua`.
   Timings in the tracker reproduce capture 21, not a new optimality measurement.
-- `Route.lua` supplies 2-pixel cores, 4-pixel outlines, 6/5 dash/gap, colours,
+- `Route.lua` supplies 2-pixel cores in 4-pixel outlines, 4-pixel walk dots in 6-pixel rims 9 apart, colours,
   overview curves, fading continent-edge curves and the 1.2-second settling pulse.
   Outlines render below all cores. The destination uses the native pin at 0.8 scale.
 - `Map.lua` / `Map.xml` supply 20-unit ferry pins, transitive dock clustering,

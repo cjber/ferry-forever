@@ -196,33 +196,48 @@ def segment(canvas, a, b, color, dashed=False, alpha=1):
     """Route.lua Segment/Stroke: lengths in UI units at an effective scale of 1, whatever the frame's own scale."""
     ax, ay = (n * canvas.ui.scale for n in a)
     bx, by = (n * canvas.ui.scale for n in b)
-    dx, dy = bx - ax, by - ay
-    length = math.hypot(dx, dy)
-    if length == 0:
+    if (ax, ay) == (bx, by):
         return
-    # Route.lua's DASH and GAP, in the same units as the thickness.
-    dash, gap = round(6 * canvas.ui.scale), round(5 * canvas.ui.scale)
-    intervals = (
-        [(d / length, min(d + dash, length) / length) for d in range(0, math.ceil(length), dash + gap)]
-        if dashed
-        else [(0, 1)]
-    )
     if not hasattr(canvas, "strokes"):
         canvas.strokes = []
-    for low, high in intervals:
-        canvas.strokes.append(((ax + dx * low, ay + dy * low, ax + dx * high, ay + dy * high), color, alpha))
+    canvas.strokes.append(((ax, ay, bx, by), color, alpha, dashed))
+
+
+def walk_dots(strokes, spacing):
+    """Route.lua's breadcrumbs: a dot every SPACING along each walk, carried across the joins between its segments."""
+    dots, walked, end = [], 0.0, None
+    for (ax, ay, bx, by), color, alpha, dashed in strokes:
+        if not dashed:
+            continue
+        if end != (ax, ay):
+            walked = 0.0
+        length = math.hypot(bx - ax, by - ay)
+        distance = math.ceil(walked / spacing) * spacing - walked
+        while distance <= length:
+            dots.append((ax + (bx - ax) * distance / length, ay + (by - ay) * distance / length, color, alpha))
+            distance += spacing
+        walked, end = walked + length, (bx, by)
+    return dots
 
 
 def flush_strokes(canvas):
-    # ARTWORK sublevel -1 puts every outline beneath every core, including at bends and crossings.
-    # THICKNESS / scale UI units draws at THICKNESS units' worth of pixels at every UI scale, so it widens with the
-    # render scale like everything else.
-    for width in (4, 2):
+    # ARTWORK sublevel -1 puts every outline and rim beneath every core, including at bends and crossings.
+    # Sizes in UI units draw at that many units' worth of pixels at every UI scale, so they widen with the render
+    # scale like everything else: 2-unit lines in 4-unit outlines, and 4-unit dots in 6-unit rims, 9 apart.
+    k = canvas.ui.scale
+    strokes = getattr(canvas, "strokes", [])
+    dots = walk_dots(strokes, 9 * k)
+    for under in (True, False):
         layer = Image.new("RGBA", canvas.image.size)
         draw = ImageDraw.Draw(layer)
-        for line, color, alpha in getattr(canvas, "strokes", []):
-            rgba = (0.04, 0.04, 0.04, alpha * 0.5) if width == 4 else (*color, alpha)
-            draw.line(line, fill=rgba255(rgba), width=round(width * canvas.ui.scale))
+        for line, color, alpha, dashed in strokes:
+            if not dashed:
+                rgba = (0.04, 0.04, 0.04, alpha * 0.5) if under else (*color, alpha)
+                draw.line(line, fill=rgba255(rgba), width=round((4 if under else 2) * k))
+        for x, y, color, alpha in dots:
+            r = (3 if under else 2) * k
+            rgba = (0.04, 0.04, 0.04, alpha * 0.5) if under else (*color, alpha)
+            draw.ellipse((x - r, y - r, x + r, y + r), fill=rgba255(rgba))
         canvas.image.alpha_composite(layer)
     canvas.strokes = []
 
@@ -760,7 +775,7 @@ def compare_references(refs, tooltip_ref=None):
                 enlarged(mock),
             ),
             (
-                "Owner 18: dashed route (3x)",
+                "Owner 18: dotted route (3x)",
                 enlarged(Image.open(refs / "18.png").crop((64, 34, 135, 156)), 3),
                 "Mock: route and native waypoint (3x)",
                 enlarged(render_minimap(art).image.crop((192, 280, 291, 354)), 3),
