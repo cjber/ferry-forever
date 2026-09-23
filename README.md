@@ -27,7 +27,7 @@ Each feature has more detail in [docs/features.md](docs/features.md).
   ![Journey steps from Auberdine to Silithus with time and distance remaining](docs/screenshots/tracker.png)
 - **Guide.** The game's own waypoint marker leads you along the route turn by turn, round walls rather than straight at
   the stop, and hands your tracked quest back when you arrive. Click the tracker header to turn it off.
-  ![Auberdine’s piers on the minimap, with the dashed route and Guide’s native waypoint](docs/screenshots/minimap.png)
+  ![Auberdine’s piers on the minimap, with the dotted route and Guide’s native waypoint](docs/screenshots/minimap.png)
 - **Optional compass.** A slim strip at the top of the screen marks Guide's next two turns, the next stop and your
   destination. Turn it on in `/path`.
   ![The optional compass strip with the next turns and destination](docs/screenshots/compass.png)
