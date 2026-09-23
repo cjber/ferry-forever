@@ -14,6 +14,9 @@ verbatim rather than rewritten as the addon moves.
 Walking legs are round breadcrumb dots, evenly spaced around every bend, instead of dashes, on the map and
 the minimap alike. Boats, zeppelins and flights keep their solid coloured lines.
 
+**Other addons can offer Shortest Path guidance.** The version 1 public API estimates travel time and starts
+journeys on their behalf. An addon can cancel only its own current journey, preserving a route you start yourself.
+
 Docks, lifts, tram stations and portals now show on the minimap with the world map's icons, and hovering one
 gives the same departures tooltip. They vanish at the minimap's rim like the game's own tracking icons, and
 cost nothing away from them. *Transport* in the minimap's tracking menu, or the new setting in `/path`, turns

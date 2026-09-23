@@ -3,6 +3,7 @@ max_line_length = 120
 exclude_files = { "tools/.cache/**", ".types/**", "types/**", ".release/**", "ShortestPathForever_Nav*/**" }
 ignore = { "212/_.*" } -- unused args prefixed with _
 globals = {
+	"ShortestPathForever",
 	"ShortestPathForeverCharDB",
 	"ShortestPathForeverDB",
 	"ShortestPathForeverDockPinMixin",

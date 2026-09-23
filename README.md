@@ -79,6 +79,16 @@ paths from `TaxiNodes`/`TaxiPath` (with InFlight's recorded flight times where i
 from CMaNGOS's teleport triggers; `tools/gen_transit.py` builds all three. The planner uses discovered flight
 points, and may walk to an undiscovered flight master when learning it makes the journey faster.
 
+## Works alongside
+
+Other addons can use `ShortestPathForever.API` (`version = 1`) with uiMapID and normalized 0–1 coordinates:
+`Estimate(fromMap, fromX, fromY, toMap, toX, toY)` returns seconds or `nil`, using the arrow's planner,
+discovered flights, transport timings and baked walks without changing guidance. Endpoint terrain searches
+are omitted; estimates are cached for up to five seconds with origins rounded to 0.0001.
+`Navigate(owner, map, x, y, title)` starts guidance and returns a boolean;
+`Cancel(owner)` only stops that addon's current journey. A player-started journey replaces that ownership.
+Estimates return `nil` and navigation returns `false` during combat; navigation also respects the Journey setting.
+
 ## Development
 
 ```sh

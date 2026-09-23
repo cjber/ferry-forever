@@ -20,6 +20,7 @@ local VERB = {
 }
 
 local goal, guide, result
+local journeyOwner
 local search, FinishSearch
 local plannerCache = {}
 local walkOrder, walkPending = {}, {}
@@ -124,6 +125,9 @@ local function WaterWalking()
 	end
 	return false
 end
+
+-- Read-only capability query shared by the public estimator and the guided planner.
+ns.JourneyWaterWalking = WaterWalking
 
 -- A transport nobody has timed yet waits half its round trip on average; "about" marks that guess.
 local function LegTime(leg)
@@ -370,11 +374,21 @@ function ns.ClearJourney()
 		ns.Path.ClearCaches()
 	end
 	StopGuide()
-	goal, result = nil, nil
+	goal, result, journeyOwner = nil, nil, nil
 	progress.index, progress.departed = 1, false
 	driver:Hide()
 	ns.SetJourneyRoute(nil)
 	RefreshTracker()
+end
+
+---@param owner string
+---@return boolean
+function ns.CancelOwnedJourney(owner)
+	if not goal or journeyOwner ~= owner then
+		return false
+	end
+	ns.ClearJourney()
+	return true
 end
 
 local function UpdateProgress()
@@ -1344,7 +1358,10 @@ local function Update(self, elapsed)
 	end
 end
 
-local function StartJourney(point)
+---@param point SPFPoint
+---@param owner? string nil for a journey started by the player
+---@return boolean
+local function StartJourney(point, owner)
 	local mode = WaterWalking()
 	local repeated = goal and SamePlace(goal, point) and mode == waterMode
 	local previous = repeated and result
@@ -1357,7 +1374,7 @@ local function StartJourney(point)
 	if guide then
 		StopGuide()
 	end
-	goal = point
+	goal, journeyOwner = point, owner
 	result, search = previous, nil
 	progress.index, progress.departed = previous and index or 1, previous and departed or false
 	driver.elapsed, driver.progressElapsed = 0, 0
@@ -1382,6 +1399,12 @@ local function StartJourney(point)
 	return true
 end
 
+ns.StartJourney = StartJourney
+
+---@param uiMapID integer
+---@param x number
+---@param y number
+---@return SPFPoint?
 local function WorldPoint(uiMapID, x, y)
 	local continent, world = C_Map.GetWorldPosFromMapPos(uiMapID, CreateVector2D(x, y))
 	if continent and world then
@@ -1389,6 +1412,8 @@ local function WorldPoint(uiMapID, x, y)
 		return { map = continent, x = worldX, y = worldY }
 	end
 end
+
+ns.WorldPoint = WorldPoint
 
 local function PlanQuest(questID, clickedMap, isWaypoint)
 	if not ns.db.journey then
