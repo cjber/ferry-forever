@@ -12,6 +12,7 @@
 ---@field WalkPlaces table<number, table<string, number[]>>
 ---@field db SPFDatabase
 ---@field charDB SPFCharacterDatabase
+---@field Defaults table<string, boolean>
 
 ---@alias SPFMode 'walk'|'flight'|'boat'|'zeppelin'|'lift'|'tram'|'portal'|'passage'
 ---@alias SPFKind 'start'|'goal'|'dock'|'taxi'|'portal'
