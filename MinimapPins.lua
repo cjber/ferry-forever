@@ -135,9 +135,11 @@ end
 
 local function Draw()
 	local x, y, _, map = ns.JourneyPosition()
+	---@type number?, number?
 	local radius, facing = ns.MinimapView()
-	if not (x and canaccessvalue(radius) and canaccessvalue(facing) and radius and radius > 0) then
-		x = nil
+	-- Facing is nil while unavailable and secret while restricted; either way nothing below may read it.
+	if not (x and canaccessvalue(radius) and canaccessvalue(facing) and radius and facing and radius > 0) then
+		x, radius, facing = nil, nil, nil
 	end
 	local width = frame:GetWidth()
 	local square = GetMinimapShape and GetMinimapShape() == "SQUARE"
@@ -156,7 +158,7 @@ local function Draw()
 	entries = entries or Entries()
 	used = 0
 	local near = false
-	if x and width > SIZE then
+	if x and radius and facing and width > SIZE then
 		local cosine, sine = math.cos(facing), math.sin(facing)
 		-- The whole icon stays inside the rim.
 		local reach = 1 - SIZE / width

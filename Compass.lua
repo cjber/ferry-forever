@@ -174,7 +174,7 @@ local function Update(elapsed)
 	end
 	local x, y, _, map = UnitPosition("player")
 	local facing = GetPlayerFacing()
-	if not (x and y and map and facing) then
+	if not (x and y and map and canaccessvalue(facing) and facing) then
 		frame:SetAlpha(0)
 		frame.facing = nil
 		SetUpdating(false)
