@@ -28,8 +28,10 @@ local function check(index, count)
  local pins = active[goalTemplate]
  assert(#pins == count-index+1)
  for i, pin in ipairs(pins) do
-  assert(pin.Number.text == index+i-1, "remaining pins retain original stop numbers")
-  assert(pin.Texture.atlas == "Waypoint-MapPin-Tracked")
+  -- Stops up to 9 wear Blizzard's numeral atlas on the Adventure Guide ring; later stops use the font.
+  assert(pin.Numeral.atlas == "services-number-" .. (index+i-1), "remaining pins retain original stop numbers")
+  assert(pin.Number.text == "")
+  assert(pin.Texture.atlas == "adventureguide-ring")
   assert(pin.stopTitle == string.format("Stop %d of %d: %s", index+i-1, count, stops[index+i-1].title))
  end
  local line = active[lineTemplate][1]
@@ -64,6 +66,7 @@ assert(not ShortestPathForeverJourneyDriver:IsShown() and not arrowFrame:IsShown
 -- Pooled numbered pins must revert to the ordinary waypoint for a single destination.
 assert(api.Navigate("Test", 1414, 0.51, 0.5, "Only"))
 assert(#active[goalTemplate] == 1 and active[goalTemplate][1].Number.text == "")
+assert(active[goalTemplate][1].Texture.atlas == "Waypoint-MapPin-Tracked")
 assert(active[goalTemplate][1].stopTitle == nil and arrowFrame.Progress.text == "")
 assert(api.Cancel("Test"))
 posX, posY = 0, 0

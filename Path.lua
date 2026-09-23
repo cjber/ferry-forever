@@ -968,18 +968,13 @@ local trees = { S = Tree(), G = Tree(), R = Tree() }
 -- Abstract A* state.
 local ag, apar, astamp, aclosed, agen = {}, {}, {}, {}, 0
 
--- Endpoint searches: grid Dijkstra to the cluster's entrances (and the other endpoint when they share it).
-local function endpoint(st, swim, tree, k, node, others)
+-- Endpoint searches: grid Dijkstra to the cluster's entrances.
+local function endpoint(st, swim, tree, k, node)
 	local targets, left = {}, 0
 	for _, id in ipairs(nodesOf(st, k)) do
 		local e = entrance(st, id)
 		if e and not targets[e] then
 			targets[e], left = true, left + 1
-		end
-	end
-	for other in pairs(others or {}) do
-		if not targets[other] then
-			targets[other], left = true, left + 1
 		end
 	end
 	search(st, k, swim, node, tree, nil, targets, left)

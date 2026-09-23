@@ -1,7 +1,7 @@
 # Journey display and retained memory
 
 Baseline: `6c75d965d1acf259504e1e666848c1a2719a6bb4`, copied with `git archive` to
-`/tmp/spf-search-before`. Changes remain uncommitted. All measurements use LuaJIT and the offline
+`/tmp/spf-search-before`. All measurements use LuaJIT and the offline
 UI fixture; no game client or saved-variable files were accessed.
 
 ## Display contract
@@ -13,9 +13,9 @@ invalid-route replacement, one final swap, silent background searches, cache evi
 the stock spinner, idle Guide/compass, committed totals and releasing closed-map pin geometry.
 Geometry for a grace preview does not take budget from the ongoing cost proof.
 
-The spinner follows `Blizzard_SharedXML/SecureUIPanelTemplates.xml`'s
-`OutlineLoadingSpinnerTemplate`: `common-loadingspinnercircle`, one-second repeating rotation.
-The route pulse and its second line pools are gone. Half-second walked-leg trimming and minimap
+The tracker spinner is SharedXML's `SpinnerTemplate`, Group Finder's 16 px ring and sparks.
+While a grace-period route is on screen, its stroke layer pulses through a native alpha
+animation, 1.2 seconds eased at both ends. Half-second walked-leg trimming and minimap
 arrival fading retain their existing harness coverage.
 
 ## Memory
@@ -97,5 +97,4 @@ luajit -joff tests/memory_bench.lua cross clear
 ```
 
 Actual client animation appearance, native region memory and client GC/profiler accounting remain
-unverified offline. Supplementary Lua type, Python, shell and secret checks passed; `actionlint`
-and `zizmor` were unavailable. No workflow files changed.
+unverified offline.

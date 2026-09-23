@@ -892,7 +892,7 @@ local function Render(planned, forced)
 	FinishSearch()
 end
 
-local function Plan(preview, bounded)
+local function Plan(preview)
 	local here = Here()
 	if not (here and goal) then
 		return nil
@@ -927,14 +927,6 @@ local function Plan(preview, bounded)
 			ride = { route = routeID, dock = dock, arrive = now + arriveIn }
 		end
 	end
-	local exactMaps = {}
-	if not preview and not bounded and ns.Path then
-		for _, continent in ipairs({ here.map, goal.map }) do
-			if ns.Path.HasData(continent) then
-				exactMaps[continent] = true
-			end
-		end
-	end
 	local planned = ns.Planner.Plan({
 		cache = plannerCache,
 		from = here,
@@ -952,7 +944,6 @@ local function Plan(preview, bounded)
 		portals = ns.Portals,
 		landmasses = ns.Landmasses,
 		walks = preview and {} or Walks(here),
-		exactMaps = exactMaps,
 		baked = ns.Walks,
 		waterWalking = waterMode,
 	})
@@ -1108,7 +1099,7 @@ local function RefreshCosts(includeGoal, forced)
 	local preview
 	if not result and ns.Path.LowerBound then
 		startCosts, goalCosts = walks(startBatch), walks(goalBatch)
-		preview = Plan(false, true)
+		preview = Plan()
 		if preview then
 			preview.preview, search.candidate = true, preview
 		end
@@ -1151,7 +1142,7 @@ local function RefreshCosts(includeGoal, forced)
 		end
 		-- Reuse the bounded preview once for probes; commit only after planning with current exact costs.
 		local previewed = preview and not startBatch.reason and not goalBatch.reason
-		local planned = previewed and preview or Plan(false, true)
+		local planned = previewed and preview or Plan()
 		preview = nil
 		-- Short A* cost probes let easy routes prove themselves before expanding a wide frontier. Bound
 		-- their total work, then let shared Dijkstras settle harder alternatives. Finish an active probe:
@@ -1200,7 +1191,7 @@ local function RefreshCosts(includeGoal, forced)
 			end
 		end
 		if previewed then
-			planned = Plan(false, true)
+			planned = Plan()
 		end
 		local needStart = planned and planned.needsStart and ns.Path.HasData(here.map)
 		local needGoal = planned and planned.needsGoal and ns.Path.HasData(goal.map)
@@ -1333,7 +1324,7 @@ local function Update(self, elapsed)
 			if ns.Path and not flying and not riding and (off or retry or GetTime() - refreshedAt >= REFRESH_EVERY) then
 				RefreshCosts(false, off or retry)
 			else
-				local planned = Plan(false, true)
+				local planned = Plan()
 				if
 					planned
 					and ns.Path

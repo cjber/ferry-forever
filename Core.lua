@@ -3,6 +3,7 @@ local addonName = ...
 local ns = select(2, ...)
 
 local Model = ns.Model
+-- The settings panel registers these same defaults, so a checkbox's reset matches a fresh install.
 local DEFAULTS = {
 	pins = true,
 	transit = true,
@@ -19,6 +20,7 @@ local DEFAULTS = {
 	guideStops = false,
 	compass = false,
 }
+ns.Defaults = DEFAULTS
 
 ---@param message string
 function ns.Print(message)
