@@ -328,7 +328,7 @@ def rasterize_tile(rc):
                     surf[gx * GH + gy].append((p["size"], height(p, *c), v, pid, c, False))
     # Passages narrower than a cell: centroid -> shared edge midpoint -> centroid stays inside the two convex polygons.
     # These surfaces anchor on the poly centroid, since the cell centre may lie off the mesh. Only the first passage
-    # through an empty cell may become its base, as before floors existed; later ones can only add a floor.
+    # through an empty cell may become its base; later ones can only add a floor.
     for u in sorted(adj):
         for w in sorted(adj[u]):
             if w <= u:
