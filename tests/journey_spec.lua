@@ -246,13 +246,6 @@ ns.Path = nil
 driver.load("Data/Routes.lua")
 local ratchet = ns.Routes[241]
 local dock = ns.Docks[ratchet.stops[1].dock]
-ns.DockTitle = function()
-	return "Dock"
-end
-ns.DockLabel = ns.DockTitle
-ns.DockPoint = function(id)
-	return ns.Docks[id]
-end
 ns.CurrentRide = function()
 	return 241
 end
