@@ -11,6 +11,9 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+Guide keeps its map pin hidden and removes it when a journey ends, tracking changes or you reload, while
+preserving your own pins and tracking choices.
+
 Clicking a dock, station or portal on the world map opens the map at the other end of the crossing and pings
 where it comes in. A dock with boats or zeppelins to several places asks which one with a small menu. The
 tooltip says when a click will take you somewhere.

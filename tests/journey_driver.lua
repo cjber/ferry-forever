@@ -1,5 +1,5 @@
 local root = ... or "."
-local ns = { db = { journey = true } }
+local ns = { db = { journey = true }, charDB = {} }
 local now, here, target, shown, click = 0, { map = 1, x = 0, y = 0, z = 0 }
 local function noop() end
 local frames, events, waypoint, tracked, quest = {}, {}, nil, false, 0
@@ -86,7 +86,7 @@ local env = setmetatable({
 	end,
 	C_Map = {
 		GetWorldPosFromMapPos = function(map, point)
-			return map, point
+			return map, vector((0.5 - point.y) * 50000, (0.5 - point.x) * 50000)
 		end,
 		GetBestMapForUnit = function()
 			return here.map
@@ -183,7 +183,7 @@ local map = {
 		return target.map
 	end,
 	GetNormalizedCursorPosition = function()
-		return target.x, target.y
+		return 0.5 - target.y / 50000, 0.5 - target.x / 50000
 	end,
 }
 ns.DockTitle = function()
