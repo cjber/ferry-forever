@@ -65,6 +65,27 @@ equal(driver.waypoint(), waypoint, "estimate leaves waypoint untouched")
 local _, _, after, afterIndex = ns.JourneyInfo()
 equal(after, plan, "estimate leaves plan untouched")
 equal(afterIndex, index, "estimate leaves progress untouched")
+-- Standing still, the header total stays the sum of the steps shown, before and after the timed retime.
+local function steps(legs, from)
+	local sum = 0
+	for legIndex = from, #legs do
+		local leg = legs[legIndex]
+		sum = sum + math.ceil((leg.arrive - leg.depart) / 1000) + math.ceil((leg.wait or 0) / 1000)
+	end
+	return sum * 1000
+end
+local total = ns.JourneyTime(plan.legs, index)
+equal(total, steps(plan.legs, index), "header adds up the steps")
+for _, seconds in ipairs({ 2, 4 }) do
+	driver.update(seconds)
+	local _, _, still, stillIndex = ns.JourneyInfo()
+	equal(
+		ns.JourneyTime(still.legs, stillIndex),
+		steps(still.legs, stillIndex),
+		"header matches steps after " .. seconds
+	)
+	equal(ns.JourneyTime(still.legs, stillIndex), total, "standing still keeps the total after " .. seconds)
+end
 equal(API.Cancel("OtherAddon"), false, "foreign cancellation")
 equal(API.Navigate("OtherAddon", 1, 0.7, 0.5), true, "ownership replaced")
 equal(API.Active(), true, "another addon's journey is active")

@@ -155,7 +155,7 @@ local function JourneyHeader(result, index, loading)
 	local yards = JourneyDistance(result, index)
 	local distance = yards >= 999.5 and string.format("%.1fk yd", yards / 1000)
 		or string.format("%d yd", math.floor(yards + 0.5))
-	return "Journey  " .. ns.FormatCountdown(result.arrive - ns.NowMs()) .. " · " .. distance
+	return "Journey  " .. ns.FormatCountdown(ns.JourneyTime(result.legs, index)) .. " · " .. distance
 end
 
 local function RefreshBlockText(blocks)

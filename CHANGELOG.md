@@ -51,6 +51,9 @@ Later checks happen quietly without pulsing routes or changing “finding” mes
 retain less memory, clearing a journey frees its caches, and `/path perf` now collects unused memory
 before reporting what remains.
 
+The Journey header's time is the sum of the steps below it. It used to count down to the planned arrival, so
+standing still it slipped a few seconds below the steps and jumped back every five seconds.
+
 ## [1.1.0] - 2026-09-23
 
 A new icon across the addon and its walking maps, settings in the minimap's addon compartment, and a fixed place in the objective tracker.

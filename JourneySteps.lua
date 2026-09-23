@@ -48,6 +48,11 @@ function ns.LegVerb(leg)
 	return VERB[leg.mode]
 end
 
+-- Whole seconds as a countdown shows them, so totals add up to the times on screen.
+local function Seconds(ms)
+	return math.max(0, math.ceil(ms / 1000))
+end
+
 -- A transport nobody has timed yet waits half its round trip on average; "about" marks that guess.
 ---@param leg SPFLeg
 ---@return string
@@ -58,4 +63,19 @@ function ns.LegTime(leg)
 		text = "wait " .. guess .. ns.FormatCountdown(leg.wait) .. " · " .. text
 	end
 	return text
+end
+
+-- The steps from index on, waits included, in the milliseconds of the whole seconds each step shows. The header
+-- adds up the steps rather than counting down to the planned arrival, which would run on while you stand still
+-- until the next retime put it back.
+---@param legs SPFLeg[]
+---@param index integer
+---@return integer
+function ns.JourneyTime(legs, index)
+	local seconds = 0
+	for legIndex = index, #legs do
+		local leg = legs[legIndex]
+		seconds = seconds + Seconds(leg.arrive - leg.depart) + Seconds(leg.wait or 0)
+	end
+	return seconds * 1000
 end
