@@ -167,8 +167,7 @@ end
 
 -- Clip before subdividing: even continent-sized walks need only the visible breadcrumbs. Dots sit at every SPACING
 -- along the whole walk, owner.walked carrying the distance across segment joins so bends never bunch them.
--- A multi-stop preview may span the map dozens of times, so dashLimit caps its dots per segment.
-local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale, dashLimit)
+local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale)
 	local dx, dy = x2 - x1, y2 - y1
 	local length = math.sqrt(dx * dx + dy * dy) * scale
 	if length == 0 then
@@ -189,8 +188,7 @@ local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale, d
 	-- The caller clipped a walk REACH inside its frame, so every dot's rim fits and joints need no trim, which would
 	-- drop the dots at each bend. The far end is exclusive so a dot on a joint is drawn once.
 	local half = DOT / 2 / length
-	local spacing = dashLimit and math.max(SPACING, (high - low) * length / dashLimit) or SPACING
-	for distance = math.ceil((start + low * length) / spacing) * spacing - start, high * length - 0.001, spacing do
+	for distance = math.ceil((start + low * length) / SPACING) * SPACING - start, high * length - 0.001, SPACING do
 		local t = distance / length
 		Stroke(
 			owner,
@@ -281,7 +279,7 @@ function ShortestPathForeverRoutePinMixin:OnLoad()
 	self.lines, self.underlines, self.dots, self.walked = {}, {}, {}, 0
 end
 
-function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed, dashLimit)
+function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
 	local scale = self:GetEffectiveScale()
 	local mx = dashed and REACH / scale / self:GetWidth() or 0
 	local my = dashed and REACH / scale / self:GetHeight() or 0
@@ -299,8 +297,7 @@ function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed, da
 		high,
 		color,
 		dashed,
-		scale,
-		dashLimit
+		scale
 	)
 end
 
@@ -444,7 +441,7 @@ function ShortestPathForeverRoutePinMixin:Draw()
 			elseif previous then
 				if path.preview then
 					if px and x then
-						self:Line(px, py, x, y, color, true, math.max(4, math.floor(128 / #path.points)))
+						self:Line(px, py, x, y, color, true)
 					end
 				elseif previous.jump or previous.map ~= point.map then
 					if path.mode == "boat" or path.mode == "zeppelin" then
