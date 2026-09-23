@@ -1,0 +1,11 @@
+# The Python under tools/ generates the addon's data; it is run by hand, never shipped (.pkgmeta ignores tools).
+line-length = 120
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[lint.per-file-ignores]
+# A one-shot script: it imports wowmock after putting its directory on sys.path, and its cached
+# methods live exactly as long as the process.
+"tools/screenshots.py" = ["E402", "B019"]
