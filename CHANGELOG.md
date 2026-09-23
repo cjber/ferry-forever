@@ -61,7 +61,9 @@ checked again when you leave the path or once a minute; standing still or moving
 walking-map cell reuses its costs. Once settled, the arrival countdown returns. Walk
 steps name the dock, pier, lift or flight master you are heading for. An optional compass strip follows your facing and
 marks Guide's next two turns, the next stop and your destination, with yards to the next turn. It is off
-by default and can be turned on in `/path`.
+by default and can be turned on in `/path`. Its heading glides smoothly as you turn, with stock UI fonts,
+a soft frame and correctly proportioned markers. Marks for the same place or bearing combine into one,
+keeping the destination or transport icon and the distance to your next turn.
 
 On board, once the ride has synced, the tracker shows where the boat calls next and when it gets there. Half
 a minute before a timed boat reaches the dock you are waiting at, and shortly before your own boat docks, a
