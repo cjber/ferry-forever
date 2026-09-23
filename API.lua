@@ -4,6 +4,8 @@ local ns = select(2, ...)
 -- This topology belongs exclusively to estimates: Planner.Plan mutates its cache between calls.
 -- Never borrow the active journey's cache, path jobs, progress, waypoint or route drawing.
 local plannerCache, knownSnapshot = {}, {}
+-- legs are the planner's own, read only to build EstimateDetail's copies; they never leave this file.
+---@type table<string, {at: number, seconds: number|false, legs?: SPFLeg[]}>
 local estimates, order, slot = {}, {}, 1
 local anchorSnapshot, context = {}, {}
 local CACHE_LIMIT, CACHE_MS = 256, 5000
@@ -85,7 +87,7 @@ local API = { version = 1 }
 
 -- The reason tells a caller whether asking again later can help: after combat, never for bad input, or when the
 -- player's known flight paths or boat timings change.
-function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
+local function Lookup(fromMap, fromX, fromY, toMap, toX, toY)
 	if not Ready() then
 		return nil, InCombatLockdown() and "combat" or "invalid"
 	end
@@ -169,7 +171,7 @@ function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
 	local cached = estimates[key]
 	if cached and now >= cached.at and now - cached.at < CACHE_MS then
 		if cached.seconds then
-			return cached.seconds
+			return cached
 		end
 		return nil, "unreachable"
 	end
@@ -182,11 +184,45 @@ function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
 		order[slot] = key
 		slot = slot % CACHE_LIMIT + 1
 	end
-	estimates[key] = { at = now, seconds = seconds or false }
+	local entry = { at = now, seconds = seconds or false, legs = plan and plan.legs }
+	estimates[key] = entry
 	if seconds then
-		return seconds
+		return entry
 	end
 	return nil, "unreachable"
+end
+
+function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
+	local entry, reason = Lookup(fromMap, fromX, fromY, toMap, toX, toY)
+	if not entry then
+		return nil, reason
+	end
+	return entry.seconds --[[@as number]] -- Lookup returns only answered entries.
+end
+
+-- Built on demand so plain estimates stay as cheap as before. Every table is new: a caller that edits or keeps
+-- the result can never reach the planner's nodes or a later caller's copy.
+function API.EstimateDetail(fromMap, fromX, fromY, toMap, toX, toY)
+	local entry, reason = Lookup(fromMap, fromX, fromY, toMap, toX, toY)
+	if not entry then
+		return nil, reason
+	end
+	local legs, previous = {}, entry.at
+	for index, leg in ipairs(entry.legs) do
+		-- Planner legs carry arrival times; each span runs from the previous arrival, so it includes the wait.
+		legs[index] = {
+			mode = leg.mode,
+			to = ns.LegLabel(leg),
+			seconds = (leg.arrive - previous) / 1000,
+			wait = leg.wait and leg.wait >= 60000 and leg.wait / 1000 or nil,
+			newFlightPath = leg.mode == "walk" and leg.to.undiscovered or nil,
+		}
+		previous = leg.arrive
+	end
+	return {
+		seconds = entry.seconds --[[@as number]],
+		legs = legs,
+	}
 end
 
 function API.NavigateRoute(owner, stops)

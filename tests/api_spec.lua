@@ -14,9 +14,34 @@ local function why(expected, label, value, reason)
 	equal(value, nil, label)
 	equal(reason, expected, label .. " reason")
 end
+-- Detail agrees with Estimate, and its legs add up to the whole journey, waits included.
+local function detail(label, ...)
+	local seconds, found = API.Estimate(...), API.EstimateDetail(...)
+	near(found.seconds, seconds, label .. " detail seconds")
+	local sum = 0
+	for _, leg in ipairs(found.legs) do
+		sum = sum + leg.seconds
+	end
+	near(sum, seconds, label .. " legs add up")
+	return found
+end
 
 equal(API.version, 1, "version")
 near(API.Estimate(1, 0.5, 0.5, 1, 0.5014, 0.5), 10, "world conversion and milliseconds to seconds")
+local walk = detail("walk", 1, 0.5, 0.5, 1, 0.5014, 0.5)
+equal(#walk.legs, 1, "one walking leg")
+equal(walk.legs[1].mode, "walk", "walking mode")
+equal(walk.legs[1].to, "Test", "leg named as the tracker names it")
+equal(walk.legs[1].wait, nil, "no wait on foot")
+equal(walk.legs[1].newFlightPath, nil, "no flight path to learn")
+walk.legs[1].seconds, walk.legs[1].to, walk.legs[2] = 0, "Changed by caller", {}
+local again = API.EstimateDetail(1, 0.5, 0.5, 1, 0.5014, 0.5)
+near(again.legs[1].seconds, 10, "caller edits leave the cached detail intact")
+equal(again.legs[1].to, "Test", "caller edits leave labels intact")
+equal(#again.legs, 1, "caller edits leave the leg list intact")
+equal(again.legs == walk.legs, false, "every call returns new tables")
+why("unreachable", "no detail across unconnected continents", API.EstimateDetail(1, 0.5, 0.5, 2, 0.5, 0.5))
+why("invalid", "no detail for a bad coordinate", API.EstimateDetail(1, 2, 0.5, 1, 0.5, 0.5))
 why("unreachable", "unconnected continents", API.Estimate(1, 0.5, 0.5, 2, 0.5, 0.5))
 why("unreachable", "cached unconnected continents", API.Estimate(1, 0.5, 0.5, 2, 0.5, 0.5))
 for _, value in ipairs({ -1, 1.01, math.huge, 0 / 0, "0.5", false, driver.secret }) do
@@ -58,6 +83,7 @@ env.InCombatLockdown = function()
 end
 equal(API.Navigate("AGF", 1, 0.6, 0.5), false, "combat navigation deferred to caller")
 why("combat", "no combat search", API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5))
+why("combat", "no combat detail", API.EstimateDetail(1, 0.5, 0.5, 1, 0.6, 0.5))
 env.InCombatLockdown = function()
 	return false
 end
@@ -240,12 +266,14 @@ end
 env.C_Map.GetWorldPosFromMapPos = function(map, point)
 	return project(map == 2 and 0 or map, point)
 end
-local function estimate(fromID, toID)
+-- offset moves the start that many yards along both axes from the first flight master.
+local function estimate(fromID, toID, call, offset)
 	local a, b = ns.TaxiNodes[fromID], ns.TaxiNodes[toID]
-	return API.Estimate(
+	offset = offset or 0
+	return (call or API.Estimate)(
 		a.map == 0 and 2 or a.map,
-		0.5 - a.y / 50000,
-		0.5 - a.x / 50000,
+		0.5 - (a.y + offset) / 50000,
+		0.5 - (a.x + offset) / 50000,
 		b.map == 0 and 2 or b.map,
 		0.5 - b.y / 50000,
 		0.5 - b.x / 50000
@@ -281,6 +309,26 @@ for _ = 1, 250 do
 	estimate(26, 27)
 end
 local short = (os.clock() - start) * 4
+for _, pair in ipairs({ { 26, 39 }, { 26, 67 }, { 26, 27 } }) do
+	detail(
+		"flight " .. pair[1] .. "-" .. pair[2],
+		estimate(pair[1], pair[2], function(...)
+			return ...
+		end)
+	)
+end
+local boat = estimate(26, 67, API.EstimateDetail).legs[2]
+equal(boat.mode, "boat", "Auberdine boat to Menethil")
+equal(boat.wait ~= nil and boat.wait >= 60, true, "an untimed boat's average wait is reported in seconds")
+equal(estimate(26, 67, API.EstimateDetail).legs[4].wait, nil, "flight boarding is too short to report")
+ns.known[26] = nil
+local learn = estimate(26, 39, API.EstimateDetail, 300)
+for position, leg in ipairs(learn.legs) do
+	equal(leg.newFlightPath, position == 1 or nil, "only the walk to the unknown flight master learns it")
+end
+equal(learn.legs[1].mode, "walk", "walk to Auberdine's flight master")
+equal(learn.legs[2].mode, "flight", "then fly from it")
+ns.known[26] = true
 print(
 	string.format(
 		"api_spec: %d checks passed; Estimate cached short %.3f ms, cross-continent cold %.3f / cached %.3f ms",
