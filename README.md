@@ -22,8 +22,8 @@ Each feature has more detail in [docs/features.md](docs/features.md).
 - **Journey planner.** Shift-click the map or minimap, or choose *Plan journey* on a quest, for the fastest way there:
   walking through tunnels and city levels, known flight points, boats, zeppelins, lifts, the tram and portals. The
   route is drawn on both maps and its steps sit in the objective tracker. It replans as you move, switching only for a
-  clearly faster way. While a new journey is checked, only the destination pin and a small spinner show;
-  the route, steps and totals appear together, and a long search shows its best route after three seconds.
+  clearly faster way. New journeys show a destination pin and the Group Finder spinner until ready. After three
+  seconds, the best route appears and pulses gently on both maps until the spinner stops. Later checks stay quiet.
   ![Journey steps from Auberdine to Silithus with time and distance remaining](docs/screenshots/tracker.png)
 - **Guide.** The game's own waypoint marker leads you along the route turn by turn, round walls rather than straight at
   the stop, and hands your tracked quest back when you arrive. Click the tracker header to turn it off.

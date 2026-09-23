@@ -16,10 +16,11 @@ The detail behind each feature in the [README](../README.md).
   ![Dashed minimap route and Guide’s native waypoint at Auberdine](screenshots/minimap.png)
 
 - **Finding the fastest way.** While a new journey is checked, the map shows only its destination pin and the
-  tracker a small loading spinner; the route, steps and totals then appear together. A search that takes more than
+  tracker the Group Finder spinner; the route, steps and totals then appear together. A search that takes more than
   three seconds shows its best route so far, and changes it only for one at least 30 seconds and 10% faster, or if
-  it stops working. Later checks run quietly behind the current route. Nearby walks can settle immediately;
-  longer searches stop as soon as no unchecked alternative can beat the chosen route. Only that route gets
+  it stops working. The drawn route pulses gently on the world map and minimap while the spinner turns, then
+  becomes steady as soon as the search finishes. Later checks run quietly without a spinner or pulsing.
+  Nearby walks can settle immediately; longer searches stop as soon as no unchecked alternative can beat the chosen route. Only that route gets
   walking geometry, and drawn paths stay visible during refreshes, and clearing a journey releases its search caches. Your position's costs refresh when you leave
   the path or once a minute. Repeating a destination reuses its costs; standing still or moving within the same
   walking-map cell by at most three yards also reuses your position's costs. Walk steps name the dock, pier, lift
