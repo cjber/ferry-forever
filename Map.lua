@@ -3,6 +3,7 @@ local _, ns = ...
 local PIN_TEMPLATE = "ShortestPathForeverDockPinTemplate"
 local FLIGHT_TEMPLATE = "ShortestPathForeverFlightPinTemplate"
 local PORTAL_TEMPLATE = "ShortestPathForeverPortalPinTemplate"
+local PING_TEMPLATE = "ShortestPathForeverPingPinTemplate"
 local PIN_SIZE = 20
 local ARROW_SIZE = 15
 -- Half a pin, as a fraction of a zoomed-out map.
@@ -70,7 +71,7 @@ function ns.DockKind(dockID)
 	return dockKinds[dockID]
 end
 
-local KIND = { boat = "Boat", zeppelin = "Zeppelin", lift = "Lift", tram = "Tram" }
+local KIND = { boat = "Boat", zeppelin = "Zeppelin", lift = "Lift", tram = "Tram", portal = "Portal" }
 local KINDS = { boat = "Boats", zeppelin = "Zeppelins", lift = "Lifts", tram = "Deeprun Tram" }
 local ORDER = { "boat", "zeppelin", "lift", "tram" }
 local LANDING = { boat = "pier", zeppelin = "tower", lift = "landing", tram = "station" }
@@ -78,6 +79,15 @@ local COMPASS = { "east", "northeast", "north", "northwest", "west", "southwest"
 
 local function StatusColor(departure)
 	return departure.known and HIGHLIGHT_FONT_COLOR or GRAY_FONT_COLOR
+end
+
+-- The click hint, only when a click has somewhere to go.
+local function AddEndsLine(ends)
+	if #ends == 1 then
+		GameTooltip_AddInstructionLine(GameTooltip, "Click to show " .. ends[1].zone)
+	elseif #ends > 1 then
+		GameTooltip_AddInstructionLine(GameTooltip, "Click to show where they go")
+	end
 end
 
 local function AddDepartureLines(departures)
@@ -215,6 +225,7 @@ function ShortestPathForeverDockPinMixin:RefreshTooltip()
 		)
 		GameTooltip_AddNormalLine(GameTooltip, GRAY_FONT_COLOR:WrapTextInColorCode(text))
 	end
+	AddEndsLine(self:GetEnds())
 	GameTooltip:Show()
 end
 
@@ -263,6 +274,8 @@ local ProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
 
 function ProviderMixin:RemoveAllData()
 	self:GetMap():RemoveAllPinsByTemplate(PIN_TEMPLATE)
+	self:GetMap():RemoveAllPinsByTemplate(PING_TEMPLATE)
+	self.ping = nil
 	-- [dockID] = the pin showing it; [key of the cluster's docks] = that pin.
 	self.pinOf, self.pins = {}, {}
 end
@@ -279,6 +292,17 @@ function ProviderMixin:ShowDestinations(pin)
 			end
 		end
 	end
+end
+
+-- The stock map ping (MapCanvasDataProviderMixin:PingPin), at a point rather than a pin: a portal's far end
+-- has none, and a dock's may be filtered out.
+function ProviderMixin:Ping(x, y)
+	if not self.ping then
+		self.ping = self:GetMap():AcquirePin(PING_TEMPLATE)
+		self.ping:UseFrameLevelType("PIN_FRAME_LEVEL_QUEST_PING")
+	end
+	self.ping:SetNumLoops(2)
+	self.ping:PlayAt(x, y)
 end
 
 function ProviderMixin:HideDestinations()
@@ -322,6 +346,63 @@ local function MapPosition(point, mapID)
 		return Clamp(x, EDGE, 1 - EDGE), Clamp(y, EDGE, 1 - EDGE)
 	end
 end
+
+-- Where a pin's routes end, one per map other than this one: candidates = { { kind, point }... }, in the
+-- tooltip's order. A lift's landings share one spot, so a lift has an end only from a map other than its own.
+local function Ends(mapID, candidates)
+	local ends, seen = {}, { [mapID] = true }
+	for _, candidate in ipairs(candidates) do
+		local location = ns.Locate(candidate.point)
+		if location and not seen[location.uiMap] then
+			seen[location.uiMap] = true
+			candidate.uiMap, candidate.zone = location.uiMap, location.zone
+			ends[#ends + 1] = candidate
+		end
+	end
+	return ends
+end
+
+local function ShowEnd(map, target)
+	map:SetMapID(target.uiMap)
+	local x, y = MapPosition(target.point, target.uiMap)
+	if x then
+		provider:Ping(x, y)
+	end
+end
+
+-- One end opens straight away. A hub's ends are a menu, as the map is gone once one opens, so there is no
+-- cycling through them.
+local function OpenEnds(pin, button)
+	if button ~= "LeftButton" or IsModifierKeyDown() then
+		return
+	end
+	local map, ends = pin:GetMap(), pin:GetEnds()
+	if #ends == 1 then
+		ShowEnd(map, ends[1])
+	elseif #ends > 1 then
+		MenuUtil.CreateContextMenu(pin, function(_, root)
+			for _, target in ipairs(ends) do
+				root:CreateButton(KIND[target.kind] .. " to " .. target.zone, function()
+					ShowEnd(map, target)
+				end)
+			end
+		end)
+	end
+end
+
+function ShortestPathForeverDockPinMixin:GetEnds()
+	local candidates = {}
+	for _, dock in ipairs(self.cluster.docks) do
+		for _, departure in ipairs(ns.DockDepartures(dock.id)) do
+			for _, dockID in ipairs(departure.to) do
+				candidates[#candidates + 1] = { kind = departure.kind, point = ns.DockPoint(dockID) }
+			end
+		end
+	end
+	return Ends(self:GetMap():GetMapID(), candidates)
+end
+
+ShortestPathForeverDockPinMixin.OnMouseClickAction = OpenEnds
 
 -- The docks on this map with any route still shown, as { id, x, y } in map fractions. A lift or tram
 -- landing also shows on any neighbouring zone it falls inside: the Great Lift joins the Barrens to Thousand
@@ -458,8 +539,15 @@ function ShortestPathForeverPortalPinMixin:OnMouseEnter()
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 	GameTooltip_SetTitle(GameTooltip, portal.name)
 	GameTooltip_AddNormalLine(GameTooltip, "to " .. (destination and destination.zone or UNKNOWN))
+	AddEndsLine(self:GetEnds())
 	GameTooltip:Show()
 end
+
+function ShortestPathForeverPortalPinMixin:GetEnds()
+	return Ends(self:GetMap():GetMapID(), { { kind = "portal", point = self.portal.to } })
+end
+
+ShortestPathForeverPortalPinMixin.OnMouseClickAction = OpenEnds
 
 function ShortestPathForeverPortalPinMixin:OnMouseLeave()
 	if GameTooltip:IsOwned(self) then

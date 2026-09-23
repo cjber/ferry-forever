@@ -31,9 +31,11 @@ Each feature has more detail in [docs/features.md](docs/features.md).
   destination. Turn it on in `/path`.
   ![The optional compass strip with the next turns and destination](docs/screenshots/compass.png)
 - **Docks on the world map.** Piers and zeppelin towers get the stock ferry icon and a matching zeppelin. Hover one for
-  where each boat goes next and when; the docks it sails to light up and its routes are drawn.
+  where each boat goes next and when; the docks it sails to light up and its routes are drawn. Click one to open the
+  map at the other end, where a ping marks the dock; one with several destinations asks which.
   ![Hovering Auberdine’s piers shows departures and lights destination docks](docs/screenshots/docks.png)
-- **Lifts, the Deeprun Tram and portals** count down like the boats; portals are marked with where they go. Flight
+- **Lifts, the Deeprun Tram and portals** count down like the boats; portals are marked with where they go, and
+  clicking a station or portal opens the map where it comes out. Flight
   masters, known and undiscovered, use the game's own icons. Each layer has a switch in the map's filter menu.
 - **Next departures.** At a dock, lift or tram station, a tracker section above your quests counts down to every
   arrival and departure; on board, it shows the next call.
