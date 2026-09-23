@@ -892,6 +892,31 @@ local function UpdateMinimap(self, elapsed)
 	end
 end
 
+-- Later legs are only an itinerary preview. Search the current leg and keep its minimap guidance exact.
+local function WorldPaths()
+	worldPaths = paths
+	if stops then
+		worldPaths = {}
+		for _, path in ipairs(paths) do
+			worldPaths[#worldPaths + 1] = path
+		end
+		for _, path in ipairs(ns.JourneyPreview()) do
+			worldPaths[#worldPaths + 1] = path
+		end
+	end
+end
+
+-- A crossing between later stops finished planning; only the world map draws the itinerary.
+function ns.RefreshJourneyPreview()
+	if not stops then
+		return
+	end
+	WorldPaths()
+	if provider and WorldMapFrame:IsShown() then
+		provider:RefreshAllData()
+	end
+end
+
 ---@param destination SPFPoint?
 ---@param route SPFPlan?
 function ns.SetJourneyRoute(destination, route)
@@ -908,19 +933,7 @@ function ns.SetJourneyRoute(destination, route)
 	if destination and ns.JourneyStops then
 		stops, stopIndex = ns.JourneyStops()
 	end
-	worldPaths = paths
-	if stops then
-		worldPaths = {}
-		for _, path in ipairs(paths) do
-			worldPaths[#worldPaths + 1] = path
-		end
-		-- Later legs are only an itinerary preview. Search the current leg and keep its minimap guidance exact.
-		local points = {}
-		for index = stopIndex, #stops do
-			points[#points + 1] = stops[index]
-		end
-		worldPaths[#worldPaths + 1] = { mode = "walk", points = points, preview = true }
-	end
+	WorldPaths()
 	-- The map refreshes every provider when it opens, so a closed one is left until then.
 	if provider and (WorldMapFrame:IsShown() or not destination) then
 		provider:RefreshAllData()

@@ -52,7 +52,8 @@ local function Owner(owner)
 end
 
 -- Only this module owns the caller's itinerary. Journey handles one destination at a time.
----@type {owner: string, points: SPFPoint[], index: integer}?
+-- hops[i] draws stop i to i + 1 across continents once planned, or false when the planner found no way.
+---@type {owner: string, points: SPFPoint[], index: integer, hops: table<integer, SPFDrawPath[]|false>}?
 local route
 local MAX_STOPS = 64
 
@@ -198,6 +199,101 @@ local function Lookup(fromMap, fromX, fromY, toMap, toX, toY)
 	return Answer(from, to, string.format("%d:%.4f:%.4f:%d:%.17g:%.17g", fromMap, fromX, fromY, toMap, toX, toY))
 end
 
+-- Journey plans one stop at a time, so a later stop across the sea has no route until arrival. Plan each such
+-- crossing with the estimate's cheap planner (no terrain searches), one per idle frame: a cold plan costs about
+-- 2 ms, and waiting out active searches keeps it off their frame budget. Stops on one continent stay straight.
+local previewScheduled, previewWait
+local PumpPreview
+
+local function SchedulePreview()
+	if not previewScheduled then
+		previewScheduled = true
+		ns.Path.after(PumpPreview)
+	end
+end
+
+---@param legs SPFLeg[]
+---@return SPFDrawPath[]
+local function HopPaths(legs)
+	local paths = {}
+	for index, leg in ipairs(legs) do
+		paths[index] = {
+			mode = leg.mode,
+			points = ns.Planner.LegPoints(leg, ns.Routes),
+			preview = leg.mode == "walk" or nil,
+		}
+	end
+	return paths
+end
+
+PumpPreview = function()
+	previewScheduled = false
+	if not (route and ns.db and ns.charDB) then
+		return
+	end
+	if InCombatLockdown() then
+		if not previewWait then
+			previewWait = CreateFrame("Frame")
+			previewWait:SetScript("OnEvent", function(self)
+				self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+				SchedulePreview()
+			end)
+		end
+		previewWait:RegisterEvent("PLAYER_REGEN_ENABLED")
+		return
+	end
+	if ns.Path.Busy() then
+		SchedulePreview()
+		return
+	end
+	for index = route.index, #route.points - 1 do
+		local from, to = route.points[index], route.points[index + 1]
+		if from.map ~= to.map and route.hops[index] == nil then
+			local key =
+				string.format("route:%d:%.17g:%.17g:%d:%.17g:%.17g", from.map, from.x, from.y, to.map, to.x, to.y)
+			local entry = Answer(from, to, key)
+			route.hops[index] = entry and HopPaths(entry.legs) or false
+			if ns.RefreshJourneyPreview then
+				ns.RefreshJourneyPreview()
+			end
+			SchedulePreview()
+			return
+		end
+	end
+end
+
+-- The drawn itinerary after the current stop: straight dotted hops within a continent, planned legs across one.
+-- An unplanned crossing stays a two-point preview hop, which the map draws as end marks only.
+---@return SPFDrawPath[]
+function ns.JourneyPreview()
+	local drawn = {}
+	if not (route and #route.points > 1) then
+		return drawn
+	end
+	local chain = { route.points[route.index] }
+	for index = route.index, #route.points - 1 do
+		local hop, to = route.hops[index], route.points[index + 1]
+		if route.points[index].map ~= to.map and hop == nil then
+			SchedulePreview()
+		end
+		if hop then
+			if #chain > 1 then
+				drawn[#drawn + 1] = { mode = "walk", points = chain, preview = true }
+			end
+			for _, path in ipairs(hop) do
+				drawn[#drawn + 1] = path
+			end
+			chain = { to }
+		else
+			chain[#chain + 1] = to
+		end
+	end
+	if #chain > 1 then
+		drawn[#drawn + 1] = { mode = "walk", points = chain, preview = true }
+	end
+	return drawn
+end
+
 function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
 	local entry, reason = Lookup(fromMap, fromX, fromY, toMap, toX, toY)
 	if not entry then
@@ -266,7 +362,7 @@ function API.NavigateRoute(owner, stops)
 		points[index] = point
 	end
 	-- Validate and copy every stop before replacing guidance. Caller mutations cannot redirect a journey.
-	route = { owner = owner, points = points, index = 1 }
+	route = { owner = owner, points = points, index = 1, hops = {} }
 	return ns.StartJourney(points[1])
 end
 
