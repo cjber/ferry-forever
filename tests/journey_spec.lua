@@ -51,16 +51,15 @@ end
 -- Neither the timer nor the first batch completion can choose an exact plan before both batches finish.
 begin()
 local settling, round, pending = ns.JourneyStatus()
-assert(settling and round == 0 and pending == 2 and driver.shown().settling)
+assert(settling and round == 0 and pending == 2 and not driver.shown())
 assert(#jobs == 0 and #plans == 1 and #batches == 2)
-assert(ns.JourneyInfo():find("finding the fastest way", 1, true))
+assert(select(2, ns.JourneyInfo())[1].text == "Finding the fastest way…")
 driver.move({ map = 1, x = 7, y = 0, z = 0 })
 driver.update(0.6)
-local previewPoints = driver.shown().legs[1].walkPoints
-assert(previewPoints and previewPoints[1].x == 7, "even a pending preview must trim while walking")
+assert(not driver.shown(), "searching must not draw previews while walking")
 driver.move(here)
 for _ = 1, 3 do
-	driver.update(5)
+	driver.update(0.5)
 end
 assert(#plans == 1 and #jobs == 0)
 costs(batches[2], 1400)
@@ -68,7 +67,7 @@ assert(#plans == 1 and #jobs == 0)
 costs(batches[1], 1400)
 settling, round, pending = ns.JourneyStatus()
 assert(settling and round == 1 and pending == 1 and #plans == 2 and #jobs == 1)
-assert(not driver.shown().legs[1].estimated)
+assert(not driver.shown(), "wait for all chosen geometry before committing")
 local first = jobs[1]
 local points = { first.from, { map = 1, x = 600, y = 300 }, first.to }
 -- Even a disagreement only logs; geometry cannot start another plan.
@@ -193,9 +192,10 @@ begin()
 ready()
 first = jobs[#jobs]
 finish(first, { first.from, { map = 1, x = 600, y = 300 }, first.to })
-local trackedPlan, arrive = ns.Planner.Plan, driver.shown().arrive
+local trackedPlan = ns.Planner.Plan
 count = #jobs
 ns.Planner.Plan = function(options)
+	local arrive = options.now + 200000
 	local mid = { map = 1, x = 600, y = 100 }
 	return {
 		now = options.now,
@@ -221,7 +221,7 @@ ns.Planner.Plan = function(options)
 	}
 end
 driver.update(60)
-assert(driver.shown().settling)
+assert(not select(5, ns.JourneyInfo()), "background work must not show a spinner")
 costs(batches[#batches], 1400)
 assert(not driver.shown().settling and #jobs == count and driver.shown().legs[1].to == first.to)
 ns.Planner.Plan = trackedPlan

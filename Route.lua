@@ -71,6 +71,10 @@ local function ClipAxis(start, delta, low, high, minimum, maximum)
 end
 
 local function Stroke(owner, x1, y1, x2, y2, color, scale)
+	-- Client regions cannot be destroyed. Bound each reusable pool even after extreme map zooms.
+	if owner.used >= 4096 then
+		return
+	end
 	owner.used = owner.used + 1
 	local line = owner.lines[owner.used]
 	local underline = owner.underlines[owner.used]
@@ -131,22 +135,6 @@ local function HideUnused(owner)
 	end
 end
 
--- Two pooled layers let a single alpha change animate every pending stroke, including its outline.
-local function LoadingLayer(owner)
-	owner.loading = CreateFrame("Frame", nil, owner)
-	owner.loading:SetAllPoints(owner)
-	owner.loading:EnableMouse(false)
-	owner.loading.lines, owner.loading.underlines, owner.loading.used = {}, {}, 0
-end
-
-local function Pulse(owner)
-	owner.loading:SetAlpha(0.575 + 0.225 * math.cos(GetTime() * 2 * math.pi / 1.2))
-end
-
-local function IsLoading(path)
-	return path.settling or (path.mode == "walk" and not path.measured and not path.walkError)
-end
-
 ShortestPathForeverRoutePinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function ShortestPathForeverRoutePinMixin:OnLoad()
@@ -154,17 +142,15 @@ function ShortestPathForeverRoutePinMixin:OnLoad()
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScaleStyle(AM_PIN_SCALE_STYLE_WITH_TERRAIN)
 	self.lines, self.underlines = {}, {}
-	LoadingLayer(self)
 end
 
 function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
-	self.loading.strokeAlpha = self.strokeAlpha
 	local low, high = ClipAxis(x1, x2 - x1, 0, 1, 0, 1)
 	if low then
 		low, high = ClipAxis(y1, y2 - y1, low, high, 0, 1)
 	end
 	Segment(
-		self.loadingPath and self.loading or self,
+		self,
 		x1 * self:GetWidth(),
 		-y1 * self:GetHeight(),
 		x2 * self:GetWidth(),
@@ -300,15 +286,12 @@ function ShortestPathForeverRoutePinMixin:Draw()
 	self:SetSize(canvas:GetWidth(), canvas:GetHeight())
 	self:SetPosition(0.5, 0.5)
 	self.used = 0
-	self.loading:SetSize(self:GetWidth(), self:GetHeight())
-	self.loading.used = 0
 	if self.hits then
 		self.hits = {}
 	end
 	for _, path in ipairs(self.paths) do
 		local color = COLORS[path.mode]
 		self.drawingRoute = path.route
-		self.loadingPath = IsLoading(path)
 		local previous, px, py
 		local crossing = OverviewCrossing(self, path, color)
 		for index = 1, crossing and 0 or #path.points do
@@ -332,16 +315,14 @@ function ShortestPathForeverRoutePinMixin:Draw()
 		end
 	end
 	HideUnused(self)
-	HideUnused(self.loading)
-	self:SetScript("OnUpdate", self.loading.used > 0 and Pulse or nil)
-	Pulse(self)
 	if self.hits then
 		self:UpdateAlpha()
 	end
 end
 
 function ShortestPathForeverRoutePinMixin:OnReleased()
-	self:SetScript("OnUpdate", nil)
+	-- Released journey pins must not keep the last route alive through the client's pin pool.
+	self.paths = nil
 	MapCanvasPinMixin.OnReleased(self)
 end
 
@@ -472,6 +453,7 @@ end
 
 local TransportProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
 local transportGeometry = {}
+local geometryRoutes, geometryDocks
 
 function TransportProviderMixin:RemoveAllData()
 	self:GetMap():RemoveAllPinsByTemplate(TRANSPORT_TEMPLATE)
@@ -482,6 +464,14 @@ function TransportProviderMixin:RefreshAllData()
 	local map = self:GetMap()
 	if not (ns.db.mapRoutes and map:GetMapID() and map:IsVisible()) then
 		return
+	end
+	if geometryRoutes ~= ns.Routes or geometryDocks ~= ns.Docks then
+		transportGeometry, geometryRoutes, geometryDocks = {}, ns.Routes, ns.Docks
+	end
+	for id in pairs(transportGeometry) do
+		if not ns.Routes[id] then
+			transportGeometry[id] = nil
+		end
 	end
 	local geometry = {}
 	local ids = {}
@@ -627,27 +617,28 @@ local function DrawMinimap(self)
 	self.lastX, self.lastY, self.lastMap, self.lastRadius, self.lastFacing = x, y, map, radius, facing
 	self.lastWidth, self.lastHeight, self.lastScale, self.lastSquare = width, height, scale, square
 	self.revision = geometryRevision
-	self.used, self.loading.used = 0, 0
-	self.loading:SetSize(width, height)
-	self.fadeX, self.loading.fadeX = nil, nil
+	self.used = 0
+	self.fadeX = nil
 	self:SetAlpha(1)
+	self.Goal:Hide()
 	local border = UNDER_THICKNESS / scale
 	if x and facing and radius and radius > 0 and width > border and height > border then
 		local cosine, sine = math.cos(facing), math.sin(facing)
 		if goal and goal.map == map then
 			local gx, gy = Project(goal, x, y, radius, cosine, sine)
+			if math.abs(gx) <= 1 and math.abs(gy) <= 1 and (square or gx * gx + gy * gy <= 1) then
+				self.Goal:SetPoint("CENTER", self, "CENTER", gx * width / 2, gy * height / 2)
+				self.Goal:Show()
+			end
 			self.fadeX, self.fadeY = (gx + 1) * width / 2, (gy - 1) * height / 2
 			self.fadeScaleX, self.fadeScaleY = 2 * radius / width, 2 * radius / height
-			self.loading.fadeX, self.loading.fadeY = self.fadeX, self.fadeY
-			self.loading.fadeScaleX, self.loading.fadeScaleY = self.fadeScaleX, self.fadeScaleY
 			local distance = math.sqrt((goal.x - x) ^ 2 + (goal.y - y) ^ 2)
-			-- The parent fades both pooled layers; the loading pulse keeps its independent alpha.
+			-- Fade the line near arrival so it does not obscure the goal.
 			self:SetAlpha(math.max(0, math.min(1, (distance - 15) / 25)))
 		end
 		-- GetMinimapShape is an optional addon convention (HBD-Pins:215), not a Blizzard global.
 		local inset = 1 - border / math.min(width, height)
 		for _, path in ipairs(paths) do
-			local owner = IsLoading(path) and self.loading or self
 			if path.mode ~= "portal" and path.mode ~= "passage" then
 				for index = 2, #path.points do
 					local a, b = path.points[index - 1], path.points[index]
@@ -656,7 +647,7 @@ local function DrawMinimap(self)
 						local bx, by = Project(b, x, y, radius, cosine, sine)
 						local low, high = ClipMinimap(ax, ay, bx - ax, by - ay, inset, square)
 						Segment(
-							owner,
+							self,
 							(ax + 1) * width / 2,
 							(ay - 1) * height / 2,
 							(bx + 1) * width / 2,
@@ -673,19 +664,15 @@ local function DrawMinimap(self)
 		end
 	end
 	HideUnused(self)
-	HideUnused(self.loading)
-	Pulse(self)
 end
 
 local function UpdateMinimap(self, elapsed)
-	if not (result and ns.db.journey) then
+	if not (goal and ns.db.journey) then
+		self.Goal:Hide()
 		self:Hide()
 		return
 	end
 	self.elapsed = self.elapsed + elapsed
-	if self.loading.used > 0 then
-		Pulse(self)
-	end
 	if self.elapsed >= 0.1 then
 		self.elapsed = 0
 		DrawMinimap(self)
@@ -700,22 +687,20 @@ function ns.SetJourneyRoute(destination, route)
 		paths[#paths + 1] = {
 			mode = leg.mode,
 			points = ns.Planner.LegPoints(leg, ns.Routes),
-			measured = leg.measured,
-			walkError = leg.walkError,
-			settling = route.settling,
 		}
 	end
 	-- The map refreshes every provider when it opens, so a closed one is left until then.
-	if provider and WorldMapFrame:IsShown() then
+	if provider and (WorldMapFrame:IsShown() or not destination) then
 		provider:RefreshAllData()
 	end
 	if minimap then
-		if route then
+		if destination then
 			minimap.elapsed = 0
 			minimap:SetScript("OnUpdate", UpdateMinimap)
 			minimap:Show()
 			DrawMinimap(minimap)
 		else
+			minimap.Goal:Hide()
 			minimap:SetScript("OnUpdate", nil)
 			minimap:Hide()
 		end
@@ -731,6 +716,9 @@ ns.Init(function()
 	minimap:SetAllPoints(Minimap)
 	minimap:EnableMouse(false)
 	minimap.lines, minimap.underlines, minimap.used = {}, {}, 0
-	LoadingLayer(minimap)
+	minimap.Goal = Minimap:CreateTexture(nil, "OVERLAY")
+	minimap.Goal:SetAtlas(GOAL_ATLAS)
+	minimap.Goal:SetSize(16, 16)
+	minimap.Goal:Hide()
 	minimap:Hide()
 end)

@@ -31,7 +31,9 @@ local function DepartureText(departure)
 end
 
 local function RowColor(row)
-	return row.current and OBJECTIVE_TRACKER_COLOR.NormalHighlight or OBJECTIVE_TRACKER_COLOR.Normal
+	return row.grey and GRAY_FONT_COLOR
+		or row.current and OBJECTIVE_TRACKER_COLOR.NormalHighlight
+		or OBJECTIVE_TRACKER_COLOR.Normal
 end
 
 function ModuleMixin:LayoutContents()
@@ -130,8 +132,8 @@ local function JourneyDistance(result, index)
 	return math.max(0, yards + path.later)
 end
 
-local function JourneyHeader(result, index)
-	if not result then
+local function JourneyHeader(result, index, loading)
+	if not result or loading then
 		module.distance = nil
 		return "Journey"
 	end
@@ -183,9 +185,8 @@ local function RefreshTracker(dockID, yards)
 		end
 	end
 	local blocks = {}
-	local journeyTitle, journeyRows, journeyResult, journeyIndex = ns.JourneyInfo()
+	local journeyTitle, journeyRows, journeyResult, journeyIndex, loading = ns.JourneyInfo()
 	if journeyTitle then
-		journeyTitle = journeyTitle:gsub(" · %d+:%d+$", "")
 		blocks[#blocks + 1] = { key = "journey", title = journeyTitle, rows = journeyRows }
 	end
 	if blockKey then
@@ -194,9 +195,17 @@ local function RefreshTracker(dockID, yards)
 	module.dockID, module.mapDock = dockID, mapDock
 	module.hasDisplayPriority = journeyTitle ~= nil
 	local section = journeyTitle and "Journey" or kind and HEADER[kind] or ModuleMixin.headerText
-	local header = journeyTitle and JourneyHeader(journeyResult, journeyIndex) or section
+	local header = journeyTitle and JourneyHeader(journeyResult, journeyIndex, loading) or section
 	if not journeyTitle then
 		module.distance = nil
+	end
+	module.Spinner:SetShown(loading == true)
+	if loading then
+		if not module.Spinner.animation:IsPlaying() then
+			module.Spinner.animation:Play()
+		end
+	else
+		module.Spinner.animation:Stop()
 	end
 	-- The section's identity affects layout; its live totals only change the header's single text line.
 	local changed = #blocks ~= #module.blocks or section ~= module.section
@@ -272,6 +281,18 @@ ns.Init(function()
 	module = CreateFrame("Frame", "ShortestPathForeverObjectiveTracker", UIParent, "ObjectiveTrackerModuleTemplate")
 	Mixin(module, ModuleMixin)
 	module.blocks = {}
+	-- Blizzard_SharedXML/SecureUIPanelTemplates.xml uses this atlas and rotation for its loading spinner.
+	module.Spinner = module.Header:CreateTexture(nil, "OVERLAY")
+	module.Spinner:SetAtlas("common-loadingspinnercircle")
+	module.Spinner:SetSize(12, 12)
+	module.Spinner:SetPoint("LEFT", module.Header.Text, "RIGHT", 6, 0)
+	local animation = module.Spinner:CreateAnimationGroup()
+	animation:SetLooping("REPEAT")
+	local rotation = animation:CreateAnimation("Rotation")
+	rotation:SetDuration(1)
+	rotation:SetDegrees(-360)
+	module.Spinner.animation = animation
+	module.Spinner:Hide()
 	module.section = ModuleMixin.headerText
 	module:SetHeader(ModuleMixin.headerText)
 	-- Above quests, below SkillUp Forever (-2) and Legacy Here (0, -1): each needs its own slot.

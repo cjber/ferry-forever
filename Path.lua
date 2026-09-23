@@ -1599,8 +1599,12 @@ pump = function()
 		end
 	until clock() >= finish
 	if #queue == 0 then
-		-- Endpoint frontiers and cost vectors survive; the geometry grids are cheap to recover.
+		-- Exact endpoint costs survive; decoded grids and local trees are only useful during active work.
 		for _, st in pairs(states) do
+			for _, entry in ipairs(st.endTrees or {}) do
+				entry.tree = nil
+			end
+			st.endTrees = nil
 			for k in pairs(st.used) do
 				evict(st, k)
 			end
@@ -1685,9 +1689,26 @@ end
 function Path.Resume(job)
 	if job.paused and not job.done and not job.cancelled then
 		job.paused = false
+		job.co = job.co or coroutine.create(start)
 		queue[#queue + 1] = job
 		schedule()
 	end
+end
+
+-- A proved journey needs the exact costs and validity/bounds, not a suspended Dijkstra stack.
+-- If a later timetable exposes another alternative, Resume rebuilds only the missing frontier.
+function Path.ReleaseMany(job)
+	Path.Pause(job)
+	job.co, job.scratch, job.callback, job.progress = nil, nil, nil, nil
+end
+
+function Path.ClearCaches()
+	-- Cancellation removes a journey's jobs first; never invalidate another active search's grids.
+	if #queue > 0 then
+		return
+	end
+	states, spare = {}, nil
+	decodedKB, decodedCount, graphKB = 0, 0, 0
 end
 
 function Path.Cancel(job)

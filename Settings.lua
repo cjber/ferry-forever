@@ -30,6 +30,7 @@ local function Perf()
 	end
 	-- Updating memory walks every addon's allocations, so only do it on this explicit request.
 	if UpdateAddOnMemoryUsage and GetAddOnMemoryUsage then
+		collectgarbage("collect")
 		UpdateAddOnMemoryUsage()
 		local base, nav = GetAddOnMemoryUsage(addonName) or 0, 0
 		for _, map in ipairs({ 0, 1, 2991 }) do
@@ -38,7 +39,9 @@ local function Perf()
 				nav = nav + (GetAddOnMemoryUsage(name) or 0)
 			end
 		end
-		ns.Print(string.format("Memory: %.1f KB addon + %.1f KB walking maps = %.1f KB", base, nav, base + nav))
+		ns.Print(
+			string.format("Memory (collected): %.1f KB addon + %.1f KB walking maps = %.1f KB", base, nav, base + nav)
+		)
 	else
 		ns.Print("Memory accounting is unavailable on this client.")
 	end

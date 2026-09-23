@@ -17,11 +17,10 @@ ns.HasJourney = function() return route ~= nil end
 ns.CurrentRide = function() return onTaxi and 123 end
 ns.JourneyInfo = function()
  if not route then return end
- local status = settling and "finding the fastest way..." or ns.FormatCountdown(route.arrive - ns.NowMs())
- local title = "Journey to Silithus · " .. status
+ local title = "Journey to Silithus"
  local rows = {}
  for i = index, #route.legs do rows[#rows + 1] = {key=i, text="Step " .. i, current=i==index} end
- return title, rows, route, index
+ return title, rows, route, index, settling
 end
 local function point(x, y, map, z) return {x=x, y=y or 0, map=map or 1, z=z} end
 local function leg(mode, points)
@@ -107,13 +106,15 @@ walk.walkPoints = {point(0), point(0, 400), point(300, 400), point(300)}
 assert(refresh(true) == "Journey  44:47 · 1.1k yd", "measured geometry invalidates cached distance")
 settling = true
 refresh(true)
-assert(block.HeaderText:GetText() == "Journey to Silithus · finding the fastest way...")
+assert(block.HeaderText:GetText() == "Journey to Silithus" and tracker.Spinner.animation:IsPlaying())
+assert(tracker.Header.text == "Journey", "loading suppresses totals")
 combat = true
 marks, texts = dirty, headers
 posY = 200
 tick()
 assert(dirty == marks and headers == texts, "combat defers the new header too")
 combat = false
+settling = false
 assert(refresh() == "Journey  44:46 · 900 yd")
 route = nil
 refresh(true)
