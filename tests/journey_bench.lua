@@ -28,7 +28,7 @@ for _, case in ipairs({
 	ns.Print = function(message)
 		error(message)
 	end
-	local jobs, nextFrame, rounds, resets = {}, nil, 0, 0
+	local jobs, nextFrame, rounds, resets, plannerCPU = {}, nil, 0, 0, 0
 	local drawn = {}
 	local draw = ns.SetJourneyRoute
 	ns.SetJourneyRoute = function(g, r)
@@ -48,7 +48,10 @@ for _, case in ipairs({
 	local plan = ns.Planner.Plan
 	ns.Planner.Plan = function(options)
 		rounds = rounds + 1
-		return plan(options)
+		local started = os.clock()
+		local planned = plan(options)
+		plannerCPU = plannerCPU + (os.clock() - started) * 1000
+		return planned
 	end
 	for _, method in ipairs({ "Find", "FindMany" }) do
 		local find = ns.Path[method]
@@ -74,12 +77,15 @@ for _, case in ipairs({
 		driver.update(1 / 60)
 		assert(frames < 20000, "journey did not settle")
 	end
-	local cpu, many = 0, 0
+	local cpu, many, probes = 0, 0, 0
 	for _, job in ipairs(jobs) do
 		cpu = cpu + job.cpu
+		if job.costOnly then
+			probes = probes + 1
+		end
 		if job.method == "FindMany" then
 			many = many + 1
-			print(string.format("  FindMany map %d: %.1f ms, %d frames", job.map, job.cpu, job.frames))
+			print(string.format("  FindMany map %d: %.1f ms, %d slices", job.map, job.cpu, job.frames))
 		end
 	end
 	local settling, round = ns.JourneyStatus()
@@ -87,19 +93,22 @@ for _, case in ipairs({
 	assert(driver.shown(), "expected reachable journey")
 	print(
 		string.format(
-			"%s: %d searches (%d many), %d planner calls, %d settle rounds, %d frames, %.1f ms, %d straight resets",
+			"%s: %d searches (%d many, %d probes), %d planner calls, %d settle rounds, %d frames, "
+				.. "%.1f ms search, %.1f ms planner, %d straight resets",
 			case[1],
 			#jobs,
 			many,
+			probes,
 			rounds,
 			round,
 			frames,
 			cpu,
+			plannerCPU,
 			resets
 		)
 	)
 	if ns.Path.FindMany then
-		assert(many == 2 and round == 1 and rounds == 2, "one preview and one exact plan")
+		assert(many == 2 and round == 1 and rounds >= 2, "one committed route")
 		assert(resets == 0, "drawn walks cannot revert to straight lines")
 	end
 	ns.ClearJourney()

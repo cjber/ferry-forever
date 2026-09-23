@@ -503,5 +503,45 @@ for _, water in ipairs({ false, true }) do
 	near(only(reversed, "walk").yards, water and 2000 or 3000)
 end
 
+-- Different place identities can share endpoints. Their bounds must not hide an exact measurement.
+do
+	local o = options()
+	o.walks = { { from = o.from, to = o.to, cost = 100 }, { from = o.from, to = o.to, cost = 0, estimated = true } }
+	local measured = Plan(o)
+	near(only(measured, "walk").yards, 100)
+	assert(not measured.needsStart)
+	o.walks[3] = { from = o.from, to = o.to, cost = 50 }
+	near(only(Plan(o), "walk").yards, 50)
+end
+
+-- The earlier flight arrival has already visited the only onward stop. A later arrival without that
+-- visit must survive; otherwise lowering an unrelated walk can make the alleged best route worse.
+do
+	local a, y, x, target = point(1, 10), point(1, 20), point(1, 30), point(1, 40)
+	local o = {
+		from = point(1),
+		to = target,
+		now = 0,
+		walkSpeed = 1,
+		exactMaps = { [1] = true },
+		taxiNodes = { a, y, x },
+		taxiPaths = {
+			{ from = 2, to = 3, seconds = 1 },
+			{ from = 1, to = 3, seconds = 1 },
+			{ from = 3, to = 2, seconds = 1 },
+		},
+	}
+	o.walks = {
+		{ from = o.from, to = a, cost = 2 },
+		{ from = o.from, to = y, cost = 1, estimated = true },
+		{ from = y, to = target, cost = 3 },
+	}
+	local bounded = Plan(o)
+	assert(bounded and not bounded.needsStart and not bounded.needsGoal)
+	near(bounded.arrive, 10000)
+	o.walks[2].cost, o.walks[2].estimated = 100, false
+	near(Plan(o).arrive, bounded.arrive)
+end
+
 print("planner_spec: ok")
 assert(loadfile("tests/journey_spec.lua"))()

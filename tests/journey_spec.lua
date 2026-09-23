@@ -30,6 +30,7 @@ ns.Path = {
 	end,
 }
 local function begin()
+	ns.ClearJourney()
 	driver.begin(here, target)
 end
 local function costs(job, cost, reason)

@@ -43,10 +43,11 @@ dock draws its boat and zeppelin routes. On the Azeroth map, crossings curve fro
 sea; closer maps keep the real sailing path to the map edge.
 
 While a journey's walks are being checked, the tracker says it is finding the fastest way and the route
-pulses softly on the map and minimap. Walking costs from your position and to the destination are checked
-in two batches before choosing the route, so long journeys no longer repeat rounds of checking different
-walks. Drawn paths stay visible during refreshes. Your position is checked again when you leave the path or
-once a minute; the destination's costs last for the journey. Once settled, the arrival countdown returns. Walk
+pulses softly on the map and minimap. Easy routes settle quickly, and longer searches stop once unchecked
+alternatives cannot beat the chosen route, without searching the whole continent. Drawn paths stay visible
+during refreshes and repeated journeys to the same destination reuse their walking costs. Your position is
+checked again when you leave the path or once a minute; standing still or moving a few yards within the same
+walking-map cell reuses its costs. Once settled, the arrival countdown returns. Walk
 steps name the dock, pier, lift or flight master you are heading for. An optional compass strip follows your facing and
 marks Guide's next two turns, the next stop and your destination, with yards to the next turn. It is off
 by default and can be turned on in `/path`.

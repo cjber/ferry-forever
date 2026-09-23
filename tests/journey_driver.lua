@@ -21,7 +21,7 @@ local env = setmetatable({
 		return now / 1000
 	end,
 	GetUnitSpeed = function()
-		return 0, 7
+		return 0, ns.speed or 7
 	end,
 	canaccessvalue = function()
 		return true

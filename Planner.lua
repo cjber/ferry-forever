@@ -138,19 +138,23 @@ local function Gap(a, b)
 	return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 + dz ^ 2)
 end
 
-local function SamePoint(a, b)
-	return a.map == b.map and a.x == b.x and a.y == b.y and a.z == b.z
+local function PointKey(point)
+	return string.format(
+		"%d:%.17g:%.17g:%s",
+		point.map,
+		point.x,
+		point.y,
+		point.z and string.format("%.17g", point.z) or ""
+	)
 end
 
--- Endpoint batches supply directed, exact running-yard costs (false for no path). Later entries override earlier
--- ones for Remaining(). Straight lines are only previews or the fallback on maps without walking data.
-local function WalkCost(options, a, b)
-	local walks = options.walks or {}
-	for index = #walks, 1, -1 do
-		local walk = walks[index]
-		if SamePoint(walk.from, a) and SamePoint(walk.to, b) then
-			return walk.cost, false
-		end
+-- Endpoint batches supply exact costs or lower bounds in running yards. Index once per plan: repeatedly
+-- scanning every measurement for every edge made frequent bounded plans more expensive than their searches.
+local function WalkCost(options, a, b, index)
+	local from = index[a.pointKey]
+	local walk = from and from[b.pointKey]
+	if walk then
+		return walk.cost, walk.estimated or false
 	end
 	if options.exactMaps and options.exactMaps[a.map] then
 		return false, false
@@ -211,19 +215,42 @@ function Planner.Places(options)
 	return places
 end
 
--- Changing arrival states must not turn a round trip into a shortcut around a measured continuous walk.
-local function Revisits(previous, current, target, count)
+-- A cheaper arrival only dominates another if it leaves at least the same onward choices. The no-revisit
+-- rule depends on the path taken, so keeping just one arrival per travel mode can discard the fastest route.
+local function Revisits(labels, current, target)
 	while current do
-		if (current - 1) % count + 1 == target then
+		local label = labels[current]
+		if label.node == target then
 			return true
 		end
-		current = previous[current] and previous[current].index
+		current = label.parent
 	end
 	return false
 end
 
+local function Subset(labels, first, second, target)
+	while first do
+		local label = labels[first]
+		if label.node ~= target and not Revisits(labels, second, label.node) then
+			return false
+		end
+		first = label.parent
+	end
+	return true
+end
+
 function Planner.Plan(options)
-	local nodes, edges, masses = {}, {}, {}
+	local nodes, edges, masses, walkIndex = {}, {}, {}, {}
+	for _, walk in ipairs(options.walks or {}) do
+		local from, to = PointKey(walk.from), PointKey(walk.to)
+		walkIndex[from] = walkIndex[from] or {}
+		local previous = walkIndex[from][to]
+		-- Co-located docks and taxi nodes share a physical endpoint. An unresolved alias must not
+		-- replace an exact cost, while the latest exact Remaining() measurement still wins.
+		if not previous or previous.estimated or not walk.estimated then
+			walkIndex[from][to] = walk
+		end
+	end
 	local docks, taxis, portals = {}, {}, {}
 	local speed = options.walkSpeed or 7
 	assert(speed > 0, "walkSpeed must be positive")
@@ -232,6 +259,7 @@ function Planner.Plan(options)
 		local index = #nodes + 1
 		nodes[index] =
 			{ kind = kind, id = id, map = point.map, x = point.x, y = point.y, z = point.z, label = point.label }
+		nodes[index].pointKey = PointKey(point)
 		edges[index] = {}
 		masses[index] = Planner.Landmass(point, options.landmasses or {})
 		return index
@@ -314,9 +342,9 @@ function Planner.Plan(options)
 					local origin, destination = nodes[first], nodes[last]
 					local baked, yards, estimated = BakedCost(options, origin, destination)
 					if not baked then
-						yards, estimated = WalkCost(options, origin, destination)
+						yards, estimated = WalkCost(options, origin, destination, walkIndex)
 					end
-					if yards then
+					if yards and first ~= goal and last ~= start then
 						Edge(first, last, {
 							mode = "walk",
 							duration = yards / speed * 1000,
@@ -333,75 +361,152 @@ function Planner.Plan(options)
 	-- invents fresh straight-line shortcuts around a measured detour (or a blocked walk), so it must be one search.
 	-- Zero-length transfers still connect co-located places and break a flight for boarding costs.
 	local count = #nodes
-	local arrival, visited, previous = { [start] = options.now }, {}, {}
-	local finishAt
-	for _ = 1, count * 3 do
-		local current, earliest
-		for index = 1, count * 3 do
-			if not visited[index] and arrival[index] and (not earliest or arrival[index] < earliest) then
-				current, earliest = index, arrival[index]
+	-- Ignoring arrival modes and revisits gives an admissible remaining-time bound. It keeps the extra
+	-- labels needed for correctness from exploring unrelated routes before reaching the destination.
+	local backward, lower, done = {}, { [goal] = 0 }, {}
+	for from, adjacent in ipairs(edges) do
+		for _, edge in ipairs(adjacent) do
+			local duration = edge.duration
+			if edge.route and not edge.aboard and not (options.anchors or {})[edge.route] then
+				duration = duration + options.routes[edge.route].period / 2
+			end
+			backward[edge.to] = backward[edge.to] or {}
+			local list = backward[edge.to]
+			list[#list + 1], list[#list + 2] = from, duration
+		end
+	end
+	for _ = 1, count do
+		local current, best
+		for node, cost in pairs(lower) do
+			if not done[node] and (not best or cost < best) then
+				current, best = node, cost
 			end
 		end
 		if not current then
-			return nil
-		end
-		local node = (current - 1) % count + 1
-		if node == goal then
-			finishAt = current
 			break
 		end
-		visited[current] = true
-		local flying, walked = current > count and current <= count * 2, current > count * 2
-		for _, edge in ipairs(edges[node]) do
-			-- Unknown nodes may be learned on foot or crossed in flight, but never used to land.
-			local canLeave = not flying or not nodes[node].undiscovered or edge.mode == "flight"
-			if walked and edge.mode == "walk" and edge.yards > 0 then
-				canLeave = false
+		done[current] = true
+		local adjacent = backward[current] or {}
+		for i = 1, #adjacent, 2 do
+			local node, cost = adjacent[i], best + adjacent[i + 1]
+			if not lower[node] or cost < lower[node] then
+				lower[node] = cost
 			end
-			local wait, estimated = 0, edge.estimated or false
-			if edge.route and not edge.aboard then
-				local route = options.routes[edge.route]
-				local anchor = (options.anchors or {})[edge.route]
-				if anchor then
-					local _, _, departIn = Model.Visit(route, edge.stop, (earliest - anchor.epoch) % route.period)
-					wait = departIn
-				else
-					wait, estimated = route.period / 2, true
+		end
+	end
+	local labels =
+		{ { node = start, state = start, time = options.now, key = options.now + (lower[start] or math.huge) } }
+	local states, heap = { [start] = { 1 } }, { 1 }
+	local function push(id)
+		local at = #heap + 1
+		while at > 1 do
+			local parent = math.floor(at / 2)
+			if labels[heap[parent]].key <= labels[id].key then
+				break
+			end
+			heap[at], at = heap[parent], parent
+		end
+		heap[at] = id
+	end
+	local function pop()
+		local first, last = heap[1], table.remove(heap)
+		if #heap > 0 then
+			local at = 1
+			while at * 2 <= #heap do
+				local child = at * 2
+				if child < #heap and labels[heap[child + 1]].key < labels[heap[child]].key then
+					child = child + 1
 				end
-			elseif edge.mode == "flight" and not flying then
-				wait = BOARDING
+				if labels[last].key <= labels[heap[child]].key then
+					break
+				end
+				heap[at], at = heap[child], child
 			end
-			local depart = earliest + wait
-			local finish = depart + edge.duration
-			local target = edge.to + (edge.mode == "flight" and count or 0)
-			if edge.mode == "walk" and (walked or edge.yards > 0) then
-				target = edge.to + count * 2
+			heap[at] = last
+		end
+		return first
+	end
+	local finishAt
+	while #heap > 0 do
+		local current = pop()
+		local label = labels[current]
+		if not label.discarded then
+			local node, earliest = label.node, label.time
+			if node == goal then
+				finishAt = current
+				break
 			end
-			if
-				canLeave
-				and not visited[target]
-				and (not arrival[target] or finish < arrival[target])
-				and not Revisits(previous, current, edge.to, count)
-			then
-				arrival[target] = finish
-				previous[target] = {
-					index = current,
-					leg = {
-						mode = edge.mode,
-						from = nodes[node],
-						to = nodes[edge.to],
-						depart = depart,
-						arrive = finish,
-						wait = wait,
-						estimated = estimated,
-						route = edge.route,
-						aboard = edge.aboard,
-						boarding = edge.stop,
-						alighting = edge.alighting,
-						hops = edge.path and { edge.path } or nil,
-						yards = edge.yards,
-					},
-				}
+			local flying, walked = label.state > count and label.state <= count * 2, label.state > count * 2
+			for _, edge in ipairs(edges[node]) do
+				-- Unknown nodes may be learned on foot or crossed in flight, but never used to land.
+				local canLeave = not flying or not nodes[node].undiscovered or edge.mode == "flight"
+				if walked and edge.mode == "walk" and edge.yards > 0 then
+					canLeave = false
+				end
+				local wait, estimated = 0, edge.estimated or false
+				if edge.route and not edge.aboard then
+					local route = options.routes[edge.route]
+					local anchor = (options.anchors or {})[edge.route]
+					if anchor then
+						local _, _, departIn = Model.Visit(route, edge.stop, (earliest - anchor.epoch) % route.period)
+						wait = departIn
+					else
+						wait, estimated = route.period / 2, true
+					end
+				elseif edge.mode == "flight" and not flying then
+					wait = BOARDING
+				end
+				local depart = earliest + wait
+				local finish = depart + edge.duration
+				local target = edge.to + (edge.mode == "flight" and count or 0)
+				if edge.mode == "walk" and (walked or edge.yards > 0) then
+					target = edge.to + count * 2
+				end
+				if canLeave and lower[edge.to] and not Revisits(labels, current, edge.to) then
+					local peers = states[target] or {}
+					local dominated = false
+					for _, peer in ipairs(peers) do
+						local other = labels[peer]
+						if not other.discarded and other.time <= finish and Subset(labels, peer, current, edge.to) then
+							dominated = true
+							break
+						end
+					end
+					if not dominated then
+						local id = #labels + 1
+						labels[id] = {
+							node = edge.to,
+							state = target,
+							time = finish,
+							key = finish + (lower[edge.to] or math.huge),
+							parent = current,
+							leg = {
+								mode = edge.mode,
+								from = nodes[node],
+								to = nodes[edge.to],
+								depart = depart,
+								arrive = finish,
+								wait = wait,
+								estimated = estimated,
+								route = edge.route,
+								aboard = edge.aboard,
+								boarding = edge.stop,
+								alighting = edge.alighting,
+								hops = edge.path and { edge.path } or nil,
+								yards = edge.yards,
+							},
+						}
+						for _, peer in ipairs(peers) do
+							local other = labels[peer]
+							if not other.discarded and finish <= other.time and Subset(labels, id, peer) then
+								other.discarded = true
+							end
+						end
+						states[target] = peers
+						peers[#peers + 1] = id
+						push(id)
+					end
+				end
 			end
 		end
 	end
@@ -409,9 +514,19 @@ function Planner.Plan(options)
 		return nil
 	end
 	local reversed, legs, current = {}, {}, finishAt
-	while previous[current] do
-		reversed[#reversed + 1] = previous[current].leg
-		current = previous[current].index
+	local needsStart, needsGoal, pendingWalks = false, false, {}
+	while labels[current].parent do
+		local leg = labels[current].leg
+		-- Zero-cost lower bounds may disappear from the displayed steps, but still need proof.
+		if leg.mode == "walk" and leg.estimated then
+			if leg.from.kind == "start" or leg.to.kind == "goal" then
+				pendingWalks[#pendingWalks + 1] = leg
+			end
+			needsStart = needsStart or leg.from.kind == "start"
+			needsGoal = needsGoal or (leg.to.kind == "goal" and leg.from.kind ~= "start")
+		end
+		reversed[#reversed + 1] = leg
+		current = labels[current].parent
 	end
 	for index = #reversed, 1, -1 do
 		local leg, last = reversed[index], legs[#legs]
@@ -425,5 +540,11 @@ function Planner.Plan(options)
 			legs[#legs + 1] = leg
 		end
 	end
-	return { arrive = arrival[finishAt], legs = legs }
+	return {
+		arrive = labels[finishAt].time,
+		legs = legs,
+		needsStart = needsStart,
+		needsGoal = needsGoal,
+		pendingWalks = pendingWalks,
+	}
 end

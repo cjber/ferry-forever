@@ -54,11 +54,17 @@ local function compare(map, from, targets, water)
 			points and math.abs(costs[i] - cost) < 1e-6 or not points and costs[i] == false,
 			string.format("forward %d/%d: %s vs %s", map, i, tostring(costs[i]), tostring(cost))
 		)
+		if points then
+			assert(Path.LowerBound(map, from, to) <= cost + 1e-6, "geometric bound exceeded a forward cost")
+		end
 		points, cost = Path.FindSync(map, to, from, water)
 		assert(
 			points and math.abs(reverse[i] - cost) < 1e-6 or not points and reverse[i] == false,
 			string.format("reverse %d/%d: %s vs %s", map, i, tostring(reverse[i]), tostring(cost))
 		)
+		if points then
+			assert(Path.LowerBound(map, to, from) <= cost + 1e-6, "geometric bound exceeded a reverse cost")
+		end
 		comparisons = comparisons + 2
 	end
 end
@@ -136,3 +142,77 @@ end
 rawset(_G, "geterrorhandler", previousHandler)
 assert(reported and failures == 1 and recovered)
 print(string.format("path_many_spec: %d exact forward/reverse comparisons, queue and cancellation ok", comparisons))
+
+-- Every published frontier bounds every still-unsettled target, even while another map's local grid
+-- search owns the scratch heap. Pausing one batch must leave its peer and a geometry search runnable.
+local isolated = {}
+assert(loadfile("Path.lua"))("ShortestPathForever", isolated)
+Path = isolated.Path
+Path.clusters = 4
+Path.after = function(fn)
+	frame = fn
+end
+local sources = { ns.TaxiNodes[26], ns.TaxiNodes[6] }
+local targetLists = {
+	{ ns.TaxiNodes[27], ns.TaxiNodes[39], ns.TaxiNodes[26], { x = 5500, y = -1500 } },
+	{ ns.TaxiNodes[7], ns.TaxiNodes[6], ns.TaxiNodes[67] },
+}
+local expected, incremental, complete = {}, {}, {}
+for i, from in ipairs(sources) do
+	expected[i] = Path.FindManySync(from.map, from, targetLists[i], i == 2, i == 2)
+end
+local realClock, fakeTime, pauses = Path.clock, 0, 0
+Path.clock = function()
+	fakeTime = fakeTime + 0.01
+	return fakeTime
+end
+Path.budget = 0.05
+local function check(i, costs, current)
+	for target, cost in ipairs(expected[i]) do
+		if costs[target] ~= nil then
+			assert(costs[target] == cost, "an incremental cost must already be exact")
+		elseif cost then
+			assert(current.radius <= cost + 1e-6, "frontier exceeded an unsettled target's cost")
+		end
+	end
+end
+for i, from in ipairs(sources) do
+	incremental[i] = Path.FindMany(
+		from.map,
+		from,
+		targetLists[i],
+		function(costs, err, current)
+			assert(not err)
+			check(i, costs, current)
+			complete[i] = true
+		end,
+		i == 2,
+		i == 2,
+		function(costs, _, current)
+			check(i, costs, current)
+			if i == 1 and pauses == 0 and current.radius > 0 then
+				Path.Pause(current)
+				pauses = pauses + 1
+			end
+		end
+	)
+end
+local geometry
+Path.Find(1, ns.TaxiNodes[26], ns.TaxiNodes[39], function(points)
+	geometry = points
+end)
+while frame do
+	local fn = frame
+	frame = nil
+	fn()
+end
+assert(pauses == 1 and not complete[1] and complete[2] and geometry)
+Path.Resume(incremental[1])
+while frame do
+	local fn = frame
+	frame = nil
+	fn()
+end
+assert(complete[1])
+Path.clock, Path.budget = realClock, 3
+print("incremental frontier bounds, cross-map interleaving, pause/resume and geometry: ok")

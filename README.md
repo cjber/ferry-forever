@@ -16,10 +16,12 @@ load only when a route needs them.
   rather than straight at the stop (or, with *Guide marks only where each step ends* in `/path`, straight at the next boat, lift or flight master), and hands your tracked quest back when you finish. To head for a quest, pick **Plan journey** from its right-click menu in the objective
   tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
 - **Finding the fastest way.** The tracker says when a journey is still being checked, and its route pulses
-  softly on the map and minimap while two searches measure walks from your position and to your destination.
-  It then chooses the route once and draws only its walking legs; drawn paths stay visible during refreshes.
-  Your position's costs refresh when you leave the path or once a minute, while the destination's costs stay valid
-  for the journey. Walk steps name the dock, pier, lift or flight master you are heading for.
+  softly on the map and minimap while the fastest route is being proved. Nearby walks can settle immediately;
+  longer searches stop as soon as no unchecked alternative can beat the chosen route. Only that route gets
+  walking geometry, and drawn paths stay visible during refreshes. Your position's costs refresh when you leave
+  the path or once a minute. Repeating a destination reuses its costs; standing still or moving within the same
+  walking-map cell by at most three yards also reuses your position's costs. Walk steps name the dock, pier, lift
+  or flight master you are heading for.
 - **An optional compass.** A slim strip at the top of the screen follows your facing and marks Guide's next
   two turns, the next stop and your destination. Turn it on in `/path`.
 - **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower a matching
@@ -67,7 +69,8 @@ python3 tools/gen_transit.py         # regenerate Data/Transports.lua, Data/Taxi
 tools/draw_zeppelin.py               # redraw media/zeppelin.tga (the game has no zeppelin map icon)
 luajit tests/model_spec.lua          # timetable, ride fitting and wire format
 luajit tests/planner_spec.lua        # planning and real-nav journey regressions
-luajit tests/path_many_spec.lua      # batch costs, reverse costs and graph symmetry
+luajit tests/path_many_spec.lua      # exact costs, frontier bounds, interleaving and graph symmetry
+luajit tests/journey_optimal_spec.lua # 30 seeded full-search comparisons and cache invalidation
 luajit -joff tests/journey_bench.lua  # searches, rounds and frames at the 3 ms budget
 luajit tests/walk_sim.lua            # follow four real routes; assert zero route flips
 ```

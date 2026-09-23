@@ -10,7 +10,7 @@ local Path = {}
 ns.Path = Path
 
 Path.budget = 3 -- milliseconds of CPU per frame, shared by Find and FindMany
-Path.clusters = 12 -- decoded cluster grids kept in memory (at least 4)
+Path.clusters = 64 -- decoded cluster grids kept in memory (at least 4)
 Path.clock = debugprofilestop or function()
 	return os.clock() * 1000
 end
@@ -36,14 +36,12 @@ do
 end
 
 local function num(s, i, width)
-	local v = 0
-	for j = i, i + width - 1 do
-		v = v * 64 + B64[byte(s, j)]
-	end
-	return v
+	local a, b, c = byte(s, i, i + width - 1)
+	local value = B64[a] * 64 + B64[b]
+	return width == 2 and value or value * 64 + B64[c]
 end
 
--- Slicing: tick() yields once the frame's deadline passes. Only one search runs at a time (see pump).
+-- Slicing yields at the shared deadline; pump swaps each coroutine's private search scratch before resuming it.
 local deadline, ops, expansions = huge, 0, 0
 local clock = function()
 	return Path.clock()
@@ -168,8 +166,8 @@ end
 
 -- The node on local cell lc for a link layer (0 the base surface, i the ith floor up, -1 the surface nearest
 -- height h), with its height gap for -1. The cluster must be decoded.
-local function surface(st, k, lc, layer, h)
-	local val, z, at = st.val[k], st.z[k], st.at[k]
+local function surface(st, k, lc, layer, h, values, heights, floors)
+	local val, z, at = values or st.val[k], heights or st.z[k], floors or st.at[k]
 	local first = at[-(lc + 1)]
 	if layer == 0 then
 		return val[lc + 1] ~= 0 and lc or nil
@@ -245,9 +243,10 @@ local function decodeFloors(st, k, val, z)
 			val[node + 1], z[node + 1], at[node + 1] = B64[byte(s, pos)], num(s, pos + 1, 2) - 2048, lc
 			local steps = num(s, pos + 3, 2)
 			for d = 0, 7 do
-				if floor(steps / 2 ^ d) % 2 == 1 then
+				if steps % 2 == 1 then
 					addLink(links, node, d, -1)
 				end
+				steps = floor(steps / 2)
 			end
 			pos, node = pos + 5, node + 1
 		end
@@ -282,49 +281,52 @@ local function decodeGrid(st, k)
 	end
 	local s, C = concat(chunks), st.C
 	local val, m = {}, {}
-	local n, code = 0, 0
+	local n, valueCode, moveCode = 0, 0, 0
 	for i = 1, #s do
 		local sym = B64[byte(s, i)]
 		if sym < 48 then
-			code = sym
+			valueCode, moveCode = floor(sym / 16), (sym % 16) * 16
 			n = n + 1
-			val[n], m[n] = floor(code / 16), (code % 16) * 16
+			val[n], m[n] = valueCode, moveCode
 		else
 			for _ = 48, sym do
 				n = n + 1
-				val[n], m[n] = floor(code / 16), (code % 16) * 16
+				val[n], m[n] = valueCode, moveCode
 			end
 		end
 	end
 	-- m[i] packs the open moves (1 = +x, 2 = +y, 4 = +x+y, 8 = +x-y) over the data flags * 16.
 	local N = C * C
-	for a = 0, N - 1 do
-		local i = a + 1
+	-- Descending cells let diagonals reuse their forward neighbours' decoded moves in the same pass.
+	for a = N - 1, 0, -1 do
+		local i, ly = a + 1, a % C
 		local f = m[i] / 16
 		if val[i] ~= 0 then
 			if a + C < N and val[i + C] ~= 0 and f % 2 == 0 then
 				m[i] = m[i] + 1
 			end
-			if a % C < C - 1 and val[i + 1] ~= 0 and f % 4 < 2 then
+			if ly < C - 1 and val[i + 1] ~= 0 and f % 4 < 2 then
 				m[i] = m[i] + 2
 			end
 		end
-	end
-	-- Diagonals: either L-shaped detour open, or an explicit link.
-	local function X(j)
-		return m[j] % 2 == 1
-	end
-	local function Y(j)
-		return m[j] % 4 >= 2
-	end
-	for a = 0, N - 1 do
-		local i, ly = a + 1, a % C
+		-- Diagonals: either L-shaped detour open, or an explicit link.
 		if a + C < N and val[i] ~= 0 then
-			local f = floor(m[i] / 16)
-			if ly < C - 1 and val[i + C + 1] ~= 0 and ((X(i) and Y(i + C)) or (Y(i) and X(i + 1)) or f % 8 >= 4) then
+			if
+				ly < C - 1
+				and val[i + C + 1] ~= 0
+				and ((m[i] % 2 == 1 and m[i + C] % 4 >= 2) or (m[i] % 4 >= 2 and m[i + 1] % 2 == 1) or f % 8 >= 4)
+			then
 				m[i] = m[i] + 4
 			end
-			if ly > 0 and val[i + C - 1] ~= 0 and ((X(i) and Y(i + C - 1)) or (Y(i - 1) and X(i - 1)) or f >= 8) then
+			if
+				ly > 0
+				and val[i + C - 1] ~= 0
+				and (
+					(m[i] % 2 == 1 and m[i + C - 1] % 4 >= 2)
+					or (val[i - 1] ~= 0 and m[i - 1] % 64 < 32 and m[i - 1] % 32 < 16)
+					or f >= 8
+				)
+			then
 				m[i] = m[i] + 8
 			end
 		end
@@ -490,6 +492,7 @@ end
 
 local function search(st, k, swim, source, tree, goal, targets, left)
 	local val = grid(st, k)
+	-- A paused search retains these arrays even if another job evicts its cluster.
 	local m, z, at, links = st.moves[k], st.z[k], st.at[k], st.links[k]
 	local C, cs = st.C, st.cs
 	local N = C * C
@@ -580,7 +583,7 @@ local function search(st, k, swim, source, tree, goal, targets, left)
 					local d = l[e]
 					local tx, ty = ux + DX[d], uy + DY[d]
 					if tx >= 0 and ty >= 0 and tx < C and ty < C then
-						local v = surface(st, k, tx * C + ty, l[e + 1], z[i])
+						local v = surface(st, k, tx * C + ty, l[e + 1], z[i], val, z, at)
 						if v then
 							relax(v, d >= 4 and SQRT2 or 1)
 						end
@@ -673,7 +676,31 @@ local function neighbour(st, k, node, gx, gy, dx, dy, water)
 	local tk, tlc = floor(tx / C) * st.ny + floor(ty / C), (tx % C) * C + ty % C
 	if node < C * C then
 		local open
-		if dx == 0 or dy == 0 then
+		local val = tk == k and grid(st, k)
+		-- Most string-pulling steps stay on one base grid. Its decoded moves already check the
+		-- same detours; only a dry diagonal beside water needs the stricter surface checks below.
+		if
+			val
+			and (
+				water
+				or (
+					val[node + 1] ~= 2
+					and val[tlc + 1] ~= 2
+					and (dx == 0 or dy == 0 or (val[node + dx * C + 1] ~= 2 and val[node + dy + 1] ~= 2))
+				)
+			)
+		then
+			local m = st.moves[k]
+			if dy == 0 then
+				open = m[(dx > 0 and node or tlc) + 1] % 2 == 1
+			elseif dx == 0 then
+				open = m[(dy > 0 and node or tlc) + 1] % 4 >= 2
+			elseif dx == dy then
+				open = m[(dx > 0 and node or tlc) + 1] % 8 >= 4
+			else
+				open = m[(dx > 0 and node or tlc) + 1] % 16 >= 8
+			end
+		elseif dx == 0 or dy == 0 then
 			open = stepOpen(st, gx, gy, dx, dy, water)
 		else
 			open = diagonalOpen(st, gx, gy, dx, dy, water)
@@ -797,6 +824,7 @@ local function settle(st, swim, tree, k, node)
 		return false
 	end
 	local tries = 0
+	grid(st, k)
 	local h = st.z[k][node + 1]
 	local cell = cellOf(st, k, node)
 	local lx, ly = floor(cell / C), cell % C
@@ -844,7 +872,30 @@ local function pointNode(st, point)
 	return k, node, not node and "offmesh" or nil
 end
 
-local function run(map, from, to, waterWalking)
+-- Fixed places recur in both batches and in later journeys. Keep their small entrance-cost vectors, not the
+-- grid trees; cap the cache so moving start positions cannot grow it for the entire play session.
+local function connect(st, swim, k, node)
+	local key = k .. ":" .. node .. ":" .. swim
+	local entry = st.ends[key]
+	if not entry then
+		local tree = Tree()
+		node = settle(st, swim, tree, k, node)
+		entry = { node = node, edges = connections(st, tree, k), tree = tree }
+		-- A handful of local trees removes repeated endpoint searches without retaining a continent's grids.
+		st.endTrees = st.endTrees or {}
+		st.endTrees[#st.endTrees + 1] = entry
+		if #st.endTrees > 8 then
+			table.remove(st.endTrees, 1).tree = nil
+		end
+		if st.endCount >= 256 then
+			st.ends, st.endCount = {}, 0
+		end
+		st.ends[key], st.endCount = entry, st.endCount + 1
+	end
+	return entry.node, entry.edges, entry.tree
+end
+
+local function run(map, from, to, waterWalking, costOnly)
 	local st = State(map)
 	if not st then
 		return nil, "nodata"
@@ -866,98 +917,105 @@ local function run(map, from, to, waterWalking)
 	local C = st.C
 
 	local S, G = trees.S, trees.G
-	local same = sk == gk
-	sc = settle(st, swim, S, sk, sc)
-	gc = settle(st, swim, G, gk, gc)
-	if same then
-		endpoint(st, swim, S, sk, sc, { [gc] = true })
-	end
-	local direct = same and reached(S, gc) and S.g[gc + 1] or nil
+	local source, target, sourceTree, targetTree
+	sc, source, sourceTree = connect(st, swim, sk, sc)
+	gc, target, targetTree = connect(st, swim, gk, gc)
+	local key = table.concat({ sk, sc, gk, gc, swim }, ":")
+	st.paths = st.paths or {}
+	local cached = st.paths[key]
+	local hops, cost
+	local x0, y0, cs = st.x0, st.y0, st.cs
+	if cached then
+		hops, cost = cached.hops, cached.cost
+	else
+		local direct
+		if sk == gk and search(st, sk, swim, sc, S, gc) then
+			direct = S.g[gc + 1]
+		end
 
-	-- O(1)-ish reject: the endpoints' entrances must share a component.
-	local comps, shared = {}, false
-	for _, id in ipairs(nodesOf(st, sk)) do
-		local e = entrance(st, id)
-		if e and reached(S, e) then
+		local comps, shared = {}, false
+		for id in pairs(source) do
 			comps[st.ncomp[id]] = true
 		end
-	end
-	for _, id in ipairs(nodesOf(st, gk)) do
-		local e = entrance(st, id)
-		if e and reached(G, e) and comps[st.ncomp[id]] then
-			shared = true
+		for id in pairs(target) do
+			shared = shared or comps[st.ncomp[id]]
 		end
-	end
-	if not direct and not shared then
-		return nil, "unreachable"
-	end
+		if not direct and not shared then
+			return nil, "unreachable"
+		end
 
-	-- Abstract A* from START to GOAL through the entrance graph.
-	local x0, y0, cs = st.x0, st.y0, st.cs
-	local function world(id)
-		local k, lc = floor(id / 4096), st.ncell[id]
-		return x0 + (floor(k / st.ny) * C + floor(lc / C) + 0.5) * cs, y0 + ((k % st.ny) * C + lc % C + 0.5) * cs
-	end
-	-- Rounded graph edges and snapping must not let the heuristic overstate the remaining cost.
-	local goalCell = cellOf(st, gk, gc)
-	local goalX = x0 + (floor(gk / st.ny) * C + floor(goalCell / C) + 0.5) * cs
-	local goalY = y0 + (gk % st.ny * C + goalCell % C + 0.5) * cs
-	local lower = max(0, 1 - 0.5 / cs)
-	local function h(id)
-		local x, y = world(id)
-		return sqrt((x - goalX) ^ 2 + (y - goalY) ^ 2) * lower
-	end
-	agen = agen + 1
-	local gen = agen
-	hn = 0
-	local function relax(v, gv, parent)
-		if astamp[v] ~= gen or gv < ag[v] then
-			ag[v], apar[v], astamp[v] = gv, parent, gen
-			push(gv + (v == GOAL and 0 or h(v)), v)
+		-- Abstract A* from START to GOAL through the entrance graph.
+		local function world(id)
+			local k, lc = floor(id / 4096), st.ncell[id]
+			return x0 + (floor(k / st.ny) * C + floor(lc / C) + 0.5) * cs, y0 + ((k % st.ny) * C + lc % C + 0.5) * cs
 		end
-	end
-	for _, id in ipairs(nodesOf(st, sk)) do
-		local e = entrance(st, id)
-		if e and reached(S, e) then
-			relax(id, S.g[e + 1], START)
+		-- Rounded graph edges and snapping must not let the heuristic overstate the remaining cost.
+		local goalCell = cellOf(st, gk, gc)
+		local goalX = x0 + (floor(gk / st.ny) * C + floor(goalCell / C) + 0.5) * cs
+		local goalY = y0 + (gk % st.ny * C + goalCell % C + 0.5) * cs
+		local lower = max(0, 1 - 0.5 / cs)
+		local function h(id)
+			local x, y = world(id)
+			local dx, dy = abs(x - goalX), abs(y - goalY)
+			return (dx > dy and dx + (SQRT2 - 1) * dy or dy + (SQRT2 - 1) * dx) * lower
 		end
-	end
-	if direct then
-		relax(GOAL, direct, START)
-	end
-	local found = false
-	while hn > 0 do
-		local u = pop()
-		if aclosed[u] ~= gen then
-			aclosed[u] = gen
-			tick()
-			if u == GOAL then
-				found = true
-				break
+		agen = agen + 1
+		local gen = agen
+		hn = 0
+		local function relax(v, gv, parent)
+			if astamp[v] ~= gen or gv < ag[v] then
+				ag[v], apar[v], astamp[v] = gv, parent, gen
+				push(gv + (v == GOAL and 0 or h(v)), v)
 			end
-			local gu = ag[u]
-			if floor(u / 4096) == gk then
-				local e = entrance(st, u)
-				if e and reached(G, e) then
-					relax(GOAL, gu + G.g[e + 1], u)
+		end
+		for id, distance in pairs(source) do
+			relax(id, distance, START)
+		end
+		if direct then
+			relax(GOAL, direct, START)
+		end
+		local found = false
+		while hn > 0 do
+			local u = pop()
+			if aclosed[u] ~= gen then
+				aclosed[u] = gen
+				tick()
+				if u == GOAL then
+					found = true
+					break
 				end
-			end
-			local adj = st.nadj[u]
-			for e = 1, #adj, 3 do
-				local v = adj[e]
-				if aclosed[v] ~= gen then
-					nodesOf(st, floor(v / 4096))
-					relax(v, gu + adj[e + cost2], u)
+				local gu = ag[u]
+				if target[u] then
+					relax(GOAL, gu + target[u], u)
+				end
+				nodesOf(st, floor(u / 4096))
+				local adj = st.nadj[u]
+				for e = 1, #adj, 3 do
+					local v = adj[e]
+					if aclosed[v] ~= gen then
+						nodesOf(st, floor(v / 4096))
+						relax(v, gu + adj[e + cost2], u)
+					end
 				end
 			end
 		end
+		if not found then
+			return nil, "unreachable"
+		end
+		cost = ag[GOAL]
+		hops = { GOAL }
+		while hops[#hops] ~= START do
+			hops[#hops + 1] = apar[hops[#hops]]
+		end
+
+		if (st.pathCount or 0) >= 16 then
+			st.paths, st.pathCount = {}, 0
+		end
+		st.paths[key] = { hops = hops, cost = cost }
+		st.pathCount = (st.pathCount or 0) + 1
 	end
-	if not found then
-		return nil, "unreachable"
-	end
-	local hops = { GOAL }
-	while hops[#hops] ~= START do
-		hops[#hops + 1] = apar[hops[#hops]]
+	if costOnly then
+		return cost
 	end
 
 	-- Refine each hop into nodes with their global cells and a running count of water nodes.
@@ -965,10 +1023,10 @@ local function run(map, from, to, waterWalking)
 	local function add(k, node)
 		local n = #P.x
 		if n == 0 or P.k[n] ~= k or P.n[n] ~= node then
-			local cell = cellOf(st, k, node)
+			local cell = node < C * C and node or cellOf(st, k, node)
 			P.x[n + 1], P.y[n + 1] = floor(k / st.ny) * C + floor(cell / C), (k % st.ny) * C + cell % C
 			P.k[n + 1], P.n[n + 1] = k, node
-			P.w[n + 1] = (P.w[n] or 0) + (grid(st, k)[node + 1] == 2 and 1 or 0)
+			P.w[n + 1] = (P.w[n] or 0) + ((st.val[k] or grid(st, k))[node + 1] == 2 and 1 or 0)
 		end
 	end
 	local function addAll(k, nodes, first, last, step)
@@ -980,13 +1038,24 @@ local function run(map, from, to, waterWalking)
 	for i = #hops, 2, -1 do
 		local a, b = hops[i], hops[i - 1]
 		if a == START and b == GOAL then
+			search(st, sk, swim, sc, S, gc)
 			local nodes = trace(S, gc, {})
 			addAll(sk, nodes, #nodes, 1, -1)
 		elseif a == START then
-			local nodes = trace(S, entrance(st, b), {})
+			local tree = sourceTree
+			if not tree or not reached(tree, entrance(st, b)) then
+				search(st, sk, swim, sc, S, entrance(st, b))
+				tree = S
+			end
+			local nodes = trace(tree, entrance(st, b), {})
 			addAll(sk, nodes, #nodes, 1, -1)
 		elseif b == GOAL then
-			local nodes = trace(G, entrance(st, a), {})
+			local tree = targetTree
+			if not tree or not reached(tree, entrance(st, a)) then
+				search(st, gk, swim, gc, G, entrance(st, a))
+				tree = G
+			end
+			local nodes = trace(tree, entrance(st, a), {})
 			addAll(gk, nodes, 1, #nodes, 1)
 		else
 			local ka, kb = floor(a / 4096), floor(b / 4096)
@@ -1028,122 +1097,207 @@ local function run(map, from, to, waterWalking)
 	end
 	points.wet = wetYards
 	-- Smoothing only changes drawing: planning and FindMany use the identical graph cost.
-	return points, ag[GOAL]
+	return points, cost
 end
 
--- Fixed places recur in both batches and in later journeys. Keep their small entrance-cost vectors, not the
--- grid trees; cap the cache so moving start positions cannot grow it for the entire play session.
-local function connect(st, swim, k, node)
-	local key = k .. ":" .. node .. ":" .. swim
-	local entry = st.ends[key]
-	if not entry then
-		node = settle(st, swim, trees.G, k, node)
-		entry = { node = node, edges = connections(st, trees.G, k) }
-		if st.endCount >= 256 then
-			st.ends, st.endCount = {}, 0
+-- Targets join the heap as terminal nodes. Connecting a cluster only when its first entrance is reached
+-- avoids paying for every faraway endpoint before any nearby target can settle.
+local function runMany(map, from, targets, waterWalking, reverse, job)
+	local costs = job and job.costs or {}
+	local function failed(reason)
+		for i = 1, #targets do
+			costs[i] = false
 		end
-		st.ends[key], st.endCount = entry, st.endCount + 1
-	end
-	return entry.node, entry.edges
-end
-
--- One Dijkstra on the abstract graph, stopping when every target entrance is settled (or the heap empties).
--- Local endpoint searches run before the abstract search because they share its scratch heap.
-local function runMany(map, from, targets, waterWalking, reverse)
-	local costs = {}
-	for i = 1, #targets do
-		costs[i] = false
+		return costs, reason
 	end
 	local st = State(map)
 	if not st then
-		return costs, "nodata"
+		return failed("nodata")
 	end
 	local sk, sc, reason = pointNode(st, from)
 	if not sc then
-		return costs, reason
+		return failed(reason)
+	end
+	if job then
+		job.valid, job.sourceCluster, job.sourceNode = true, sk, sc
+		for i, point in ipairs(targets) do
+			if point.x == from.x and point.y == from.y then
+				local k, node = pointNode(st, point)
+				if k == sk and node == sc then
+					costs[i] = 0
+					job.revision = job.revision + 1
+				end
+			end
+		end
+		-- Publish endpoint validity before doing local Dijkstra work. Invalid goals and co-located
+		-- transfers can then settle without launching speculative walks across the continent.
+		if job.progress then
+			yield()
+		end
 	end
 	local swim, cost2 = waterWalking and 1 or st.swim, waterWalking and 2 or 1
-	local S, G = trees.S, trees.G
-	local source
-	sc, source = connect(st, swim, sk, sc)
-	local ends, others, wanted, left = {}, {}, {}, 0
+	local source, sourceTree
+	sc, source, sourceTree = connect(st, swim, sk, sc)
+	local clusters, links, dist, closed, left = {}, {}, {}, {}, #targets
 	for i, point in ipairs(targets) do
-		local k, node = pointNode(st, point)
-		if node then
-			local edges
-			node, edges = connect(st, swim, k, node)
-			if k == sk then
-				others[node] = true
-				if reverse then
-					endpoint(st, swim, G, k, node, { [sc] = true })
-					costs[i] = reached(G, sc) and G.g[sc + 1] or false
-				end
-			end
-			ends[i] = { edges = edges, node = node, k = k }
-			for id in pairs(edges) do
-				if not wanted[id] then
-					wanted[id], left = true, left + 1
-				end
-			end
+		local k = locate(st, point.x, point.y)
+		if costs[i] ~= nil then
+			left = left - 1
+		elseif k then
+			clusters[k] = clusters[k] or {}
+			clusters[k][#clusters[k] + 1] = i
+		else
+			costs[i], left = false, left - 1
 		end
 	end
-	if next(others) and not reverse then
-		endpoint(st, swim, S, sk, sc, others)
-		for i, target in pairs(ends) do
-			if target.k == sk and reached(S, target.node) then
-				costs[i] = S.g[target.node + 1]
-			end
-		end
-	end
-	agen = agen + 1
-	local gen = agen
 	hn = 0
 	local function relax(id, cost)
-		if astamp[id] ~= gen or cost < ag[id] then
-			ag[id], astamp[id] = cost, gen
+		if not dist[id] or cost < dist[id] then
+			dist[id] = cost
 			push(cost, id)
 		end
 	end
+	local function prepare(k)
+		local list = clusters[k]
+		if not list then
+			return
+		end
+		clusters[k] = nil
+		-- Local searches need their own heap, including across a yield midway through a connection.
+		local keys, values, size = hk, hv, hn
+		hk, hv, hn = {}, {}, 0
+		local direct, ends = {}, {}
+		for _, i in ipairs(list) do
+			local _, node = pointNode(st, targets[i])
+			if node then
+				local edges, tree
+				node, edges, tree = connect(st, swim, k, node)
+				ends[i] = edges
+				if k == sk then
+					local first, last = reverse and node or sc, reverse and sc or node
+					if not reverse then
+						tree = sourceTree
+					end
+					if first == last then
+						direct[i] = 0
+					elseif tree and reached(tree, last) then
+						direct[i] = tree.g[last + 1]
+					elseif search(st, k, swim, first, trees.R, last) then
+						direct[i] = trees.R.g[last + 1]
+					end
+				end
+			else
+				costs[i], left = false, left - 1
+				if job then
+					job.revision = job.revision + 1
+				end
+			end
+		end
+		hk, hv, hn = keys, values, size
+		for i, cost in pairs(direct) do
+			relax(-i, cost)
+		end
+		for i, edges in pairs(ends) do
+			for id, cost in pairs(edges) do
+				links[id] = links[id] or {}
+				local adjacent = links[id]
+				adjacent[#adjacent + 1], adjacent[#adjacent + 2] = -i, cost
+			end
+		end
+	end
+	prepare(sk)
 	for id, cost in pairs(source) do
 		relax(id, cost)
 	end
 	while hn > 0 and left > 0 do
+		-- Until the popped node's outgoing edges are relaxed, its key still bounds the frontier.
+		if job then
+			job.radius = hk[1]
+		end
 		local u = pop()
-		if aclosed[u] ~= gen then
-			aclosed[u] = gen
-			tick()
-			if wanted[u] then
-				left = left - 1
-			end
-			nodesOf(st, floor(u / 4096))
-			local adj = st.nadj[u]
-			for e = 1, #adj, 3 do
-				local v = adj[e]
-				if aclosed[v] ~= gen then
-					relax(v, ag[u] + adj[e + cost2])
+		if not closed[u] then
+			closed[u] = true
+			if u < 0 then
+				costs[-u], left = dist[u], left - 1
+				if job then
+					job.revision = job.revision + 1
+				end
+			else
+				local k = floor(u / 4096)
+				prepare(k)
+				local ends = links[u] or {}
+				for i = 1, #ends, 2 do
+					relax(ends[i], dist[u] + ends[i + 1])
+				end
+				nodesOf(st, k)
+				local adj = st.nadj[u]
+				for e = 1, #adj, 3 do
+					local v = adj[e]
+					if not closed[v] then
+						relax(v, dist[u] + adj[e + cost2])
+					end
 				end
 			end
 		end
+		if job then
+			job.radius = hn > 0 and hk[1] or huge
+		end
+		tick()
 	end
-	for i, target in pairs(ends) do
-		for id, cost in pairs(target.edges) do
-			if aclosed[id] == gen then
-				local total = ag[id] + cost
-				if not costs[i] or total < costs[i] then
-					costs[i] = total
-				end
-			end
+	for i = 1, #targets do
+		if costs[i] == nil then
+			costs[i] = false
 		end
 	end
 	return costs
 end
 
+-- Eight-direction grid distance is a lower bound even across clusters. Costs omit snapping and height
+-- and round each abstract edge to yards. Each endpoint can snap
+-- SNAP cells and then move SNAP more off a ledge; each nonzero grid step is at least cs before rounding.
+-- This bound is in running yards for both water modes, before the planner divides by walkSpeed.
+function Path.LowerBound(map, from, to)
+	local st = State(map)
+	if not st then
+		return 0
+	end
+	local dx, dy = abs(from.x - to.x), abs(from.y - to.y)
+	local gap = dx > dy and dx + (SQRT2 - 1) * dy or dy + (SQRT2 - 1) * dx
+	return max(0, gap - (4 * SNAP + 1) * SQRT2 * st.cs) * max(0, 1 - 0.5 / st.cs)
+end
+
+function Path.ReuseMany(job, point)
+	if not job or job.map ~= point.map or not job.sourceNode then
+		return false
+	end
+	local from = job.from
+	if (from.x - point.x) ^ 2 + (from.y - point.y) ^ 2 > 9 or (from.z and point.z and abs(from.z - point.z) > ZTOL) then
+		return false
+	end
+	local st = State(job.map)
+	local k, node = pointNode(st, point)
+	return k == job.sourceCluster and node == job.sourceNode
+end
+
 local function start(job)
 	expansions = 0
 	if job.targets then
-		return runMany(job.map, job.from, job.targets, job.waterWalking, job.reverse)
+		return runMany(job.map, job.from, job.targets, job.waterWalking, job.reverse, job)
 	end
-	return run(job.map, job.from, job.to, job.waterWalking)
+	return run(job.map, job.from, job.to, job.waterWalking, job.costOnly)
+end
+
+local function scratch(saved)
+	local previous = { hk, hv, hn, trees, ag, apar, astamp, aclosed, agen }
+	if saved then
+		hk, hv, hn, trees = saved[1], saved[2], saved[3], saved[4]
+		ag, apar, astamp, aclosed, agen = saved[5], saved[6], saved[7], saved[8], saved[9]
+	else
+		hk, hv, hn = {}, {}, 0
+		trees = { S = Tree(), G = Tree(), R = Tree() }
+		ag, apar, astamp, aclosed, agen = {}, {}, {}, {}, 0
+	end
+	return previous
 end
 
 -- Synchronous search, for tests and tools. Returns points, cost (or nil, reason) and the expansion count.
@@ -1151,7 +1305,9 @@ function Path.FindSync(map, from, to, waterWalking)
 	deadline, ops = huge, 0
 	local job = { map = map, from = from, to = to, waterWalking = waterWalking }
 	local co = coroutine.create(start)
+	local saved = scratch()
 	local ok, points, cost = coroutine.resume(co, job)
+	scratch(saved)
 	if not ok then
 		error(points)
 	end
@@ -1162,11 +1318,13 @@ end
 -- target -> from costs, including the directed same-cluster water step. The shipped abstract edges are symmetric.
 function Path.FindManySync(map, from, targets, waterWalking, reverse)
 	deadline, ops, expansions = huge, 0, 0
+	local saved = scratch()
 	local costs, reason = runMany(map, from, targets, waterWalking, reverse)
+	scratch(saved)
 	return costs, reason, expansions
 end
 
--- Jobs run one at a time, each resumed once a frame until Path.budget ms of CPU is spent.
+-- Round-robin slices share one frame budget, including callbacks that replan from newly settled costs.
 local queue = {}
 local scheduled = false
 local pump
@@ -1180,29 +1338,38 @@ end
 
 pump = function()
 	scheduled = false
-	local job = queue[1]
-	if not job then
-		return
-	end
-	local t0 = clock()
-	deadline, ops = t0 + Path.budget, 0
-	expansions = job.expansions or 0
-	local ok, points, cost = coroutine.resume(job.co, job)
-	job.expansions = expansions
-	job.frames = job.frames + 1
-	job.cpu = job.cpu + clock() - t0
-	deadline = huge
-	if not ok or coroutine.status(job.co) == "dead" then
-		table.remove(queue, 1)
-		if not ok then
-			geterrorhandler()(points)
-			points, cost = nil, "error"
+	local finish = clock() + Path.budget
+	repeat
+		local job = table.remove(queue, 1)
+		if not job then
+			break
 		end
-		-- Journey must be able to settle its pending walks even when a coroutine fails.
-		if not job.cancelled then
-			job.callback(points, cost, job)
+		local t0 = clock()
+		deadline, ops = math.min(finish, t0 + (#queue > 0 and Path.budget / 2 or Path.budget)), 0
+		expansions = job.expansions or 0
+		local saved = scratch(job.scratch)
+		local ok, points, cost = coroutine.resume(job.co, job)
+		job.scratch = scratch(saved)
+		job.expansions = expansions
+		job.frames = job.frames + 1
+		job.cpu = job.cpu + clock() - t0
+		deadline = huge
+		if not ok or coroutine.status(job.co) == "dead" then
+			job.done, job.scratch = true, nil
+			if not ok then
+				geterrorhandler()(points)
+				points, cost = nil, "error"
+			end
+			if not job.cancelled then
+				job.callback(points, cost, job)
+			end
+		else
+			queue[#queue + 1] = job
+			if job.progress then
+				job.progress(job.costs, nil, job)
+			end
 		end
-	end
+	until clock() >= finish
 	schedule()
 end
 
@@ -1233,15 +1400,29 @@ function Path.Find(map, from, to, callback, waterWalking)
 	return job
 end
 
--- The same queue, budget and cancellation contract as Find; callback(costs, reason, job). Missing data or an
--- invalid source returns all false plus a reason. Individual unreachable targets are false without failing peers.
-function Path.FindMany(map, from, targets, callback, waterWalking, reverse)
+-- A candidate can be ruled in or out without refining all its intermediate clusters into drawing points.
+-- callback(cost, reason, job) uses the same exact graph cost as Find and FindMany.
+function Path.FindCost(map, from, to, callback, waterWalking)
+	local job = Path.Find(map, from, to, callback, waterWalking)
+	job.costOnly = true
+	return job
+end
+
+-- callback(costs, reason, job) completes once; optional progress(costs, nil, job) runs after each slice.
+-- costs[i] is nil until settled, an exact running-yard cost afterwards, or false when unreachable. job.radius
+-- bounds every unsettled target, including a popped entrance whose expansion has not finished. Pause/Resume
+-- retain the frontier. Missing data or an invalid source completes with all false plus a reason.
+function Path.FindMany(map, from, targets, callback, waterWalking, reverse, progress)
 	local job = {
 		map = map,
 		from = from,
 		targets = targets,
 		waterWalking = waterWalking,
 		reverse = reverse,
+		progress = progress,
+		costs = {},
+		radius = 0,
+		revision = 0,
 		callback = callback,
 		co = coroutine.create(start),
 		frames = 0,
@@ -1252,14 +1433,28 @@ function Path.FindMany(map, from, targets, callback, waterWalking, reverse)
 	return job
 end
 
-function Path.Cancel(job)
-	job.cancelled = true
+-- Paused batches retain their settled costs and frontier for later replans, without consuming frames.
+function Path.Pause(job)
+	job.paused = true
 	for i, queued in ipairs(queue) do
 		if queued == job then
 			table.remove(queue, i)
 			return
 		end
 	end
+end
+
+function Path.Resume(job)
+	if job.paused and not job.done and not job.cancelled then
+		job.paused = false
+		queue[#queue + 1] = job
+		schedule()
+	end
+end
+
+function Path.Cancel(job)
+	Path.Pause(job)
+	job.cancelled, job.scratch = true, nil
 end
 
 -- The walkable height at a global cell nearest height h, within ZTOL.
