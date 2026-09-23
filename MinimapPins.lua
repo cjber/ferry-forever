@@ -1,4 +1,5 @@
-local _, ns = ...
+---@class SPFNamespace
+local ns = select(2, ...)
 
 -- Docks, lifts, tram stations and portals on the minimap, with the world map's icons and tooltips. The
 -- minimap's own tracking icons (flight masters, mailboxes) vanish at the rim rather than cling to it, and so do

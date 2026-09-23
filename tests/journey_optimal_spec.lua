@@ -185,7 +185,7 @@ for _, leg in ipairs(driver.shown().legs) do
 	modes[leg.mode] = true
 end
 assert(modes.tram and modes.passage, "Ironforge to Stormwind should ride the Deeprun Tram")
-for _, row in ipairs(select(2, ns.JourneyInfo())) do
+for _, row in ipairs((select(2, ns.JourneyInfo()))) do
 	print("  " .. row.text)
 	assert(not row.text:find("Unknown", 1, true), "unnamed step: " .. row.text)
 end
