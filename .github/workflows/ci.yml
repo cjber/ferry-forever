@@ -18,6 +18,15 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y luajit lua-check
       - run: luacheck .
       - run: for spec in tests/*_spec.lua; do luajit "$spec" || exit 1; done
+      - name: lua-language-server
+        env:
+          LUALS_VERSION: 3.19.1
+          LUALS_SHA256: e9235d2d72ef55bc41cf8c99cda2ed64777682024b4bb81f5dea425060c5cbb8
+        run: |
+          curl -fsSLo luals.tar.gz "https://github.com/LuaLS/lua-language-server/releases/download/${LUALS_VERSION}/lua-language-server-${LUALS_VERSION}-linux-x64.tar.gz"
+          echo "${LUALS_SHA256}  luals.tar.gz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/luals" && tar -xzf luals.tar.gz -C "$RUNNER_TEMP/luals" && rm luals.tar.gz
+          "$RUNNER_TEMP/luals/bin/lua-language-server" --check=. --checklevel=Error --logpath="$RUNNER_TEMP/luals-log"
       - uses: JohnnyMorganz/stylua-action@479972f01e665acfcba96ada452c36608bdbbb5e # v4.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
