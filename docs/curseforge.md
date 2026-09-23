@@ -1,6 +1,6 @@
 Shortest Path Forever finds the fastest way across WoW: Forever. Shift-click a destination on the map, or pick a quest, and it joins walking paths, flight paths, boats, zeppelins, lifts, the Deeprun Tram and portals into one journey. Walking maps for Eastern Kingdoms, Kalimdor and Zephras Isle come in the same download.
 
-![A journey from Auberdine through Menethil and Theramore to Silithus](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/kalimdor.png)
+![Eight-second demo of a route settling, the countdown and compass](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/demo.gif)
 
 ## Features
 
@@ -20,7 +20,7 @@ Shortest Path Forever finds the fastest way across WoW: Forever. Shift-click a d
 
 ![The optional compass strip with the next turns and destination](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/compass.png)
 
-![Eight-second demo of a route settling, the countdown and compass](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/demo.gif)
+![A journey from Auberdine through Menethil and Theramore to Silithus](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/kalimdor.png)
 
 ## Usage
 

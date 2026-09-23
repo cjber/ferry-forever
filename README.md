@@ -13,7 +13,7 @@ the flight points you know, boats and zeppelins with their live departure times,
 walks you there with the game's own navigation marker. Walking maps cover Eastern Kingdoms, Kalimdor and Zephras Isle;
 they come in the same download and load only when a route needs them.
 
-![A journey from Auberdine through Menethil and Theramore to Silithus](docs/screenshots/kalimdor.png)
+![Eight-second demo of a route settling, the countdown and the optional compass](docs/screenshots/demo.gif)
 
 ## Features
 
@@ -47,7 +47,7 @@ Each feature has more detail in [docs/features.md](docs/features.md).
 - **Times from real rides, shared.** One ride, yours or another player's, times a boat for hours. Sightings pass
   quietly over guild, party and yell at the docks; turn sharing off in the settings.
 
-![Eight-second demo of a route settling, the countdown and the optional compass](docs/screenshots/demo.gif)
+![A journey from Auberdine through Menethil and Theramore to Silithus](docs/screenshots/kalimdor.png)
 
 ## Install
 

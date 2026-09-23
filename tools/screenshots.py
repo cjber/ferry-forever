@@ -563,18 +563,12 @@ def render_compass(ui):
 def render_minimap(ui):
     canvas = ui.canvas(300, 285)
     cx, cy, size, radius = 150, 155, 198, 233 + 1 / 3
-    walk = ordered(data()["walk"])
     pier = data()["docks"]["10"]
-    # On the walk's last stretch, 60 yards short of the south pier: Guide's waypoint covers its ferry pin, and the
-    # Teldrassil pier's shows at the top (MinimapPins.lua). The route is drawn from where you stand.
-    last = walk[-2]
-    t = 1 - 60 / math.hypot(pier["x"] - last["x"], pier["y"] - last["y"])
-    here = {
-        "map": START["map"],
-        "x": last["x"] + t * (pier["x"] - last["x"]),
-        "y": last["y"] + t * (pier["y"] - last["y"]),
-    }
-    points = [here, pier]
+    # Standing on Auberdine's long jetty: the walk runs west to the junction and south to the Menethil pier, whose
+    # ferry pin shows beside the Teldrassil pier's (MinimapPins.lua). The recorded walk is too coarse to follow the
+    # jetty, so its planks are measured off the minimap art.
+    here = {"map": START["map"], "x": 6464.8, "y": 662.9}
+    points = [here, {"map": START["map"], "x": 6506.6, "y": 808.6}, pier]
     terrain = minimap_art(ui, START["map"], here["x"], here["y"], radius)
     face = ui.canvas(size, size)
     face.draw(terrain, 0, 0, size, size)
