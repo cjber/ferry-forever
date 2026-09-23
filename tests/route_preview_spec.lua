@@ -116,6 +116,29 @@ check(#frames == 0, "cached crossings plan nothing again")
 
 ns.JourneyChanged(nil)
 check(#ns.JourneyPreview() == 0, "a cancelled route previews nothing")
+
+-- A crossing the planner cannot route is remembered as such: it keeps its end marks and is never asked again.
+local reachable = ns.Planner.Plan
+ns.Planner.Plan = function(options)
+	if not options.walks then
+		return nil
+	end
+	return reachable(options)
+end
+check(API.NavigateRoute("Spec", { stops[1], stops[3] }), "unreachable route starts")
+local before = refreshed
+ns.JourneyPreview()
+-- Bounded: a crossing forgotten after a failed plan would ask again every frame.
+for _ = 1, 200 do
+	step()
+end
+check(refreshed == before + 1, "an unreachable crossing is planned once")
+ns.JourneyPreview()
+step()
+boats, straight = crossings(ns.JourneyPreview())
+check(refreshed == before + 1 and #frames == 0, "an unreachable crossing is not planned again")
+check(boats == 0 and straight == 1, "an unreachable crossing keeps its two-point hop")
+ns.Planner.Plan = reachable
 print(
 	string.format(
 		"route_preview_spec: %d checks passed; crossing plans %s ms, slowest frame planning one %.2f ms",
