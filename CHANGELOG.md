@@ -17,8 +17,10 @@ coloured lines.
 
 **Other addons can offer Shortest Path guidance.** The version 1 public API estimates travel time and starts
 journeys through one or several stops in order. Numbered map pins, drawn as the Adventure Guide's gold-numbered
-rings that glow when you hover them, and dotted previews show the remaining stops. A later stop on another
-continent previews the boat, zeppelin or flight that takes you there, never a line across the sea.
+rings that glow when you hover them, mark the remaining stops, and the way on to each is drawn as you will
+travel it: walks follow the paths round hills like the current leg, and boats, zeppelins and flights show in
+their colours, never a line across the sea. A dotted straight line stands in only until that stretch is worked
+out, a moment after the current leg's.
 Guidance advances on arrival and shows your progress. An addon can check the current stop and cancel
 only its own whole route, preserving a journey you start yourself. It can also show how a trip goes, such as
 the boat, the flight and a new flight path to pick up on the way, say why no time is shown (in combat, or no
