@@ -4,44 +4,31 @@
     <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fbe7a1"/><stop offset="0.45" stop-color="#d9a441"/><stop offset="1" stop-color="#7a4f14"/>
     </linearGradient>
-    <radialGradient id="land" cx="30%" cy="30%" r="80%">
-      <stop offset="0" stop-color="#3a3a24"/><stop offset="1" stop-color="#14140c"/>
-    </radialGradient>
-    <radialGradient id="sea" cx="70%" cy="70%" r="80%">
-      <stop offset="0" stop-color="#123a4a"/><stop offset="1" stop-color="#06141c"/>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#3a2a1c"/><stop offset="1" stop-color="#120c08"/>
     </radialGradient>
     <radialGradient id="pin" cx="40%" cy="30%" r="75%">
       <stop offset="0" stop-color="#fff6cf"/><stop offset="0.5" stop-color="#f2c14e"/><stop offset="1" stop-color="#9a5e12"/>
     </radialGradient>
-    <clipPath id="inner"><rect x="16" y="16" width="224" height="224" rx="20"/></clipPath>
   </defs>
 
   <rect x="6" y="6" width="244" height="244" rx="28" fill="url(#gold)"/>
-  <g clip-path="url(#inner)">
-    <rect x="16" y="16" width="224" height="224" fill="url(#sea)"/>
-    <!-- mainland bottom-left, island top-right, sea between -->
-    <path d="M16 96 C50 104 70 128 96 150 C120 170 132 196 150 240 H16 Z" fill="url(#land)"/>
-    <path d="M16 96 C50 104 70 128 96 150 C120 170 132 196 150 240" fill="none" stroke="#c9b27a" stroke-opacity="0.35" stroke-width="3"/>
-    <path d="M156 118 C150 100 170 88 196 90 C224 92 240 104 240 118 V132 C220 142 176 140 156 118 Z" fill="url(#land)" stroke="#c9b27a" stroke-opacity="0.35" stroke-width="3"/>
-    <g fill="none" stroke="#5fa8c0" stroke-opacity="0.25" stroke-width="3" stroke-linecap="round">
-      <path d="M172 190 q10 -8 20 0 t20 0"/><path d="M60 46 q10 -8 20 0 t20 0"/><path d="M176 168 q8 -6 16 0"/>
-    </g>
-  </g>
+  <rect x="16" y="16" width="224" height="224" rx="20" fill="url(#bg)"/>
 
   <!-- walking leg: gold, dotted, as the addon draws it -->
-  <path d="M44 212 C70 214 64 186 80 176 C92 168 100 170 108 164" fill="none" stroke="#000" stroke-opacity="0.55"
-    stroke-width="17" stroke-linecap="round" stroke-dasharray="0 23" transform="translate(2 3)"/>
-  <path d="M44 212 C70 214 64 186 80 176 C92 168 100 170 108 164" fill="none" stroke="#ffd100"
-    stroke-width="14" stroke-linecap="round" stroke-dasharray="0 23"/>
-  <circle cx="44" cy="212" r="13" fill="url(#gold)" stroke="#4a2c08" stroke-width="4"/>
+  <path d="M48 208 C74 210 70 178 90 168 C102 162 110 164 118 158" fill="none" stroke="#000" stroke-opacity="0.55"
+    stroke-width="21" stroke-linecap="round" stroke-dasharray="0 26" transform="translate(3 4)"/>
+  <path d="M48 208 C74 210 70 178 90 168 C102 162 110 164 118 158" fill="none" stroke="#ffd100"
+    stroke-width="18" stroke-linecap="round" stroke-dasharray="0 26"/>
+  <circle cx="48" cy="208" r="15" fill="url(#gold)" stroke="#4a2c08" stroke-width="4"/>
 
-  <!-- boat leg: cyan with a dark border, dock to island -->
-  <path d="M112 160 C124 124 150 136 170 120" fill="none" stroke="#02161e" stroke-width="16" stroke-linecap="round"/>
-  <path d="M112 160 C124 124 150 136 170 120" fill="none" stroke="#00bfff" stroke-width="9" stroke-linecap="round"/>
-  <circle cx="112" cy="161" r="9" fill="#00bfff" stroke="#02161e" stroke-width="4"/>
+  <!-- boat leg: cyan with a dark border, dock to the pin -->
+  <path d="M122 154 C132 130 150 142 164 136" fill="none" stroke="#02161e" stroke-width="20" stroke-linecap="round"/>
+  <path d="M122 154 C132 130 150 142 164 136" fill="none" stroke="#00bfff" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="122" cy="155" r="11" fill="#00bfff" stroke="#02161e" stroke-width="4"/>
 
-  <!-- destination: the waypoint pin, tip on the island -->
-  <g transform="translate(192 44) scale(0.8)">
+  <!-- destination: the waypoint pin at the journey's end -->
+  <g transform="translate(172 44) scale(1.15)">
     <path d="M0 92 C-10 70 -38 50 -38 22 A38 38 0 0 1 38 22 C38 50 10 70 0 92 Z" fill="#000" opacity="0.45" transform="translate(4 5)"/>
     <path d="M0 92 C-10 70 -38 50 -38 22 A38 38 0 0 1 38 22 C38 50 10 70 0 92 Z" fill="url(#pin)" stroke="#4a2c08" stroke-width="5" stroke-linejoin="round"/>
     <circle cx="0" cy="22" r="14" fill="#2a1804" stroke="#5a360c" stroke-width="3"/>
