@@ -11,17 +11,9 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
-The Journey section in the objective tracker shows the time and yards remaining across every leg,
-following measured walking paths and transport routes. The destination stays on its own line, and the
-totals update as you travel without rebuilding the tracker layout.
+## [1.0.0] - 2026-09-23
 
-Background polling now sleeps when you are stationary away from travel activity. Docks and passive boat
-or lift rides still wake the countdowns and observation; unchanged tracker content is reused, and shared
-sightings no longer rebuild unrelated map layers. Walking searches and tracker updates wait through
-combat. Less terrain bookkeeping is built at login, and `/path perf` shows the client's measured CPU cost
-and addon memory for checking performance in game.
-
-The first release, a route finder for WoW: Forever: pick a spot on the map or a quest and it plans the
+A route finder for WoW: Forever: pick a spot on the map or a quest and it plans the
 fastest way there and walks you to it. Every boat and zeppelin, including the new Forever crossings to Southshore,
 Riverglades and Zephras Isle, has its dock marked on the world map, a ferry for boats and a zeppelin drawn
 to match it for zeppelins. Hovering a dock lists where each boat goes next, counts down to its arrival and
@@ -65,7 +57,7 @@ by default and can be turned on in `/path`. Its heading glides smoothly as you t
 a soft frame and correctly proportioned markers. Marks for the same place or bearing combine into one,
 keeping the destination or transport icon and the distance to your next turn.
 
-Guide and the route now survive temporarily unavailable player coordinates, and the drawn walking leg
+Guide and the route survive temporarily unavailable player coordinates, and the drawn walking leg
 trims as you move without waiting for the next route search. On the minimap, the final 30 yards fade into
 the destination and the whole line fades as you approach within 40 yards. Guide's final marker uses a
 fading arrow nearby so its native waypoint does not cover the goal; the world-map route keeps its contrast.
@@ -75,3 +67,13 @@ a minute before a timed boat reaches the dock you are waiting at, and shortly be
 raid-warning banner, a sound and a flashing taskbar icon let you know, even with the game in the
 background. A `/reload` or logout mid-ride keeps the ride so far. Every map layer, the tracker, the alerts
 and their sound, the planner and sharing can each be switched off in the settings.
+
+The Journey section in the objective tracker shows the time and yards remaining across every leg,
+following measured walking paths and transport routes. The destination stays on its own line, and the
+totals update as you travel without rebuilding the tracker layout.
+
+Background polling sleeps when you are stationary away from travel activity. Docks and passive boat
+or lift rides still wake the countdowns and observation; unchanged tracker content is reused, and shared
+sightings don't rebuild unrelated map layers. Walking searches and tracker updates wait through
+combat. Less terrain bookkeeping is built at login, and `/path perf` shows the client's measured CPU cost
+and addon memory for checking performance in game.
