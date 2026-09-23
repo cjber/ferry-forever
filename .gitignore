@@ -3,3 +3,4 @@ __pycache__/
 *.zip
 .release/
 .release-notes.md
+docs/verification/

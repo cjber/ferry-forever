@@ -1,0 +1,64 @@
+diff --git a/Extractor/Extractor.cs b/Extractor/Extractor.cs
+index 5a36ccd..997e0d2 100644
+--- a/Extractor/Extractor.cs
++++ b/Extractor/Extractor.cs
+@@ -1,11 +1,14 @@
+ using System.Numerics;
+-using CASCLib;
+ 
+ namespace MapExtract;
+ 
+ /// Builds a world-space collision triangle soup for one ADT tile.
+-public sealed class Extractor(CASCHandler casc, Func<ushort, LiquidClass> classify)
++public sealed partial class Extractor(IFileSource casc, Func<ushort, LiquidClass> classify)
+ {
++    /// Shortest Path Forever: a continent bake drops the model caches between row bands to bound memory.
++    public void ClearCaches() { _wmoCache.Clear(); _m2Cache.Clear(); }
++    public int CachedModels => _wmoCache.Count + _m2Cache.Count;
++
+     readonly Dictionary<uint, (Wmo.Mesh Solid, Wmo.Mesh Liquid, uint GroupLiquid, Wmo.Root Root)> _wmoCache = [];
+     readonly Dictionary<uint, Wmo.Mesh> _m2Cache = [];
+ 
+diff --git a/Extractor/FileSource.cs b/Extractor/FileSource.cs
+new file mode 100644
+index 0000000..f5a0b66
+--- /dev/null
++++ b/Extractor/FileSource.cs
+@@ -0,0 +1,15 @@
++namespace MapExtract;
++
++/// Shortest Path Forever: the two calls the extractor makes on CASC storage, so the reader can be swapped.
++public interface IFileSource
++{
++    Stream OpenFile(int fileDataId);
++    bool FileExists(int fileDataId);
++}
++
++/// A file the root lists but local storage cannot supply (never downloaded, or evicted by the client's LRU).
++public sealed class MissingFileException(int fileDataId, Exception? inner = null)
++    : FileNotFoundException($"file {fileDataId} is not in local storage", inner)
++{
++    public int FileDataId { get; } = fileDataId;
++}
+diff --git a/Nav/NavBake.cs b/Nav/NavBake.cs
+index 598fa1d..ad6048c 100644
+--- a/Nav/NavBake.cs
++++ b/Nav/NavBake.cs
+@@ -81,6 +81,8 @@ public static class NavBake
+         public float EdgeMaxLen = 12f;
+         public float EdgeMaxError = 1.3f;
+         public int VertsPerPoly = 6;
++        /// Shortest Path Forever: retry a tile whose watershed contours fail with another partitioner.
++        public RcPartition Partition = RcPartition.WATERSHED;
+         public float DetailSampleDist = 6f;
+         public float DetailSampleMaxError = 1f;
+         /// Diagnostic: force every triangle to this area id. 0 = off.
+@@ -211,7 +213,7 @@ public static class NavBake
+         // ---- config -----------------------------------------------------------
+         int border = RcConfig.CalcBorder(s.AgentRadius, s.CellSize);
+         var cfg = new RcConfig(
+-            true, s.TileSizeCells, s.TileSizeCells, border, RcPartition.WATERSHED,
++            true, s.TileSizeCells, s.TileSizeCells, border, s.Partition,
+             s.CellSize, s.CellHeight, s.AgentMaxSlope, s.AgentHeight, s.AgentRadius, s.AgentMaxClimb,
+             s.MinRegionArea, s.MergeRegionArea, s.EdgeMaxLen, s.EdgeMaxError, s.VertsPerPoly,
+             s.DetailSampleDist, s.DetailSampleMaxError, true, true, true,

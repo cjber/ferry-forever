@@ -1,6 +1,6 @@
 # Changelog
 
-What changed in each release, in the terms someone waiting at a dock would notice. Dates are UTC.
+What changed in each release, in the terms someone finding their way would notice. Dates are UTC.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The entries are prose rather than bare
@@ -10,3 +10,70 @@ Each version's entry is also its release notes on GitHub, CurseForge and Wago. O
 verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-09-23
+
+A route finder for WoW: Forever: pick a spot on the map or a quest and it plans the
+fastest way there and walks you to it. Every boat and zeppelin, including the new Forever crossings to Southshore,
+Riverglades and Zephras Isle, has its dock marked on the world map, a ferry for boats and a zeppelin drawn
+to match it for zeppelins. Hovering a dock lists where each boat goes next, counts down to its arrival and
+departure, and lights up the docks it sails to. Docks that would overlap on a zoomed-out map share one
+icon, with each pier named in the tooltip. The map's filter menu can hide the icons, or just the other
+faction's routes. Near a dock, a Boats section above your quests shows the same countdowns.
+
+Each route's loop time comes from the game's own path data, so a single ride fixes a boat's schedule for
+hours. Ride once and it syncs, and the sighting is shared quietly with your guild, party and anyone at the
+dock, so other players' rides time your boats too. Sharing can be turned off in the settings (`/path`).
+
+The lifts at the Great Lift, Freewind Post, Thunder Bluff and Undercity, and both Deeprun Tram trains, are
+timed the same way: countdowns on the map and in the tracker, synced from a ride and shared. The tram is
+marked at its city entrances, and portals are marked with where they lead. Shift-click the world map or minimap to
+plan the fastest way to that spot, combining walking, the flight points you know, boats and zeppelins with
+their live waits, the lifts, the tram and portals, and a flight master you haven't found yet when walking to it pays
+off. **Plan journey** in a quest's right-click menu, or Shift-clicking its marker on the map, does the same
+for its objective, or its turn-in once it is complete. The route is drawn on the world map and minimap as a
+slim outlined line that reads on any map, walking legs dotted and the destination marked with the
+waypoint pin, and its steps sit in the objective tracker like a tracked quest. **Guide**, on from the start of every journey and toggled from the tracker header,
+moves the game's own waypoint marker along the route turn by turn (or only to where each step ends, a setting), and gives your tracked quest back when you finish. Walking legs follow the ground round walls, cliffs and water on Eastern Kingdoms, Kalimdor
+and Zephras Isle, from walking maps that come in the same download. They take tunnels such as Dun Algaz and
+the Undercity's lower levels, ride a lift when the way round on foot is longer, and take the boat rather than
+a long swim. Walks keep out of water, unless you have Water Walking or Levitate, when the step asks you to
+cast it and the route crosses. Walks between docks, flight masters and portals are measured ahead of time and
+ship with the addon, so plans spend less time checking walks. Replanning on board
+keeps you on the boat. Flight masters are marked on the world map, known and undiscovered, and hovering a
+dock draws its boat and zeppelin routes. On the Azeroth map, crossings curve from dock to dock across the
+sea; closer maps keep the real sailing path to the map edge.
+
+While a journey's walks are being checked, the tracker says it is finding the fastest way and the route
+pulses softly on the map and minimap. Easy routes settle quickly, and longer searches stop once unchecked
+alternatives cannot beat the chosen route, without searching the whole continent. Drawn paths stay visible
+during refreshes. Route finding uses less memory and shares its work across frames to reduce hitches; the
+first walking-map load starts after the click. Repeated journeys to the same destination reuse their walking costs. Your position is
+checked again when you leave the path or once a minute; standing still or moving a few yards within the same
+walking-map cell reuses its costs. Once settled, the arrival countdown returns. Walk
+steps name the dock, pier, lift or flight master you are heading for. An optional compass strip follows your facing and
+marks Guide's next two turns, the next stop and your destination, with yards to the next turn. It is off
+by default and can be turned on in `/path`. Its heading glides smoothly as you turn, with stock UI fonts,
+a soft frame and correctly proportioned markers. Marks for the same place or bearing combine into one,
+keeping the destination or transport icon and the distance to your next turn.
+
+Guide and the route survive temporarily unavailable player coordinates, and the drawn walking leg
+trims as you move without waiting for the next route search. On the minimap, the final 30 yards fade into
+the destination and the whole line fades as you approach within 40 yards. Guide's final marker uses a
+fading arrow nearby so its native waypoint does not cover the goal; the world-map route keeps its contrast.
+
+On board, once the ride has synced, the tracker shows where the boat calls next and when it gets there. Half
+a minute before a timed boat reaches the dock you are waiting at, and shortly before your own boat docks, a
+raid-warning banner, a sound and a flashing taskbar icon let you know, even with the game in the
+background. A `/reload` or logout mid-ride keeps the ride so far. Every map layer, the tracker, the alerts
+and their sound, the planner and sharing can each be switched off in the settings.
+
+The Journey section in the objective tracker shows the time and yards remaining across every leg,
+following measured walking paths and transport routes. The destination stays on its own line, and the
+totals update as you travel without rebuilding the tracker layout.
+
+Background polling sleeps when you are stationary away from travel activity. Docks and passive boat
+or lift rides still wake the countdowns and observation; unchanged tracker content is reused, and shared
+sightings don't rebuild unrelated map layers. Walking searches and tracker updates wait through
+combat. Less terrain bookkeeping is built at login, and `/path perf` shows the client's measured CPU cost
+and addon memory for checking performance in game.
