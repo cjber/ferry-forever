@@ -122,11 +122,11 @@ local function WaterWalking()
 	return false
 end
 
--- A transport nobody has timed yet waits half its round trip on average; the tilde marks that guess.
+-- A transport nobody has timed yet waits half its round trip on average; "about" marks that guess.
 local function LegTime(leg)
 	local text = ns.FormatCountdown(leg.arrive - leg.depart)
 	if leg.wait and leg.wait > 0 then
-		local guess = leg.estimated and SCHEDULED[leg.mode] and "~" or ""
+		local guess = leg.estimated and SCHEDULED[leg.mode] and "about " or ""
 		text = "wait " .. guess .. ns.FormatCountdown(leg.wait) .. " · " .. text
 	end
 	return text

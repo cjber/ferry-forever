@@ -463,7 +463,7 @@ def tracker_canvas(ui, seconds=0, settling=False):
         colored(f"1. Walk to {dock_title(10)}   {countdown(120 - seconds)}", WHITE),
         "2. Boat to Wetlands   wait 2:28 · 1:20",
         f"3. Walk to {dock_title(5)}   1:31",
-        "4. Boat to Dustwallow Marsh   wait ~2:45 · 1:44",
+        "4. Boat to Dustwallow Marsh   wait about 2:45 · 1:44",
         "5. Walk to Silithus   33:02",
     ]
     title = "Journey to Silithus" + (" · finding the fastest way..." if settling else "")

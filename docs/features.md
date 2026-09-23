@@ -54,6 +54,6 @@ The detail behind each feature in the [README](../README.md).
   minute before a timed boat reaches your dock and just before your own boat docks, for anyone waiting AFK.
 - **Times from real rides.** Each route's loop time comes from the game's own path data, so one ride tells
   the addon where that boat is for hours. Ride a boat, lift or tram once and its schedule syncs. Until then
-  its dock says *no sighting yet*, and a journey counts half a loop as its wait, marked with ~ (*wait ~2:45*).
+  its dock says *no sighting yet*, and a journey counts half a loop as its wait, shown as *wait about 2:45*.
 - **Shared between players.** Sightings are passed on quietly over guild, party and yell at the docks, so
   someone else's ride can time your boat. No chat messages are shown; turn it off in the settings.
