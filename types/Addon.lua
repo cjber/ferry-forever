@@ -22,6 +22,8 @@
 ---@field z? number
 ---@field jump? number
 ---@field label? string
+---@field routeTitle? string
+---@field questID? number
 ---@class SPFPlace : SPFPoint
 ---@field kind SPFKind
 ---@field id? number

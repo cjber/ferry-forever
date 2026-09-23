@@ -32,6 +32,8 @@ Arrow.lua
 Compass.lua
 Path.lua
 Journey.lua
+JourneyInput.lua
 Route.lua
 Alert.lua
 Settings.lua
+API.lua

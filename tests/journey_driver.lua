@@ -177,6 +177,7 @@ end
 load("Model.lua")
 load("Planner.lua")
 load("Journey.lua")
+load("JourneyInput.lua")
 
 local map = {
 	GetMapID = function()

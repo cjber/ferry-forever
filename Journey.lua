@@ -20,6 +20,7 @@ local VERB = {
 }
 
 local goal, guide, result
+local nextPoint
 local search, FinishSearch
 local plannerCache = {}
 local walkOrder, walkPending = {}, {}
@@ -124,6 +125,9 @@ local function WaterWalking()
 	end
 	return false
 end
+
+-- Read-only capability query shared by the public estimator and the guided planner.
+ns.JourneyWaterWalking = WaterWalking
 
 -- A transport nobody has timed yet waits half its round trip on average; "about" marks that guess.
 local function LegTime(leg)
@@ -370,19 +374,31 @@ function ns.ClearJourney()
 		ns.Path.ClearCaches()
 	end
 	StopGuide()
-	goal, result = nil, nil
+	goal, result, nextPoint = nil, nil, nil
+	if ns.JourneyChanged then
+		ns.JourneyChanged(nil)
+	end
 	progress.index, progress.departed = 1, false
 	driver:Hide()
 	ns.SetJourneyRoute(nil)
 	RefreshTracker()
 end
 
+-- Completion may run inside a planner callback. Start at most one next stop on the driver's next step,
+-- after that callback unwinds; coincident stops must never recurse through the whole route in one frame.
+local function Arrive()
+	nextPoint = ns.NextJourneyStop and ns.NextJourneyStop(goal)
+	if not nextPoint then
+		ns.ClearJourney()
+	end
+end
+
 local function UpdateProgress()
-	if not (goal and result) then
+	if not (goal and result) or nextPoint then
 		return
 	end
 	if Near(goal) then
-		ns.ClearJourney()
+		Arrive()
 		return
 	end
 	local riding, flying = ns.CurrentRide(), UnitOnTaxi("player")
@@ -412,7 +428,7 @@ local function UpdateProgress()
 		end
 		progress.index, progress.departed = progress.index + 1, false
 	end
-	ns.ClearJourney()
+	Arrive()
 end
 
 ---@return boolean
@@ -459,7 +475,7 @@ function ns.JourneyInfo()
 	if not goal then
 		return nil
 	end
-	local title = "Journey to " .. NodeLabel(goal)
+	local title = goal.routeTitle or ("Journey to " .. NodeLabel(goal))
 	local rows = {}
 	local loading = search and search.initial or false
 	if not result and loading then
@@ -637,7 +653,7 @@ local function PrepareWalks(planned)
 		return
 	end
 	planned.prepared = true
-	for _, leg in ipairs(planned and planned.legs or {}) do
+	for _, leg in ipairs(planned.legs) do
 		if leg.mode == "walk" then
 			local key = WalkKey(leg.from, leg.to)
 			local entry = walkCache[key]
@@ -1289,6 +1305,10 @@ local function Update(self, elapsed)
 	end
 	local index = progress.index
 	UpdateProgress()
+	if nextPoint then
+		ns.StartJourney(nextPoint)
+		return
+	end
 	if not goal then
 		return
 	end
@@ -1344,7 +1364,9 @@ local function Update(self, elapsed)
 	end
 end
 
-local function StartJourney(point)
+---@param point SPFPoint
+---@return boolean
+function ns.StartJourney(point)
 	local mode = WaterWalking()
 	local repeated = goal and SamePlace(goal, point) and mode == waterMode
 	local previous = repeated and result
@@ -1357,7 +1379,10 @@ local function StartJourney(point)
 	if guide then
 		StopGuide()
 	end
-	goal = point
+	goal, nextPoint = point, nil
+	if ns.JourneyChanged then
+		ns.JourneyChanged(point)
+	end
 	result, search = previous, nil
 	progress.index, progress.departed = previous and index or 1, previous and departed or false
 	driver.elapsed, driver.progressElapsed = 0, 0
@@ -1380,103 +1405,6 @@ local function StartJourney(point)
 		RefreshTracker()
 	end
 	return true
-end
-
-local function WorldPoint(uiMapID, x, y)
-	local continent, world = C_Map.GetWorldPosFromMapPos(uiMapID, CreateVector2D(x, y))
-	if continent and world then
-		local worldX, worldY = world:GetXY()
-		return { map = continent, x = worldX, y = worldY }
-	end
-end
-
-local function PlanQuest(questID, clickedMap, isWaypoint)
-	if not ns.db.journey then
-		return
-	end
-	-- Forever takes questID and ignoreWaypoint; Ketho's Wiki stub incorrectly has zero parameters.
-	---@diagnostic disable-next-line: redundant-parameter
-	local uiMapID = clickedMap or GetQuestUiMapID(questID, true)
-	local waypoint
-	if not clickedMap or isWaypoint then
-		local mapID, x, y
-		if clickedMap then
-			mapID = clickedMap
-			x, y = C_QuestLog.GetNextWaypointForMap(questID, mapID)
-		else
-			mapID, x, y = C_QuestLog.GetNextWaypoint(questID)
-		end
-		waypoint = { uiMapID = mapID, x = x, y = y }
-	end
-	local pois = not isWaypoint and uiMapID and uiMapID > 0 and C_QuestLog.GetQuestsOnMap(uiMapID) or nil
-	local location = ns.Planner.QuestDestination(
-		questID,
-		C_QuestLog.GetTitleForQuestID(questID),
-		C_QuestLog.IsComplete(questID),
-		uiMapID,
-		pois,
-		waypoint
-	)
-	local point = location and WorldPoint(location.uiMapID, location.x, location.y)
-	if not point then
-		-- Questie.API exposes icons and update notifications, but no public coordinate lookup.
-		ns.Print("No location for that quest yet.")
-		return
-	end
-	point.label, point.questID = location.label, questID
-	StartJourney(point)
-end
-
-local function OnCanvasClick(map, button)
-	if not ns.db.journey or button ~= "LeftButton" or not IsShiftKeyDown() then
-		return false
-	end
-	local point = WorldPoint(map:GetMapID(), map:GetNormalizedCursorPosition())
-	if point then
-		StartJourney(point)
-	else
-		ns.Print("no journey can be planned to that spot.")
-	end
-	return true
-end
-
-local function OnMinimapClick(_, button)
-	if not ns.db.journey or button ~= "LeftButton" or not IsShiftKeyDown() then
-		return
-	end
-	local point = ns.MinimapPoint()
-	if point then
-		StartJourney(point)
-	end
-end
-
-local function OnPinClick(map, action, button)
-	if
-		not ns.db.journey
-		or action ~= MapCanvasMixin.MouseAction.Click
-		or button ~= "LeftButton"
-		or not IsShiftKeyDown()
-	then
-		return false
-	end
-	-- MapCanvas calls these handlers before POIButton.OnClick. Canvas click handlers do not run over pins.
-	for _, focus in ipairs(GetMouseFoci()) do
-		local pin = focus
-		---@cast pin SPFQuestPin
-		if pin.pinTemplate == "QuestPinTemplate" and pin:GetMap() == map and pin:GetQuestID() then
-			PlanQuest(pin:GetQuestID(), map:GetMapID(), pin:GetStyle() == POIButtonUtil.Style.Waypoint)
-			return true
-		end
-	end
-	return false
-end
-
-local function AddQuestMenuEntry(root, questID)
-	if ns.db.journey and questID then
-		root:CreateButton("Plan journey", function()
-			PlanQuest(questID)
-		end)
-	end
 end
 
 ns.Init(function()
@@ -1518,36 +1446,10 @@ ns.Init(function()
 		end
 	end)
 	driver:Hide()
-	WorldMapFrame:AddCanvasClickHandler(OnCanvasClick)
 	for provider in pairs(WorldMapFrame.dataProviders) do
 		if provider.RefreshAllData == WaypointLocationDataProviderMixin.RefreshAllData then
 			waypointProviders[#waypointProviders + 1] = provider
 			hooksecurefunc(provider, "RefreshAllData", HideGuideWaypointPin)
 		end
 	end
-	WorldMapFrame:AddGlobalPinMouseActionHandler(OnPinClick)
-	-- The stock handler still pings the spot, which marks where the journey goes for your group too.
-	Minimap:HookScript("OnMouseUp", OnMinimapClick)
-	Menu.ModifyMenu("MENU_QUEST_OBJECTIVE_TRACKER", function(owner, root)
-		-- The native menu owner is the tracker container, with no quest ID/context data.
-		-- Resolve the right-clicked HeaderButton's block; never reuse a previous hover's quest.
-		for _, header in ipairs(GetMouseFoci()) do
-			local block = header:GetParent()
-			---@cast block SPFTrackerBlock
-			if
-				block
-				and block.HeaderButton == header
-				and block.parentModule
-				and block.parentModule:GetContextMenuParent() == owner
-			then
-				AddQuestMenuEntry(root, block.id)
-				return
-			end
-		end
-	end)
-	Menu.ModifyMenu("MENU_QUEST_MAP_LOG_TITLE", function(owner, root)
-		---@cast owner SPFQuestMenuOwner
-		-- Waypoint menus share this tag, but have no questID.
-		AddQuestMenuEntry(root, owner.questID)
-	end)
 end)
