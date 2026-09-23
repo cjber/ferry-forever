@@ -158,6 +158,37 @@ local function JourneyHeader(result, index, loading)
 	return "Journey  " .. ns.FormatCountdown(result.arrive - ns.NowMs()) .. " · " .. distance
 end
 
+local function RefreshBlockText(blocks)
+	-- Countdown ticks reuse Blizzard's lines; only changed wrapping needs a new layout.
+	local resized = false
+	for _, entry in ipairs(blocks) do
+		local block = module:GetExistingBlock(entry.key)
+		if block and block.used then
+			if block.HeaderText:GetText() ~= entry.title then
+				local height = block:SetStringText(
+					block.HeaderText,
+					entry.title,
+					nil,
+					OBJECTIVE_TRACKER_COLOR.Header,
+					block.isHighlighted
+				)
+				resized = resized or height ~= block.headerHeight
+				block.headerHeight = height
+			end
+			for _, row in ipairs(entry.rows) do
+				local line = block:GetExistingLine(row.key)
+				if line and line.used and line.Text:GetText() ~= row.text then
+					local height = block:SetStringText(line.Text, row.text, true, RowColor(row), block.isHighlighted)
+					resized = resized or height ~= line:GetHeight()
+				end
+			end
+		end
+	end
+	if resized then
+		module:MarkDirty()
+	end
+end
+
 local function RefreshTracker(dockID, yards)
 	if not module or InCombatLockdown() then
 		return
@@ -246,34 +277,7 @@ local function RefreshTracker(dockID, yards)
 	if module:IsDirty() then
 		return
 	end
-	-- Countdown ticks reuse Blizzard's lines; only changed wrapping needs a new layout.
-	local resized = false
-	for _, entry in ipairs(blocks) do
-		local block = module:GetExistingBlock(entry.key)
-		if block and block.used then
-			if block.HeaderText:GetText() ~= entry.title then
-				local height = block:SetStringText(
-					block.HeaderText,
-					entry.title,
-					nil,
-					OBJECTIVE_TRACKER_COLOR.Header,
-					block.isHighlighted
-				)
-				resized = resized or height ~= block.headerHeight
-				block.headerHeight = height
-			end
-			for _, row in ipairs(entry.rows) do
-				local line = block:GetExistingLine(row.key)
-				if line and line.used and line.Text:GetText() ~= row.text then
-					local height = block:SetStringText(line.Text, row.text, true, RowColor(row), block.isHighlighted)
-					resized = resized or height ~= line:GetHeight()
-				end
-			end
-		end
-	end
-	if resized then
-		module:MarkDirty()
-	end
+	RefreshBlockText(blocks)
 end
 
 function ns.RefreshTracker()
