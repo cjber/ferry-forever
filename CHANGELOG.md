@@ -19,7 +19,9 @@ coloured lines.
 journeys through one or several stops in order. Numbered map pins, drawn as the Adventure Guide's gold-numbered
 rings that glow when you hover them, and dotted previews show the remaining stops,
 while guidance advances on arrival and shows your progress. An addon can check the current stop and cancel
-only its own whole route, preserving a journey you start yourself.
+only its own whole route, preserving a journey you start yourself. It can also show how a trip goes, such as
+the boat, the flight and a new flight path to pick up on the way, say why no time is shown (in combat, or no
+way there yet), and warn you before replacing a journey you are already on.
 
 Docks, lifts, tram stations and portals now show on the minimap with the world map's icons, and hovering one
 gives the same departures tooltip. They vanish at the minimap's rim like the game's own tracking icons, and
