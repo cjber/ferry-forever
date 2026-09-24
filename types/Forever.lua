@@ -11,8 +11,6 @@ LE_PARTY_CATEGORY_INSTANCE = nil
 AM_PIN_SCALE_STYLE_WITH_TERRAIN = nil
 ---@type table<string, fun(message: string, editBox: EditBox)>
 SlashCmdList = nil
----@type table<string, number>
-SOUNDKIT = nil
 ---@type table<string, {r: number, g: number, b: number}>
 ChatTypeInfo = nil
 ---@type {AddMessage: fun(message: string, color: {r: number, g: number, b: number})}

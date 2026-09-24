@@ -10,7 +10,7 @@ I wanted a proper "get me there" for WoW: Forever, so Shortest Path Forever find
 - **Live departures.** Hover a dock, on the world map or the minimap, to see where its boats go, when they arrive and when they leave. Destination docks light up; click one to open the map at the other end. Nearby departures appear in the objective tracker; aboard a timed boat, it shows the next stop.
 - **Lifts, trams and portals.** Landings and stations have their own countdowns. Portals show where they lead, and clicking one opens that map. All three can be part of a journey.
 - **Schedules learned from real rides.** Ride once to sync a transport. Sightings are shared quietly with your guild, party and nearby players. Unsynced services say “no sighting yet”, and a journey shows their guessed wait as “wait about”.
-- **Arrival alerts.** A banner, sound and flashing taskbar icon warn when your boat is due, including when you are waiting away from the keyboard.
+- **Arrival alerts.** A banner, the ship's own bell and a flashing taskbar icon warn when your boat is due, including when you are waiting away from the keyboard. Zeppelins sound their horn instead.
 
 ![Journey steps from Auberdine to Silithus, with time and distance remaining](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/tracker.png)
 
