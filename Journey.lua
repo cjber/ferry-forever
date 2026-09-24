@@ -661,14 +661,17 @@ local function Landing(place)
 	return entry
 end
 
--- Whether a bind point's walks are still being searched; callback, when given, runs once each search ends.
+-- Whether a bind point's walks are still being searched; callback, when given, runs once each search ends. With
+-- ready, only a teleport castable before `before` counts: one ready later cannot beat a route arriving then.
 ---@param teleports SPFTeleportPlace[]?
 ---@param callback? fun()
-local function LandingPending(teleports, callback)
+---@param ready? table<number, number>
+---@param before? number
+local function LandingPending(teleports, callback, ready, before)
 	local pending = false
-	for _, place in ipairs(teleports or {}) do
+	for index, place in ipairs(teleports or {}) do
 		local entry = Landing(place)
-		if entry and entry.waiting then
+		if entry and entry.waiting and (not ready or (ready[index] and ready[index] < before)) then
 			pending = true
 			if callback then
 				entry.waiting[#entry.waiting + 1] = callback
@@ -1239,9 +1242,6 @@ local function RefreshCosts(includeGoal, forced)
 		then
 			return
 		end
-		if LandingPending(teleports) then
-			return
-		end
 		local hadFixed = startBatch.fixedKey or goalBatch.fixedKey
 		fixedPlace(startBatch)
 		fixedPlace(goalBatch)
@@ -1322,7 +1322,16 @@ local function RefreshCosts(includeGoal, forced)
 		needGoal = needGoal and not goalBatch.done
 		active(startBatch, needStart)
 		active(goalBatch, needGoal)
-		if not needStart and not needGoal then
+		-- A bind point's walks still being searched, for a teleport that could be faster: settle when they end.
+		local landing = not needStart
+			and not needGoal
+			and LandingPending(
+				teleports,
+				nil,
+				select(2, ns.UsableTeleports(ns.NowMs())),
+				planned and planned.arrive or math.huge
+			)
+		if not needStart and not needGoal and not landing then
 			pendingCosts, settleRound = 0, settleRound + 1
 			Render(planned, forced)
 		else

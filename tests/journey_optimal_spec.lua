@@ -242,6 +242,37 @@ do
 	drain()
 	assert(driver.shown().legs[1].mode ~= "teleport")
 	ns.ClearJourney()
+	-- A new bind point's walks are searched once; only a hearth that could win waits for them.
+	local findMany, held = ns.Path.FindMany, nil
+	ns.Path.FindMany = function(map, point, targets, callback, ...)
+		if point == ns.teleports[1] then
+			local water = ...
+			held = function()
+				callback(ns.Path.FindManySync(map, point, targets, water))
+			end
+			return
+		end
+		return findMany(map, point, targets, callback, ...) -- multi-value: the batch's job
+	end
+	ns.teleports[1] =
+		{ map = gadgetzan.map, x = gadgetzan.x + 30, y = gadgetzan.y, spell = 8690, cast = 10000, bind = true }
+	driver.begin(ns.TaxiNodes[26], gadgetzan)
+	drain()
+	assert(held and driver.shown().legs[1].mode ~= "teleport", "an hour's cooldown settles without the bind's walks")
+	ns.ClearJourney()
+	ns.teleportReady = { 123456 }
+	driver.begin(ns.TaxiNodes[26], gadgetzan)
+	while nextFrame do
+		local fn = nextFrame
+		nextFrame = nil
+		fn()
+	end
+	assert(ns.JourneyStatus(), "a ready hearth waits for its bind point's walks")
+	held()
+	drain()
+	assert(driver.shown().legs[1].mode == "teleport")
+	ns.Path.FindMany = findMany
+	ns.ClearJourney()
 	ns.teleports, ns.teleportReady, driver.env.C_Item = nil, nil, nil
 end
 print("hearth journey: the first step, named by the game: ok")
