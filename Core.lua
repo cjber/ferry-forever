@@ -337,7 +337,7 @@ frame:SetScript("OnEvent", function(self, _, name)
 end)
 
 -- Passive boat/lift motion need not fire player movement events. Keep sampling near a landing and
--- through a ride; elsewhere movement/world events wake one shared clock instead of four idle tickers.
+-- through a ride; elsewhere movement/world events wake one shared clock rather than an idle ticker per listener.
 local travelListeners, travelTicker = {}, nil
 local moving, probes = false, 0
 ---@param fn fun(dockID: number?, yards: number?)
