@@ -82,7 +82,8 @@ def data():
     """Use the real Lua 5.1 path implementation; table serialization is the only adapter."""
     program = r"""
 local ns = {}
-for _, name in ipairs({ "Data/Routes", "Data/Transports", "Data/Portals", "Data/Taxi", "Model", "Path", "Planner" }) do
+local files = { "Data/Routes", "Data/Transports", "Data/Portals", "Data/Taxi", "Model", "PathGrid", "Path", "Planner" }
+for _, name in ipairs(files) do
 	assert(loadfile(name .. ".lua"))("ShortestPathForever", ns)
 end
 assert(loadfile("tools/load_nav.lua"))(0)
@@ -496,9 +497,9 @@ def tracker_canvas(ui, seconds=0, settling=False):
     # Reference 21 is a captured itinerary, not a new optimality claim for these timings.
     rows = [
         colored(f"1. Walk to {dock_title(10)}   {countdown(120 - seconds)}", WHITE),
-        "2. Boat to Wetlands   wait 2:28 · 1:20",
+        "2. Boat to Wetlands   leaves in 2:28 · 1:20",
         f"3. Walk to {dock_title(5)}   1:31",
-        "4. Boat to Dustwallow Marsh   wait about 2:45 · 1:44",
+        "4. Boat to Dustwallow Marsh   leaves in about 2:45 · 1:44",
         "5. Walk to Silithus   33:02",
     ]
     title = "Journey to Silithus" + (" · finding the fastest way..." if settling else "")
