@@ -200,6 +200,10 @@ print("tram journey: every step is named: ok")
 
 -- Bound beside Gadgetzan's flight master, a ready hearth from Auberdine is the first step, and still the optimum.
 do
+	local arrow
+	ns.PointGuideArrow = function(drawn)
+		arrow = drawn
+	end
 	local gadgetzan = ns.TaxiNodes[39]
 	driver.env.C_Item = {
 		GetItemNameByID = function(id)
@@ -224,10 +228,13 @@ do
 	assert(shown.legs[1].mode == "teleport" and math.abs(shown.arrive - exact.arrive) < 1e-5)
 	local rows = select(2, ns.JourneyInfo())
 	assert(rows[1].text:find("^1%. Use Hearthstone"), rows[1].text)
+	-- Cast where you stand: no arrow or marker points across the world at the landing.
+	assert(ns.IsJourneyGuided() and arrow == nil and driver.waypoint() == nil, "a teleport step points nowhere")
 	-- Cast from anywhere: landing moves on to the next step.
 	driver.move({ map = gadgetzan.map, x = gadgetzan.x + 20, y = gadgetzan.y, z = gadgetzan.z })
 	driver.update(0.2)
 	assert(select(4, ns.JourneyInfo()) == 2, "the hearth step is done on landing")
+	assert(arrow, "the next step is guided again")
 	ns.ClearJourney()
 	-- An hour's cooldown loses to flying.
 	ns.teleportReady = { 123456 + 3600000 }

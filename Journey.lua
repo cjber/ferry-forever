@@ -361,6 +361,18 @@ local function GuideTo(node, points)
 	ns.PointGuideArrow(points or { point }, GuideWaypoint, node, goal)
 end
 
+-- A teleport is cast where you stand: nothing to walk toward until you land, so no arrow or marker.
+local function GuideCast(leg)
+	if not guide or guide.target == leg then
+		return
+	end
+	guide.points, guide.target = nil, leg
+	ns.PointGuideArrow(nil)
+	if guide.waypoint then
+		ClearGuideWaypoint()
+	end
+end
+
 function ns.ClearJourney()
 	CancelPaths()
 	costsWaiting = nil
@@ -427,6 +439,10 @@ local function UpdateProgress()
 				GuideTo(leg.from)
 				return
 			end
+		end
+		if leg.mode == "teleport" and not Near(leg.to) then
+			GuideCast(leg)
+			return
 		end
 		if not Near(leg.to) or (leg.mode == "flight" and flying) then
 			GuideTo(leg.to, leg.walkPoints)
