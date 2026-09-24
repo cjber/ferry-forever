@@ -561,7 +561,8 @@ end
 ShortestPathForeverGoalPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function ShortestPathForeverGoalPinMixin:OnLoad()
-	self:UseFrameLevelType("PIN_FRAME_LEVEL_SUPER_TRACKED_CONTENT")
+	-- The user waypoint's level (WaypointLocationDataProvider), above every quest POI, super-tracked ones included.
+	self:UseFrameLevelType("PIN_FRAME_LEVEL_WAYPOINT_LOCATION")
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScalingLimits(1, 1, 1)
 	-- The native waypoint pin (SuperTrackedFrame.lua:219) that Guide's marker wears, so map and marker agree.
@@ -577,7 +578,11 @@ end
 ---@param titles string[]
 function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, numbers, titles, later)
 	self:SetPosition(x, y)
-	self:SetAlpha(later and LATER_STOP_ALPHA or 1)
+	-- The disc stays opaque, so a faded ring still hides the POI beneath it.
+	local alpha = later and LATER_STOP_ALPHA or 1
+	self.Texture:SetAlpha(alpha)
+	self.Numeral:SetAlpha(alpha)
+	self.Number:SetAlpha(alpha)
 	self.stopTitles = titles[1] and titles or nil
 	local number = numbers and #numbers == 1 and numbers[1]
 	local numeral = number and number <= MAX_NUMERAL

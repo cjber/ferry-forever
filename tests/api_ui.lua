@@ -32,7 +32,9 @@ local function check(index, count)
  for i, pin in ipairs(pins) do
   assert(pin.Numeral.atlas == "services-number-"..(index+i-1), "remaining pins retain original stop numbers")
   assert(pin.Texture.atlas == "adventureguide-ring")
-  assert(pin.alpha == (i == 1 and 1 or 0.55), "only the stop being guided to is at full strength")
+  assert(pin.Numeral.alpha == (i == 1 and 1 or 0.55), "only the stop being guided to is at full strength")
+  assert(pin.alpha == nil and pin.Disc.alpha == nil, "the disc stays opaque over the POI beneath")
+  assert(pin.frameLevelType == "PIN_FRAME_LEVEL_WAYPOINT_LOCATION", "rings draw above quest POIs")
   assert(pin.stopTitles[1] == string.format("Stop %d of %d: %s", index+i-1, count, stops[index+i-1].title))
  end
  local line = active[lineTemplate][1]
@@ -94,7 +96,8 @@ local function rings(expected)
  assert(#pins == #expected, "one ring per group: " .. #pins)
  for i, want in ipairs(expected) do
   local pin = pins[i]
-  assert(pin.alpha == (i == 1 and 1 or 0.55), "only the current stop's ring is at full strength")
+  assert(pin.Numeral.alpha == (i == 1 and 1 or 0.55), "only the current stop's ring is at full strength")
+  assert(pin.alpha == nil and pin.Disc.alpha == nil, "a faded ring's disc still hides the POI beneath")
   assert(#pin.stopTitles == #want.stops)
   for j, n in ipairs(want.stops) do
    local expected = string.format("Stop %d of 7: %s", n, close[n].title)
@@ -138,8 +141,8 @@ posX, posY = arrive.x, arrive.y
 tick()
 assert(api.CurrentStop("Test") == 2)
 local pins = active[goalTemplate]
-assert(#pins == 4 and pins[1].Numeral.atlas == "services-number-2" and pins[1].alpha == 1)
-assert(pins[2].Number.text == "3-4" and pins[2].alpha == 0.55 and #pins[2].stopTitles == 2)
+assert(#pins == 4 and pins[1].Numeral.atlas == "services-number-2" and pins[1].Numeral.alpha == 1)
+assert(pins[2].Number.text == "3-4" and pins[2].Numeral.alpha == 0.55 and #pins[2].stopTitles == 2)
 api.Cancel("Test")
 zoom = 1
 posX, posY = 0, 0
