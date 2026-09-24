@@ -56,6 +56,12 @@ local function vector(x, y)
 end
 local env = setmetatable({
 	CreateFrame = frame,
+	-- A search that throws fails the spec with its own message.
+	geterrorhandler = function()
+		return function(message)
+			error(message, 0)
+		end
+	end,
 	UnitPosition = function()
 		return here.x, here.y, here.z, here.map
 	end,
