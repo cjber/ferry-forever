@@ -51,6 +51,9 @@ local function Perf()
 	end
 end
 
+-- Rows go in through Settings.RegisterInitializer, which inserts them from Blizzard's secure delegate.
+-- Settings.CreateCheckbox inserts from our code instead, and the settings search reads every layout, so that
+-- tainted it: a restricted button in the results (Social's Discord Sign In) was then blocked and blamed on us.
 ns.Init(function()
 	local category = Settings.RegisterVerticalLayoutCategory("Shortest Path Forever")
 	local function Checkbox(key, name, tooltip, onChanged)
@@ -66,7 +69,7 @@ ns.Init(function()
 		if onChanged then
 			setting:SetValueChangedCallback(onChanged)
 		end
-		Settings.CreateCheckbox(category, setting, tooltip)
+		Settings.RegisterInitializer(category, Settings.CreateCheckboxInitializer(setting, nil, tooltip))
 		settings[key] = setting
 	end
 

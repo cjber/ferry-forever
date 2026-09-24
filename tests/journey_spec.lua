@@ -434,6 +434,11 @@ for _, destination in ipairs({ { map = 1, x = 6400, y = 100 }, { map = 0, x = 22
 	)
 end
 
+-- UnitPosition's height is a placeholder 0: the journey plans from an unknown height, never the lowest floor.
+driver.move({ map = 0, x = -8876.2, y = 610.9, z = 0 })
+local x, _, z, map = ns.JourneyPosition()
+assert(x == -8876.2 and z == nil and map == 0, "the placeholder height reached the planner")
+
 -- The durable long-route regression uses real Journey, Path and all three nav maps.
 assert(loadfile("tests/journey_bench.lua"))()
 print("journey_spec: ok")

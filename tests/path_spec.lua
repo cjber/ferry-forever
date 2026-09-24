@@ -173,4 +173,22 @@ for _, target in ipairs({
 	assert(done)
 end
 
+-- Heights: the player's is unknown (UnitPosition's is a placeholder 0), and a point without one starts from whichever
+-- surface at its spot walks cheapest. A Trade District street over the canal walks out by the Valley of Heroes gate,
+-- not from the canal bed round the city (the reported loop through Cathedral Square and Old Town).
+local TRADE_STREET = { x = -8876.2, y = 610.9 }
+pts, len = Path.FindSync(0, TRADE_STREET, { x = -9068, y = 417 })
+assert(pts and len < 350, len)
+for i = 2, #pts - 1 do
+	assert(pts[i].z > 85, "walks the canal bed")
+end
+local street = Path.FindSync(0, TRADE_STREET, GOLDSHIRE)
+local canal = Path.FindSync(0, { x = TRADE_STREET.x, y = TRADE_STREET.y, z = 74 }, GOLDSHIRE)
+assert(passes(street, -8520, 960) > 100 and passes(canal, -8520, 960) < 100, "only the canal bed goes round")
+-- A zeppelin dock stands at its transport's height: Grom'gol's tower platform, not the beach below it.
+assert(loadfile("Data/Routes.lua"))("ShortestPathForever", ns)
+local tower = ns.Docks[11]
+pts = Path.FindSync(0, tower, GOLDSHIRE)
+assert(tower.z and pts and pts[2].z > 25, "boards from the beach")
+
 print("path_spec: ok")

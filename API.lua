@@ -4,6 +4,8 @@ local ns = select(2, ...)
 -- This topology belongs exclusively to estimates: Planner.Plan mutates its cache between calls.
 -- Never borrow the active journey's cache, path jobs, progress, waypoint or route drawing.
 local plannerCache, knownSnapshot = {}, {}
+-- legs are the planner's own, read only to build EstimateDetail's copies; they never leave this file.
+---@type table<string, {at: number, seconds: number|false, legs?: SPFLeg[]}>
 local estimates, order, slot = {}, {}, 1
 local anchorSnapshot, context = {}, {}
 local CACHE_LIMIT, CACHE_MS = 256, 5000
@@ -53,17 +55,25 @@ end
 ---@type {owner: string, points: SPFPoint[], index: integer}?
 local route
 local MAX_STOPS = 64
+-- Why each owner's last journey ended, and when (GetTime); an owner's new journey forgets it.
+---@type table<string, {reason: SPFAPIEnded, at: number}>
+local ended = {}
 
 ---@param point SPFPoint?
-function ns.JourneyChanged(point)
+---@param reason? "arrived"|"cleared" -- why a nil point ended the journey
+function ns.JourneyChanged(point, reason)
 	if not route then
 		return
 	end
 	if point and point == route.points[route.index + 1] then
 		route.index = route.index + 1
 	elseif not point or point ~= route.points[route.index] then
+		ended[route.owner] = { reason = point and "replaced" or reason or "cleared", at = GetTime() }
 		route = nil
+	else
+		return
 	end
+	ns.ItineraryChanged()
 end
 
 ---@param point SPFPoint
@@ -83,31 +93,29 @@ end
 ---@class SPFPublicAPI
 local API = { version = 1 }
 
-function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
-	if not Ready() then
-		return nil
+local function Differs(a, b)
+	for key, value in pairs(a) do
+		if b[key] ~= value then
+			return true
+		end
 	end
-	local from, to = Point(fromMap, fromX, fromY), Point(toMap, toX, toY)
-	if not from or not to then
-		return nil
+	for key, value in pairs(b) do
+		if a[key] ~= value then
+			return true
+		end
 	end
+	return false
+end
+
+-- The reason tells a caller whether asking again later can help: after combat, never for bad input, or when the
+-- player's known flight paths or boat timings change.
+-- The planner options from here and now; a changed context drops every cached estimate.
+---@param from SPFPoint
+---@param to SPFPoint
+local function Options(from, to)
 	local known = ns.KnownTaxiNodes()
 	-- Discovery updates the same saved table in place; topology identity alone cannot detect it.
-	local changed = false
-	for id, value in pairs(known) do
-		if knownSnapshot[id] ~= value then
-			changed = true
-			break
-		end
-	end
-	if not changed then
-		for id, value in pairs(knownSnapshot) do
-			if known[id] ~= value then
-				changed = true
-				break
-			end
-		end
-	end
+	local changed = Differs(known, knownSnapshot)
 	if changed then
 		plannerCache, knownSnapshot = {}, {}
 		for id, value in pairs(known) do
@@ -130,9 +138,9 @@ function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
 	-- Same multimodal planner and baked walks as the arrow's initial plan. Endpoint terrain searches
 	-- are asynchronous and deliberately omitted: this is an estimate, not a settled walking path.
 	-- Uncached, LuaJIT -joff: Auberdine -> Eastern Plaguelands 2.45 ms cold / 0.51 ms warm;
-	-- JIT compilation can make the first call ~4 ms. Forty estimates in an AGF rebuild cost ~12 ms,
-	-- so cache 256 (origin rounded to 0.0001, exact destination) results for at most five seconds.
-	-- Cached calls measured ~0.003 ms; a warm AGF Plan including 40 estimates measured 0.63 ms (-joff).
+	-- JIT compilation can make the first call ~4 ms. Callers should make at most one uncached call per
+	-- frame; AGF fetches its card estimates one per frame while its panel is open. Results are cached, 256
+	-- (origin rounded to 0.0001, exact destination) for at most five seconds; cached calls measured ~0.003 ms.
 	local options = {
 		cache = plannerCache,
 		from = from,
@@ -151,8 +159,8 @@ function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
 		baked = ns.Walks,
 		waterWalking = ns.JourneyWaterWalking(),
 	}
-	for _, key in ipairs(CONTEXT_KEYS) do
-		if context[key] ~= options[key] then
+	for _, name in ipairs(CONTEXT_KEYS) do
+		if context[name] ~= options[name] then
 			changed = true
 		end
 	end
@@ -163,10 +171,20 @@ function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
 		end
 		context = options
 	end
-	local key = string.format("%d:%.4f:%.4f:%d:%.17g:%.17g", fromMap, fromX, fromY, toMap, toX, toY)
+	return options, now
+end
+
+---@param from SPFPoint
+---@param to SPFPoint
+---@param key string
+local function Answer(from, to, key)
+	local options, now = Options(from, to)
 	local cached = estimates[key]
 	if cached and now >= cached.at and now - cached.at < CACHE_MS then
-		return cached.seconds or nil
+		if cached.seconds then
+			return cached
+		end
+		return nil, "unreachable"
 	end
 	local plan = ns.Planner.Plan(options)
 	local seconds = plan and math.max(0, (plan.arrive - now) / 1000) or nil
@@ -177,8 +195,66 @@ function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
 		order[slot] = key
 		slot = slot % CACHE_LIMIT + 1
 	end
-	estimates[key] = { at = now, seconds = seconds or false }
-	return seconds
+	local entry = { at = now, seconds = seconds or false, legs = plan and plan.legs }
+	estimates[key] = entry
+	if seconds then
+		return entry
+	end
+	return nil, "unreachable"
+end
+
+local function Lookup(fromMap, fromX, fromY, toMap, toX, toY)
+	if not Ready() then
+		return nil, InCombatLockdown() and "combat" or "invalid"
+	end
+	local from, to = Point(fromMap, fromX, fromY), Point(toMap, toX, toY)
+	if not from or not to then
+		return nil, "invalid"
+	end
+	return Answer(from, to, string.format("%d:%.4f:%.4f:%d:%.17g:%.17g", fromMap, fromX, fromY, toMap, toX, toY))
+end
+
+-- Itinerary.lua draws the hops between later stops with this cheap planner; no terrain searches. It keeps each
+-- hop's legs itself, so they stay out of the estimate cache the public API answers from.
+---@param from SPFPoint
+---@param to SPFPoint
+---@return SPFLeg[]?
+function ns.EstimateLegs(from, to)
+	local plan = ns.Planner.Plan((Options(from, to)))
+	return plan and plan.legs
+end
+
+function API.Estimate(fromMap, fromX, fromY, toMap, toX, toY)
+	local entry, reason = Lookup(fromMap, fromX, fromY, toMap, toX, toY)
+	if not entry then
+		return nil, reason
+	end
+	return entry.seconds --[[@as number]] -- Lookup returns only answered entries.
+end
+
+-- Built on demand so plain estimates stay as cheap as before. Every table is new: a caller that edits or keeps
+-- the result can never reach the planner's nodes or a later caller's copy.
+function API.EstimateDetail(fromMap, fromX, fromY, toMap, toX, toY)
+	local entry, reason = Lookup(fromMap, fromX, fromY, toMap, toX, toY)
+	if not entry then
+		return nil, reason
+	end
+	local legs, previous = {}, entry.at
+	for index, leg in ipairs(entry.legs) do
+		-- Planner legs carry arrival times; each span runs from the previous arrival, so it includes the wait.
+		legs[index] = {
+			mode = leg.mode,
+			to = ns.LegLabel(leg),
+			seconds = (leg.arrive - previous) / 1000,
+			wait = leg.wait and leg.wait >= 60000 and leg.wait / 1000 or nil,
+			newFlightPath = leg.mode == "walk" and leg.to.undiscovered or nil,
+		}
+		previous = leg.arrive
+	end
+	return {
+		seconds = entry.seconds --[[@as number]],
+		legs = legs,
+	}
 end
 
 function API.NavigateRoute(owner, stops)
@@ -216,7 +292,12 @@ function API.NavigateRoute(owner, stops)
 		points[index] = point
 	end
 	-- Validate and copy every stop before replacing guidance. Caller mutations cannot redirect a journey.
+	if route and route.owner ~= owner then
+		ended[route.owner] = { reason = "replaced", at = GetTime() }
+	end
+	ended[owner] = nil
 	route = { owner = owner, points = points, index = 1 }
+	ns.ItineraryChanged()
 	return ns.StartJourney(points[1])
 end
 
@@ -233,7 +314,20 @@ function API.Cancel(owner)
 		return false
 	end
 	ns.ClearJourney()
+	ended[owner] = { reason = "cancelled", at = GetTime() }
 	return true
+end
+
+function API.Ended(owner)
+	local entry = Owner(owner) and ended[owner]
+	if entry then
+		return entry.reason, entry.at
+	end
+end
+
+-- Anyone's journey counts, the player's own included, so a caller can ask before replacing it.
+function API.Active()
+	return ns.IsJourneyGuided() == true
 end
 
 ShortestPathForever = ShortestPathForever or {}

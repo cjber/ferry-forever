@@ -145,6 +145,11 @@ ShortestPathForeverPathData = nil
 ---@class SPFWalkPoints
 ---@field [integer] SPFPoint
 ---@field wet? number
+---@class SPFDrawPath
+---@field mode SPFMode
+---@field points SPFWalkPoints
+---@field preview? boolean
+---@field route? number
 ---@class SPFLeg
 ---@field mode SPFMode
 ---@field from SPFPlace

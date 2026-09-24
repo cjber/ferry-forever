@@ -21,9 +21,15 @@ mechanic rather than your boat.
 
 **Other addons can offer Shortest Path guidance.** The version 1 public API estimates travel time and starts
 journeys through one or several stops in order. Numbered map pins, drawn as the Adventure Guide's gold-numbered
-rings that glow when you hover them, and dotted previews show the remaining stops,
-while guidance advances on arrival and shows your progress. An addon can check the current stop and cancel
-only its own whole route, preserving a journey you start yourself.
+rings that glow when you hover them, mark the remaining stops, and the way on to each is drawn as you will
+travel it: walks follow the paths round hills like the current leg, and boats, zeppelins and flights show in
+their colours, never a line across the sea. A dotted straight line stands in only until that stretch is worked
+out, a moment after the current leg's. Stops whose pins would overlap at the map's zoom share one, numbered like
+*4-7* or *2, 5*, and hovering it names each stop in order; the stop you are heading for always keeps its own pin.
+Guidance advances on arrival and shows your progress. An addon can check the current stop and cancel
+only its own whole route, preserving a journey you start yourself. It can also show how a trip goes, such as
+the boat, the flight and a new flight path to pick up on the way, say why no time is shown (in combat, or no
+way there yet), and warn you before replacing a journey you are already on.
 
 Docks, lifts, tram stations and portals now show on the minimap with the world map's icons, and hovering one
 gives the same departures tooltip. They vanish at the minimap's rim like the game's own tracking icons, and
@@ -51,6 +57,14 @@ spinner turns, the route pulses gently on the world map and minimap, becoming st
 Later checks happen quietly without pulsing routes or changing “finding” messages. Journey searches
 retain less memory, clearing a journey frees its caches, and `/path perf` now collects unused memory
 before reporting what remains.
+
+The Journey header's time is the sum of the steps below it. It used to count down to the planned arrival, so
+standing still it slipped a few seconds below the steps and jumped back every five seconds.
+
+Walks in Stormwind no longer loop round the city through the canals. The game never reports your height, and
+the walk started from the lowest floor under you, often the canal bed below a street. A walk from somewhere
+with several levels, or to a map click or stop there, now starts from whichever one is quickest. Zeppelin
+walks end on the tower's platform, not the ground below it, at Grom'gol, Tirisfal and the tower to Zephras.
 
 ## [1.1.0] - 2026-09-23
 

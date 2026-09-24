@@ -5,19 +5,10 @@ local ns = select(2, ...)
 -- with the boats' live waits. Search candidates stay private until costs and geometry settle, with a grace
 -- period for longer searches. The tracker owns the list; closing the map leaves the journey running.
 local REPLAN_EVERY, REFRESH_EVERY = 5, 60
+-- The frames around a timed replan, which Itinerary.lua leaves to it.
+local REPLAN_MARGIN = 0.5
 local DRAW_EVERY, SEARCH_GRACE = 0.5, 3
 local PROBE_BUDGET = 60 -- ms before switching from candidate costs to shared endpoint searches
-local SCHEDULED = { boat = true, zeppelin = true, lift = true, tram = true }
-local VERB = {
-	walk = "Walk to",
-	flight = "Fly to",
-	boat = "Boat to",
-	zeppelin = "Zeppelin to",
-	lift = "Lift to",
-	tram = "Tram to",
-	portal = "Portal to",
-	passage = "Go through to",
-}
 
 local goal, guide, result
 local nextPoint
@@ -28,19 +19,17 @@ local WALK_CACHE_LIMIT = 64
 local progress = { index = 1 }
 ---@class SPFJourneyDriver : Frame
 ---@field elapsed number
+---@field replannedAt? number GetTime of the last timed replan
 ---@field progressElapsed number
 ---@field riding? number
 ---@field flying? boolean
 ---@field drawAt? number
 ---@field drawX? number
 ---@field drawY? number
----@field drawZ? number
 ---@field drawMap? number
 ---@type SPFJourneyDriver
 local driver
 local ARRIVAL = 15
--- A lift's landings share a spot on the map; height tells the top from the bottom.
-local ARRIVAL_HEIGHT = 30
 local lastRunSpeed = 7
 local pathJobs, walkCache, pathVersion = {}, {}, 0
 local pendingWalks, pendingCosts, settleRound = 0, 0, 0
@@ -92,23 +81,6 @@ local function CancelPaths()
 	pathJobs, walkPending, pendingWalks, pendingCosts = {}, {}, 0, 0
 end
 
--- A place with no kind is the destination point as clicked or picked from a quest.
-local function NodeLabel(node, mode)
-	if node.kind == "start" then
-		return "your position"
-	elseif node.kind == "dock" then
-		return (mode == "boat" or mode == "zeppelin") and ns.DockLabel(node.id) or ns.DockTitle(node.id)
-	elseif node.kind == "taxi" then
-		return ns.TaxiNodes[node.id].name
-	elseif node.kind == "portal" then
-		return node.label
-	elseif node.kind == "goal" or node.kind == nil then
-		local location = not node.label and ns.Locate(node)
-		return node.label or location and location.zone or UNKNOWN
-	end
-	error("unknown journey node kind " .. tostring(node.kind))
-end
-
 -- Whether walks may cross water, and the spell to cast first when none is up.
 local function WaterWalking()
 	for _, id in ipairs(WATER_AURAS) do
@@ -129,36 +101,25 @@ end
 -- Read-only capability query shared by the public estimator and the guided planner.
 ns.JourneyWaterWalking = WaterWalking
 
--- A transport nobody has timed yet waits half its round trip on average; "about" marks that guess.
-local function LegTime(leg)
-	local text = ns.FormatCountdown(leg.arrive - leg.depart)
-	if leg.wait and leg.wait > 0 then
-		local guess = leg.estimated and SCHEDULED[leg.mode] and "about " or ""
-		text = "wait " .. guess .. ns.FormatCountdown(leg.wait) .. " · " .. text
-	end
-	return text
-end
-
 -- A missing/secret sample is not evidence that the journey is unreachable. Planning, Guide and lines share this gate.
+-- UnitPosition's third value is a placeholder, always 0, so the player's height is unknown: never a floor.
+---@return number? x, number? y, nil z, number? map
 function ns.JourneyPosition()
-	local x, y, z, map = UnitPosition("player")
+	local x, y, _, map = UnitPosition("player")
 	if not (canaccessvalue(x) and canaccessvalue(y) and canaccessvalue(map)) or not (x and y and map) then
 		return nil
 	end
-	return x, y, canaccessvalue(z) and z or nil, map
+	return x, y, nil, map
 end
 
 local function Here()
-	local x, y, z, map = ns.JourneyPosition()
-	return x and { map = map, x = x, y = y, z = z }
+	local x, y, _, map = ns.JourneyPosition()
+	return x and { map = map, x = x, y = y }
 end
 
 local function Near(node, reach)
-	local x, y, z, map = ns.JourneyPosition()
-	return x
-		and map == node.map
-		and (x - node.x) ^ 2 + (y - node.y) ^ 2 <= (reach or ARRIVAL) ^ 2
-		and not (z and node.z and math.abs(z - node.z) > ARRIVAL_HEIGHT)
+	local x, y, _, map = ns.JourneyPosition()
+	return x and map == node.map and (x - node.x) ^ 2 + (y - node.y) ^ 2 <= (reach or ARRIVAL) ^ 2
 end
 
 local function SameWaypoint(a, b)
@@ -359,7 +320,8 @@ local function GuideTo(node, points)
 	ns.PointGuideArrow(points or { point }, GuideWaypoint, node, goal)
 end
 
-function ns.ClearJourney()
+---@param reason "arrived"|"cleared"
+local function EndJourney(reason)
 	CancelPaths()
 	costsWaiting = nil
 	settleRound, costError, goalError = 0, nil, nil
@@ -376,7 +338,7 @@ function ns.ClearJourney()
 	StopGuide()
 	goal, result, nextPoint = nil, nil, nil
 	if ns.JourneyChanged then
-		ns.JourneyChanged(nil)
+		ns.JourneyChanged(nil, reason)
 	end
 	progress.index, progress.departed = 1, false
 	driver:Hide()
@@ -384,12 +346,17 @@ function ns.ClearJourney()
 	RefreshTracker()
 end
 
+-- Menus and settings pass their own arguments to callbacks, so the player's clear takes none.
+function ns.ClearJourney()
+	EndJourney("cleared")
+end
+
 -- Completion may run inside a planner callback. Start at most one next stop on the driver's next step,
 -- after that callback unwinds; coincident stops must never recurse through the whole route in one frame.
 local function Arrive()
 	nextPoint = ns.NextJourneyStop and ns.NextJourneyStop(goal)
 	if not nextPoint then
-		ns.ClearJourney()
+		EndJourney("arrived")
 	end
 end
 
@@ -475,7 +442,7 @@ function ns.JourneyInfo()
 	if not goal then
 		return nil
 	end
-	local title = goal.routeTitle or ("Journey to " .. NodeLabel(goal))
+	local title = goal.routeTitle or ("Journey to " .. ns.PlaceLabel(goal))
 	local rows = {}
 	local loading = search and search.initial or false
 	if not result and loading then
@@ -484,7 +451,7 @@ function ns.JourneyInfo()
 		local _, spell = WaterWalking()
 		for index = progress.index, #result.legs do
 			local leg = result.legs[index]
-			local text = string.format("%d. %s %s", index, VERB[leg.mode], NodeLabel(leg.to, leg.mode))
+			local text = string.format("%d. %s %s", index, ns.LegVerb(leg), ns.LegLabel(leg))
 			if leg.mode == "walk" and leg.to.undiscovered then
 				text = text .. " (new flight path)"
 			end
@@ -496,7 +463,7 @@ function ns.JourneyInfo()
 			end
 			rows[#rows + 1] = {
 				key = index,
-				text = loading and text or text .. "   " .. LegTime(leg),
+				text = loading and text or text .. "   " .. ns.LegTime(leg),
 				current = index == progress.index,
 			}
 		end
@@ -524,9 +491,7 @@ local function OnWalk(points, here, reach)
 		local dx, dy, length = b.x - a.x, b.y - a.y, lengths[index]
 		local t = length > 0 and math.max(0, math.min(1, ((here.x - a.x) * dx + (here.y - a.y) * dy) / length ^ 2)) or 0
 		local off = math.sqrt((a.x + t * dx - here.x) ^ 2 + (a.y + t * dy - here.y) ^ 2)
-		local z = a.z and b.z and a.z + t * (b.z - a.z)
-		local level = not (z and here.z and math.abs(z - here.z) > ARRIVAL_HEIGHT)
-		if here.map == a.map and off <= (reach or ON_PATH) and level and (not best or off < best) then
+		if here.map == a.map and off <= (reach or ON_PATH) and (not best or off < best) then
 			best, found, along, after = off, index, t, total - walked - t * length
 		end
 		walked = walked + length
@@ -544,8 +509,7 @@ local function Refresh()
 		-- Draw the walk you are on from where you stand, not from where it was planned.
 		local leg, here = remaining.legs[1], Here()
 		if here then
-			driver.drawAt, driver.drawX, driver.drawY, driver.drawZ, driver.drawMap =
-				GetTime(), here.x, here.y, here.z, here.map
+			driver.drawAt, driver.drawX, driver.drawY, driver.drawMap = GetTime(), here.x, here.y, here.map
 		end
 		if leg and leg.mode == "walk" and here then
 			local points = leg.walkPoints or ns.Planner.WalkPoints(leg.from, leg.to)
@@ -1240,6 +1204,13 @@ local function RefreshCosts(includeGoal, forced)
 		consider(true)
 	end
 end
+-- The timed replan in Update plans in the frame; Itinerary.lua keeps its own planning and drawing off that frame. A
+-- frame's GetTime is fixed, and the margin covers the frame the replan will take whichever handler runs first.
+---@return boolean
+function ns.JourneyReplanning()
+	return driver ~= nil and (driver.elapsed >= REPLAN_EVERY - REPLAN_MARGIN or driver.replannedAt == GetTime())
+end
+
 ---@param self SPFJourneyDriver
 ---@param elapsed number
 -- One throttled frame step; keeping its gates together preserves the search/draw cadence
@@ -1257,7 +1228,7 @@ local function Update(self, elapsed)
 		return
 	end
 	self.progressElapsed = 0
-	local x, y, z, map = ns.JourneyPosition()
+	local x, y, _, map = ns.JourneyPosition()
 	if not x then
 		return
 	end
@@ -1307,7 +1278,7 @@ local function Update(self, elapsed)
 	local changedRide = riding ~= self.riding or flying ~= self.flying
 	self.riding, self.flying = riding, flying
 	if self.elapsed >= REPLAN_EVERY or changedRide then
-		self.elapsed = 0
+		self.elapsed, self.replannedAt = 0, GetTime()
 		local mode = WaterWalking()
 		if mode ~= waterMode then
 			waterMode, walkCache, walkOrder, startCosts, goalCosts = mode, {}, {}, {}, {}
@@ -1349,7 +1320,7 @@ local function Update(self, elapsed)
 		goal
 		and result
 		and GetTime() - (self.drawAt or 0) >= DRAW_EVERY
-		and (x ~= self.drawX or y ~= self.drawY or z ~= self.drawZ or map ~= self.drawMap)
+		and (x ~= self.drawX or y ~= self.drawY or map ~= self.drawMap)
 	then
 		Refresh()
 	end

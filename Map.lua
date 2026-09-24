@@ -448,11 +448,15 @@ local function MapDocks(mapID)
 	return docks
 end
 
--- Docks whose pins would overlap at this zoom share one pin, at their middle.
-local function Clusters(map, docks)
+-- Groups the points whose pins, `size` screen units across, would overlap on the map at its current zoom. Each group
+-- lists its points in their given order, and the groups are ordered by their first point.
+---@param map table
+---@param points { x: number, y: number }[]
+---@param size number
+---@return table[][]
+function ns.OverlapGroups(map, points, size)
 	local canvas = map:GetCanvas()
-	local zoom = Saturate(map:GetCanvasZoomPercent())
-	local size = PIN_SIZE * OVERLAP * map:GetGlobalPinScale() * Lerp(1, 1.2, zoom) / map:GetCanvasScale()
+	size = size * OVERLAP / map:GetCanvasScale()
 	local reachX, reachY = size / canvas:GetWidth(), size / canvas:GetHeight()
 	local root = {}
 	local function Find(i)
@@ -461,24 +465,34 @@ local function Clusters(map, docks)
 		end
 		return i
 	end
-	for i in ipairs(docks) do
+	for i in ipairs(points) do
 		root[i] = i
 	end
-	for i = 1, #docks do
-		for j = i + 1, #docks do
-			if math.abs(docks[i].x - docks[j].x) < reachX and math.abs(docks[i].y - docks[j].y) < reachY then
+	for i = 1, #points do
+		for j = i + 1, #points do
+			if math.abs(points[i].x - points[j].x) < reachX and math.abs(points[i].y - points[j].y) < reachY then
 				root[Find(j)] = Find(i)
 			end
 		end
 	end
-	local byRoot, clusters = {}, {}
-	for i, dock in ipairs(docks) do
+	local byRoot, groups = {}, {}
+	for i, point in ipairs(points) do
 		local r = Find(i)
 		if not byRoot[r] then
-			byRoot[r] = { docks = {} }
-			clusters[#clusters + 1] = byRoot[r]
+			byRoot[r] = {}
+			groups[#groups + 1] = byRoot[r]
 		end
-		table.insert(byRoot[r].docks, dock)
+		table.insert(byRoot[r], point)
+	end
+	return groups
+end
+
+-- Docks whose pins would overlap at this zoom share one pin, at their middle.
+local function Clusters(map, docks)
+	local zoom = Saturate(map:GetCanvasZoomPercent())
+	local clusters = {}
+	for i, group in ipairs(ns.OverlapGroups(map, docks, PIN_SIZE * map:GetGlobalPinScale() * Lerp(1, 1.2, zoom))) do
+		clusters[i] = { docks = group }
 	end
 	for _, cluster in ipairs(clusters) do
 		local x, y, ids = 0, 0, {}

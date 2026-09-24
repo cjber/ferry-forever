@@ -1,3 +1,17 @@
+# Later hops of a route — 2026-09-23
+
+`Itinerary.lua` draws each later hop of a `NavigateRoute` journey as planned: the estimate's planner (no endpoint
+searches) picks the hop's legs, then `Path.Find` searches each walking leg. One piece of work runs at a time, and
+only on a frame no search held (`Path.Busy`) while the journey is not settling; a later walk already in flight is
+paused while the journey settles and resumed after. Combat defers it on `PLAYER_REGEN_ENABLED`; nothing ticks
+without work. Hops are cached by both stops' coordinates, pruned to the route's remaining hops (at most 63).
+
+`luajit -joff tests/route_preview_spec.lua` (four stops, Darkshore → Redridge → Darkshore, three runs):
+hop plans **1.6–2.2 ms cold, 0.4–0.8 ms warm**, each alone in its frame; the itinerary's own step is otherwise
+under 0.05 ms. The slowest frames (3.4–3.8 ms) are `Path` slices overshooting their 3 ms budget by one
+64-expansion check, as for the current leg's searches. The Eastern Kingdoms walking map loads on demand in its
+own frame. `journey_bench.lua` is unchanged: it does not start routes.
+
 # Idle and event audit — 2026-09-23
 
 Baseline: `a29b6a7` on `cb/ferry`; after: this uncommitted working tree. All tests are offline. No client,

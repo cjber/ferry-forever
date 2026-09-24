@@ -1071,6 +1071,60 @@ local function connect(st, swim, k, node)
 	end
 	return entry.node, entry.edges, entry.tree
 end
+
+-- A point without a height (the player, whose UnitPosition height is a placeholder 0, or a map click) could stand on
+-- any surface at its spot, so it starts from each one within a cell of it at a distinct height and the search keeps
+-- the cheapest: a street beside or over a canal is not walked from the canal bed. Returns each surface's connection,
+-- the entrance costs merged by minimum and, per entrance, the surface it came from.
+local function connectPoint(st, swim, k, node, h)
+	local nodes = { node }
+	if not h then
+		local C, val, z, at = st.C, st.val[k], st.z[k], st.at[k]
+		local cell = cellOf(st, k, node)
+		local lx, ly = floor(cell / C), cell % C
+		local function consider(n, r)
+			-- A neighbour's water is where the point is not: it would be standing in it.
+			if r > 0 and val[n + 1] == 2 then
+				return
+			end
+			for _, m in ipairs(nodes) do
+				if abs(z[n + 1] - z[m + 1]) <= ZTOL then
+					return
+				end
+			end
+			nodes[#nodes + 1] = n
+		end
+		for r = 0, 1 do
+			for dx = -r, r do
+				for dy = -r, r do
+					local x, y = lx + dx, ly + dy
+					if (dx == r or dx == -r or dy == r or dy == -r) and x >= 0 and y >= 0 and x < C and y < C then
+						local c = x * C + y
+						if val[c + 1] ~= 0 then
+							consider(c, r)
+						end
+						local n = at[-(c + 1)]
+						while n and at[n + 1] == c do
+							consider(n, r)
+							n = n + 1
+						end
+					end
+				end
+			end
+		end
+	end
+	local ends, merged, via = {}, {}, {}
+	for _, start in ipairs(nodes) do
+		local n, edges, tree = connect(st, swim, k, start)
+		ends[#ends + 1] = { node = n, tree = tree }
+		for id, cost in pairs(edges) do
+			if not merged[id] or cost < merged[id] then
+				merged[id], via[id] = cost, ends[#ends]
+			end
+		end
+	end
+	return ends, merged, via
+end
 -- Sliced A* and refinement share scratch trees; splitting adds hot-path calls and upvalues
 local function run(map, from, to, waterWalking, costOnly)
 	local st = State(map)
@@ -1094,20 +1148,25 @@ local function run(map, from, to, waterWalking, costOnly)
 	local C = st.C
 
 	local S, G = trees.S, trees.G
-	local source, target, sourceTree, targetTree
-	sc, source, sourceTree = connect(st, swim, sk, sc)
-	gc, target, targetTree = connect(st, swim, gk, gc)
-	local key = table.concat({ sk, sc, gk, gc, swim }, ":")
+	local starts, source, sourceVia = connectPoint(st, swim, sk, sc, from.z)
+	local goals, target, targetVia = connectPoint(st, swim, gk, gc, to.z)
+	local key = table.concat({ sk, sc, gk, gc, swim, from.z and 1 or 0, to.z and 1 or 0 }, ":")
 	st.paths = st.paths or {}
 	local cached = st.paths[key]
-	local hops, cost
+	local hops, cost, directFrom, directTo
 	local x0, y0, cs = st.x0, st.y0, st.cs
 	if cached then
-		hops, cost = cached.hops, cached.cost
+		hops, cost, directFrom, directTo = cached.hops, cached.cost, cached.directFrom, cached.directTo
 	else
 		local direct
-		if sk == gk and search(st, sk, swim, sc, S, gc) then
-			direct = S.g[gc + 1]
+		if sk == gk then
+			for _, a in ipairs(starts) do
+				for _, b in ipairs(goals) do
+					if search(st, sk, swim, a.node, S, b.node) and (not direct or S.g[b.node + 1] < direct) then
+						direct, directFrom, directTo = S.g[b.node + 1], a.node, b.node
+					end
+				end
+			end
 		end
 
 		local comps, shared = {}, false
@@ -1192,7 +1251,7 @@ local function run(map, from, to, waterWalking, costOnly)
 		if (st.pathCount or 0) >= 16 then
 			st.paths, st.pathCount = {}, 0
 		end
-		st.paths[key] = { hops = hops, cost = cost }
+		st.paths[key] = { hops = hops, cost = cost, directFrom = directFrom, directTo = directTo }
 		st.pathCount = (st.pathCount or 0) + 1
 	end
 	if costOnly then
@@ -1219,21 +1278,23 @@ local function run(map, from, to, waterWalking, costOnly)
 	for i = #hops, 2, -1 do
 		local a, b = hops[i], hops[i - 1]
 		if a == START and b == GOAL then
-			search(st, sk, swim, sc, S, gc)
-			local nodes = trace(S, gc, {})
+			search(st, sk, swim, directFrom, S, directTo)
+			local nodes = trace(S, directTo, {})
 			addAll(sk, nodes, #nodes, 1, -1)
 		elseif a == START then
-			local tree = sourceTree
+			local start = sourceVia[b]
+			local tree = start.tree
 			if not tree or not reached(tree, entrance(st, b)) then
-				search(st, sk, swim, sc, S, entrance(st, b))
+				search(st, sk, swim, start.node, S, entrance(st, b))
 				tree = S
 			end
 			local nodes = trace(tree, entrance(st, b), {})
 			addAll(sk, nodes, #nodes, 1, -1)
 		elseif b == GOAL then
-			local tree = targetTree
+			local goal = targetVia[a]
+			local tree = goal.tree
 			if not tree or not reached(tree, entrance(st, a)) then
-				search(st, gk, swim, gc, G, entrance(st, a))
+				search(st, gk, swim, goal.node, G, entrance(st, a))
 				tree = G
 			end
 			local nodes = trace(tree, entrance(st, a), {})
@@ -1317,8 +1378,7 @@ local function runMany(map, from, targets, waterWalking, reverse, job)
 		end
 	end
 	local swim, cost2 = waterWalking and 1 or st.swim, waterWalking and 2 or 1
-	local source, sourceTree
-	sc, source, sourceTree = connect(st, swim, sk, sc)
+	local starts, source = connectPoint(st, swim, sk, sc, from.z)
 	local clusters, links, dist, closed, left = {}, {}, {}, {}, #targets
 	for i, point in ipairs(targets) do
 		local k = locate(st, point.x, point.y)
@@ -1351,20 +1411,26 @@ local function runMany(map, from, targets, waterWalking, reverse, job)
 		for _, i in ipairs(list) do
 			local _, node = pointNode(st, targets[i])
 			if node then
-				local edges, tree
-				node, edges, tree = connect(st, swim, k, node)
-				ends[i] = edges
-				if k == sk then
-					local first, last = reverse and node or sc, reverse and sc or node
-					if not reverse then
-						tree = sourceTree
-					end
-					if first == last then
-						direct[i] = 0
-					elseif tree and reached(tree, last) then
-						direct[i] = tree.g[last + 1]
-					elseif search(st, k, swim, first, trees.R, last) then
-						direct[i] = trees.R.g[last + 1]
+				local goals
+				goals, ends[i] = connectPoint(st, swim, k, node, targets[i].z)
+				for _, a in ipairs(k == sk and starts or {}) do
+					for _, b in ipairs(goals) do
+						-- Both trees search outward from their endpoint; a reverse batch walks to the source.
+						local first, last, tree = a.node, b.node, a.tree
+						if reverse then
+							first, last, tree = b.node, a.node, b.tree
+						end
+						local cost
+						if first == last then
+							cost = 0
+						elseif tree and reached(tree, last) then
+							cost = tree.g[last + 1]
+						elseif search(st, k, swim, first, trees.R, last) then
+							cost = trees.R.g[last + 1]
+						end
+						if cost and (not direct[i] or cost < direct[i]) then
+							direct[i] = cost
+						end
 					end
 				end
 			else
@@ -1538,7 +1604,7 @@ end
 
 -- Round-robin slices share one frame budget, including callbacks that replan from newly settled costs.
 local queue = {}
-local scheduled = false
+local scheduled, pumped = false, false
 local pump, combatWait
 
 local function notify(job, callback, points, cost)
@@ -1563,7 +1629,7 @@ local function schedule()
 end
 
 pump = function()
-	scheduled = false
+	scheduled, pumped = false, true
 	if InCombatLockdown and InCombatLockdown() then
 		if not combatWait then
 			combatWait = CreateFrame("Frame")
@@ -1634,18 +1700,31 @@ pump = function()
 	schedule()
 end
 
+-- Idle work skips frames a queued search holds or one since the last call spent, so they never share a budget.
+function Path.Busy()
+	local busy = pumped or #queue > 0
+	pumped = false
+	return busy
+end
+
 -- Next-frame scheduling; tests replace it.
 ---@param fn fun()
 function Path.after(fn)
 	C_Timer.After(0, fn)
 end
 
+local function enqueue(job)
+	job.co, job.frames, job.cpu = coroutine.create(start), 0, 0
+	queue[#queue + 1] = job
+	schedule()
+	return job
+end
+
 -- Search coroutine-sliced over frames between two { x, y, z } points (z optional: it picks the floor to start or end
 -- on). callback(points, cost, job) or callback(nil, reason, job): points are { map, x, y, z } from the start to the
 -- goal, with points.wet the drawn yards over water. Cost is the abstract route in running yards, not the smoothed
--- polyline length; a swum grid yard counts as the
--- data's swim (so routes keep out of water) unless waterWalking, when water is ground. reason is "nodata",
--- "outside", "offmesh", "unreachable" or "error". Returns a handle for Path.Cancel.
+-- polyline length; a swum grid yard counts as the data's swim (so routes keep out of water) unless waterWalking, when
+-- water is ground. reason is "nodata", "outside", "offmesh", "unreachable" or "error". Returns a Cancel handle.
 ---@param map number
 ---@param from SPFPoint
 ---@param to SPFPoint
@@ -1653,19 +1732,13 @@ end
 ---@param waterWalking? boolean
 ---@return SPFPathJob
 function Path.Find(map, from, to, callback, waterWalking)
-	local job = {
+	return enqueue({
 		map = map,
 		from = from,
 		to = to,
 		waterWalking = waterWalking,
 		callback = callback,
-		co = coroutine.create(start),
-		frames = 0,
-		cpu = 0,
-	}
-	queue[#queue + 1] = job
-	schedule()
-	return job
+	})
 end
 
 -- A candidate can be ruled in or out without refining all its intermediate clusters into drawing points.
@@ -1695,7 +1768,7 @@ end
 ---@param progress? fun(costs: (number|false)[], reason: nil, job: SPFPathJob)
 ---@return SPFPathJob
 function Path.FindMany(map, from, targets, callback, waterWalking, reverse, progress)
-	local job = {
+	return enqueue({
 		map = map,
 		from = from,
 		targets = targets,
@@ -1706,13 +1779,7 @@ function Path.FindMany(map, from, targets, callback, waterWalking, reverse, prog
 		radius = 0,
 		revision = 0,
 		callback = callback,
-		co = coroutine.create(start),
-		frames = 0,
-		cpu = 0,
-	}
-	queue[#queue + 1] = job
-	schedule()
-	return job
+	})
 end
 
 -- Paused batches retain their settled costs and frontier for later replans, without consuming frames.
@@ -1760,7 +1827,6 @@ function Path.Cancel(job)
 	job.cancelled, job.scratch, job.co = true, nil, nil
 end
 
--- The walkable height at a global cell nearest height h, within ZTOL.
 ---@param map number
 ---@return boolean
 function Path.HasData(map)
