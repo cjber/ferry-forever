@@ -72,6 +72,10 @@ local env = setmetatable({
 		return 0
 	end,
 	C_Navigation = { GetFrame = noop },
+	-- A search that throws fails the spec instead of reading as an unreachable walk.
+	geterrorhandler = function()
+		return error
+	end,
 	UnitOnTaxi = noop,
 	InCombatLockdown = noop,
 	UnitFactionGroup = function()

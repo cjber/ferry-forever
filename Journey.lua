@@ -603,7 +603,7 @@ local function FindWalk(planned, leg, key)
 			callback(points, cost)
 		end
 		CacheWalk(key, { points = points or previous, reason = not points and cost or nil, cost = points and cost })
-		if ns.db.debug and (not points or math.abs(cost - leg.yards) > math.max(1, leg.yards * 0.1)) then
+		if ns.db.debug and ns.Planner.WalkContradicts(leg, points and cost) then
 			ns.Print(string.format("walking cost mismatch: planned %.1f, found %s", leg.yards, tostring(cost)))
 		end
 		-- Geometry is private until the entire search can be committed together.
