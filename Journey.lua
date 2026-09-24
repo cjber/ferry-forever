@@ -1031,7 +1031,7 @@ local function Plan(preview)
 end
 
 -- Reuse only the last two endpoint searches, with starts confirmed by the pathfinder as the same snapped node.
--- sift: long-function - one search owns the callbacks' shared revision, preview and probe budget across resumes
+-- One search owns the callbacks' shared revision, preview and probe budget across resumes
 local function RefreshCosts(includeGoal, forced)
 	local here = Here()
 	if not (here and goal) then
@@ -1191,7 +1191,7 @@ local function RefreshCosts(includeGoal, forced)
 		end
 	end
 	local consider
-	-- sift: long-function - bounded search callback; splitting adds calls and upvalues on every frontier update
+	-- Bounded search callback; splitting adds calls and upvalues on every frontier update
 	consider = function(final)
 		if version ~= pathVersion or not goal then
 			return
@@ -1347,7 +1347,7 @@ end
 
 ---@param self SPFJourneyDriver
 ---@param elapsed number
--- sift: long-function - one throttled frame step; keeping its gates together preserves the search/draw cadence
+-- One throttled frame step; keeping its gates together preserves the search/draw cadence
 local function Update(self, elapsed)
 	if InCombatLockdown() then
 		return

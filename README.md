@@ -12,6 +12,7 @@ Shift-click the world map or minimap, or pick a quest, and it plans the route: w
 the flight points you know, boats and zeppelins with their live departure times, lifts, the tram and portals. Then it
 walks you there with the game's own navigation marker. Walking maps cover Eastern Kingdoms, Kalimdor and Zephras Isle;
 they come in the same download and load only when a route needs them.
+The route, pins and tracker use the game's own art, so it looks like it came with the game.
 
 ![Eight-second demo of a route settling, the countdown and the optional compass](docs/screenshots/demo.gif)
 
@@ -39,8 +40,8 @@ Each feature has more detail in [docs/features.md](docs/features.md).
   minimap too, with the same tooltips; *Transport* in the minimap's tracking menu turns them off there.
 - **Next departures.** At a dock, lift or tram station, a tracker section above your quests counts down to every
   arrival and departure; on board, it shows the next call.
-- **Arrival alerts.** A raid-warning banner, a sound and a flashing taskbar icon half a minute before your boat
-  arrives, for anyone waiting AFK.
+- **Arrival alerts.** A raid-warning banner, the ship's own bell (the horn for a zeppelin, the tram pulling in
+  for the tram) and a flashing taskbar icon half a minute before your boat arrives, for anyone waiting AFK.
 - **Times from real rides, shared.** One ride, yours or another player's, times a boat for hours. Sightings pass
   quietly over guild, party and yell at the docks; turn sharing off in the settings.
 

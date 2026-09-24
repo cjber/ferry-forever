@@ -661,7 +661,7 @@ end
 local function Tree()
 	return { g = {}, par = {}, stamp = {}, closed = {}, gen = 0 }
 end
--- sift: long-function - one grid search loop; splitting moves its retained arrays to upvalues on the hot path
+-- One grid search loop; splitting moves its retained arrays to upvalues on the hot path
 local function search(st, k, swim, source, tree, goal, targets, left)
 	local val = grid(st, k)
 	-- Search only enters populated grids, through snapped endpoints or decoded entrances.
@@ -1125,7 +1125,7 @@ local function connectPoint(st, swim, k, node, h)
 	end
 	return ends, merged, via
 end
--- sift: long-function - sliced A* and refinement share scratch trees; splitting adds hot-path calls and upvalues
+-- Sliced A* and refinement share scratch trees; splitting adds hot-path calls and upvalues
 local function run(map, from, to, waterWalking, costOnly)
 	local st = State(map)
 	if not st then
@@ -1343,7 +1343,7 @@ local function run(map, from, to, waterWalking, costOnly)
 end
 
 -- Lazy terminal-node connections let nearby targets settle without first searching every faraway endpoint.
--- sift: long-function - one sliced Dijkstra owns the heap swap and frontier locals across endpoint searches
+-- One sliced Dijkstra owns the heap swap and frontier locals across endpoint searches
 local function runMany(map, from, targets, waterWalking, reverse, job)
 	local costs = job and job.costs or {}
 	local function failed(reason)

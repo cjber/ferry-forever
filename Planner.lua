@@ -298,7 +298,7 @@ local CACHE_KEYS = {
 
 ---@param options SPFPlanOptions
 ---@return SPFPlan?
--- sift: long-function - bounded label search shares topology and heap locals; splitting adds hot-path upvalues
+-- Bounded label search shares topology and heap locals; splitting adds hot-path upvalues
 function Planner.Plan(options)
 	local cache = options.cache
 	local topology = cache and cache.topology
