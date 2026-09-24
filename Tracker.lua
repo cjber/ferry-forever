@@ -32,7 +32,10 @@ function ModuleMixin:OnBlockHeaderClick(block, button)
 			MenuUtil.CreateContextMenu(block, function(_, root)
 				root:CreateCheckbox("Guide me", ns.IsJourneyGuided, ns.ToggleJourneyGuide)
 				root:CreateButton("Show on map", ns.ShowJourneyMap)
-				root:CreateButton("Clear journey", ns.ClearJourney)
+				-- A corpse run ends only when you live again.
+				if not ns.Corpse.Active() then
+					root:CreateButton("Clear journey", ns.ClearJourney)
+				end
 			end)
 		end
 	elseif button == "LeftButton" then

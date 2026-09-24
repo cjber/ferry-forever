@@ -127,6 +127,12 @@ ns.Init(function()
 		ns.RefreshGuideStops
 	)
 	Checkbox(
+		"corpse",
+		"Show the way back to your corpse",
+		"While you are a ghost, a red dotted path leads to your body. Your journey waits until you are alive again.",
+		ns.RefreshCorpseRun
+	)
+	Checkbox(
 		"compass",
 		"Show a compass while Guide is on",
 		"Your next turns, the next stop and your destination across the top of the screen.",

@@ -449,7 +449,7 @@ function ShortestPathForeverRoutePinMixin:Draw()
 	-- The journey's own paths come first; the later hops Itinerary.lua adds after them recede.
 	local current = self.paths == worldPaths and #paths or math.huge
 	for pathIndex, path in ipairs(self.paths) do
-		local color = COLORS[path.mode]
+		local color = path.color or COLORS[path.mode]
 		self.drawingRoute = path.route
 		self.pathAlpha = pathIndex > current and LATER_ALPHA or nil
 		self.walked = 0
@@ -683,7 +683,7 @@ function ProviderMixin:RefreshAllData()
 	self:RemoveAllData()
 	local map = self:GetMap()
 	-- Before the map's first show its zoom levels are unset.
-	if not (map:GetMapID() and map:IsVisible() and ns.db.journey and goal) then
+	if not (map:GetMapID() and map:IsVisible() and goal and (ns.db.journey or goal.corpse)) then
 		return
 	end
 	if #worldPaths > 0 then
@@ -698,7 +698,8 @@ end
 function ProviderMixin:RefreshStops()
 	local map = self:GetMap()
 	local mapID = map:GetMapID()
-	if not (mapID and map:IsVisible() and ns.db.journey and goal) then
+	-- The game's own tombstone marks your corpse.
+	if not (mapID and map:IsVisible() and ns.db.journey and goal) or goal.corpse then
 		return
 	end
 	local first, marks = stopIndex or 1, {}
@@ -837,7 +838,7 @@ local function DrawMinimap(self)
 		local cosine, sine = math.cos(facing), math.sin(facing)
 		if goal and goal.map == map then
 			local gx, gy = Project(goal, x, y, radius, cosine, sine)
-			if math.abs(gx) <= 1 and math.abs(gy) <= 1 and (square or gx * gx + gy * gy <= 1) then
+			if not goal.corpse and math.abs(gx) <= 1 and math.abs(gy) <= 1 and (square or gx * gx + gy * gy <= 1) then
 				self.Goal:SetPoint("CENTER", self, "CENTER", gx * width / 2, gy * height / 2)
 				self.Goal:Show()
 			end
@@ -867,7 +868,7 @@ local function DrawMinimap(self)
 							(by - 1) * height / 2,
 							low,
 							high,
-							COLORS[path.mode],
+							path.color or COLORS[path.mode],
 							walk,
 							scale
 						)
@@ -883,7 +884,7 @@ end
 ---@param self SPFMinimapRoute
 ---@param elapsed number
 local function UpdateMinimap(self, elapsed)
-	if not (goal and ns.db.journey) then
+	if not (goal and (ns.db.journey or goal.corpse)) then
 		self.Goal:Hide()
 		self:Hide()
 		return
@@ -929,11 +930,12 @@ function ns.SetJourneyRoute(destination, route)
 	for _, leg in ipairs(route and route.legs or {}) do
 		paths[#paths + 1] = {
 			mode = leg.mode,
+			color = leg.color,
 			points = ns.Planner.LegPoints(leg, ns.Routes),
 		}
 	end
 	stops, stopIndex = nil, nil
-	if destination and ns.JourneyStops then
+	if destination and not destination.corpse and ns.JourneyStops then
 		stops, stopIndex = ns.JourneyStops()
 	end
 	WorldPaths()

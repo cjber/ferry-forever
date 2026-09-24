@@ -11,6 +11,13 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+**The way back to your corpse.** Release your spirit and a dotted path leads from the graveyard back to your body, in
+the red-orange of the corpse's own tombstone, on the world map and the minimap. It follows the walking paths round
+walls and hills, Guide steers along it, and the tracker reads *Return to your corpse* with the time and distance
+left. The journey you were on steps aside and comes back when you are alive again, whether at your corpse, at the
+spirit healer or raised by another player; a route another addon asks for while you are a ghost waits the same way.
+*Show the way back to your corpse* in `/path` turns it off.
+
 **A stop shows what is there.** When another addon says what stands at a stop, such as a quest to hand in, a quest
 giver, a trainer or a flight master, its map pin shows the game's own mark for it, the “?” or “!”, inside the stop's
 gold ring, rather than a pin that hides it. On the minimap the stop is circled, so the game's own icon there stays

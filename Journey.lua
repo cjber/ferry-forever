@@ -58,9 +58,14 @@ local WALK_FAILURE = {
 	error = "walking search failed",
 }
 
+-- While you are a ghost, Corpse.lua's run borrows the route drawing, the tracker and Guide; the journey waits.
+local function CorpseRun()
+	return ns.Corpse ~= nil and ns.Corpse.Active()
+end
+
 ---@return boolean
 function ns.HasJourney()
-	return goal ~= nil
+	return goal ~= nil or CorpseRun()
 end
 
 local function CancelPaths()
@@ -122,14 +127,16 @@ local function EndJourney(reason)
 	if ns.Path and ns.Path.ClearCaches then
 		ns.Path.ClearCaches()
 	end
-	StopGuide()
 	goal, result, nextPoint = nil, nil, nil
 	if ns.JourneyChanged then
 		ns.JourneyChanged(nil, reason)
 	end
 	progress.index, progress.departed = 1, false
 	driver:Hide()
-	ns.SetJourneyRoute(nil)
+	if not CorpseRun() then
+		StopGuide()
+		ns.SetJourneyRoute(nil)
+	end
 	RefreshTracker()
 end
 
@@ -148,7 +155,7 @@ local function Arrive()
 end
 
 local function UpdateProgress()
-	if not (goal and result) or nextPoint then
+	if not (goal and result) or nextPoint or CorpseRun() then
 		return
 	end
 	if Near(goal) then
@@ -211,6 +218,9 @@ end
 function ns.ToggleJourneyGuide()
 	if Guide.Active() then
 		StopGuide()
+	elseif CorpseRun() then
+		Guide.Start()
+		ns.Corpse.Steer()
 	elseif goal then
 		StartGuide()
 	end
@@ -218,13 +228,17 @@ function ns.ToggleJourneyGuide()
 end
 
 function ns.ShowJourneyMap()
-	local location = goal and ns.Locate(goal)
+	local place = CorpseRun() and ns.Corpse.Point() or goal
+	local location = place and ns.Locate(place)
 	OpenWorldMap(location and location.uiMap)
 end
 
 -- Shared by the tracker and the goal pin, including on a fullscreen map.
 ---@return string? title, SPFRow[]? rows, SPFPlan? plan, number? index, boolean? loading
 function ns.JourneyInfo()
+	if CorpseRun() then
+		return ns.Corpse.Info()
+	end
 	if not goal then
 		return nil
 	end
@@ -302,6 +316,7 @@ local function OnWalk(points, here, reach)
 	return found, along, after, total
 end
 
+ns.OnWalk = OnWalk -- Corpse.lua trims its walk the same way.
 local function Refresh()
 	local remaining
 	if result then
@@ -328,7 +343,9 @@ local function Refresh()
 			end
 		end
 	end
-	ns.SetJourneyRoute(goal, remaining)
+	if not CorpseRun() then
+		ns.SetJourneyRoute(goal, remaining)
+	end
 	RefreshTracker()
 end
 
@@ -723,7 +740,7 @@ end
 ---@param elapsed number
 -- One throttled frame step; keeping its gates together preserves the search/draw cadence
 local function Update(self, elapsed)
-	if InCombatLockdown() then
+	if InCombatLockdown() or CorpseRun() then
 		return
 	end
 	if not ns.db.journey then
@@ -837,9 +854,49 @@ local function Update(self, elapsed)
 	end
 end
 
+-- Whether the journey waiting out a corpse run was guided; one asked for while you are a ghost starts guided.
+local waitingGuided = false
+-- The run is starting: searches stop, and the journey keeps its goal, route and progress for later.
+function ns.SuspendJourney()
+	waitingGuided = goal ~= nil and Guide.Active()
+	CancelPaths()
+	search = nil
+end
+
+-- You are alive again: the journey plans afresh from wherever that is, guided as it was.
+function ns.ResumeJourney()
+	if goal then
+		ns.StartJourney(goal)
+		-- The route you were on shows again at once, until the new plan replaces it.
+		if result then
+			Refresh()
+		end
+		if not waitingGuided then
+			StopGuide()
+		end
+	else
+		StopGuide()
+		ns.SetJourneyRoute(nil)
+	end
+	RefreshTracker()
+end
+
 ---@param point SPFPoint
 ---@return boolean
 function ns.StartJourney(point)
+	if CorpseRun() then
+		-- Queued behind the corpse run, which ResumeJourney plans from where you come back to life.
+		if not (goal and SamePlace(goal, point)) then
+			result, search, walkCache, walkOrder = nil, nil, {}, {}
+			progress.index, progress.departed = 1, false
+		end
+		goal, nextPoint, waitingGuided = point, nil, true
+		if ns.JourneyChanged then
+			ns.JourneyChanged(point)
+		end
+		RefreshTracker()
+		return true
+	end
 	local mode = WaterWalking()
 	local repeated = goal and SamePlace(goal, point) and mode == waterMode
 	local previous = repeated and result

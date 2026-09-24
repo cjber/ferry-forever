@@ -20,6 +20,7 @@ local DEFAULTS = {
 	share = true,
 	guideStops = true,
 	compass = false,
+	corpse = true,
 }
 ns.Defaults = DEFAULTS
 

@@ -41,6 +41,7 @@ JourneyCosts.lua
 JourneyGuide.lua
 Journey.lua
 JourneyInput.lua
+Corpse.lua
 Route.lua
 RouteTransports.lua
 Alert.lua
