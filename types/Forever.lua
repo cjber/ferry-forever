@@ -181,11 +181,13 @@ ObjectiveTrackerManager = nil
 ---@field SetValueChangedCallback fun(self: SPFSetting, callback: fun(setting: SPFSetting, value: boolean))
 ---@class SPFSettingsCategory
 ---@field GetID fun(self: SPFSettingsCategory): number
+---@class SPFSettingsInitializer
 ---@class SPFSettings
 ---@field VarType {Boolean: string}
 ---@field RegisterVerticalLayoutCategory fun(name: string): SPFSettingsCategory
 ---@field RegisterAddOnSetting fun(category: SPFSettingsCategory, variable: string, key: string, storage: SPFDatabase, variableType: string, name: string, default: boolean): SPFSetting
----@field CreateCheckbox fun(category: SPFSettingsCategory, setting: SPFSetting, tooltip?: string)
+---@field CreateCheckboxInitializer fun(setting: SPFSetting, options?: table, tooltip?: string): SPFSettingsInitializer
+---@field RegisterInitializer fun(category: SPFSettingsCategory, initializer: SPFSettingsInitializer)
 ---@field RegisterAddOnCategory fun(category: SPFSettingsCategory)
 ---@field OpenToCategory fun(id: number)
 ---@type SPFSettings
