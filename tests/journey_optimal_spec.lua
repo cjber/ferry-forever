@@ -211,6 +211,9 @@ do
 		GetItemNameByID = function(id)
 			return id == 6948 and "Hearthstone" or nil
 		end,
+		GetItemIconByID = function(id)
+			return id == 6948 and 134414 or nil
+		end,
 	}
 	ns.teleports = {
 		{
@@ -229,7 +232,14 @@ do
 	local shown, exact = driver.shown(), full(options)
 	assert(shown.legs[1].mode == "teleport" and math.abs(shown.arrive - exact.arrive) < 1e-5)
 	local rows = select(2, ns.JourneyInfo())
-	assert(rows[1].text:find("^1%. Use Hearthstone"), rows[1].text)
+	assert(rows[1].text:find("^1%. |T134414:0|t Use Hearthstone"), rows[1].text)
+	-- An icon the client cannot give leaves the plain words.
+	driver.env.C_Item.GetItemIconByID = function() end
+	driver.env.C_Spell = {
+		GetSpellTexture = function() end,
+	}
+	assert(select(2, ns.JourneyInfo())[1].text:find("^1%. Use Hearthstone"), "no icon, no gap")
+	driver.env.C_Spell = nil
 	-- Cast where you stand: no arrow or marker points across the world at the landing.
 	assert(ns.IsJourneyGuided() and arrow == nil and driver.waypoint() == nil, "a teleport step points nowhere")
 	-- Cast from anywhere: landing moves on to the next step.
