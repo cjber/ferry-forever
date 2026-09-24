@@ -9,6 +9,9 @@ local plannerCache, knownSnapshot = {}, {}
 local estimates, order, slot = {}, {}, 1
 local anchorSnapshot, context = {}, {}
 local CACHE_LIMIT, CACHE_MS = 256, 5000
+-- Teleports are cast from where you stand, now: only an estimate that starts within this many yards of you counts
+-- them. Anywhere else is a later leg of the caller's route, when their cooldowns are unknown.
+local HERE = 15
 local CONTEXT_KEYS = {
 	"walkSpeed",
 	"faction",
@@ -18,6 +21,7 @@ local CONTEXT_KEYS = {
 	"taxiNodes",
 	"taxiPaths",
 	"portals",
+	"teleports",
 	"landmasses",
 	"baked",
 }
@@ -125,6 +129,11 @@ local function Options(from, to)
 	local _, speed = GetUnitSpeed("player")
 	local now = ns.NowMs()
 	local anchors = ns.FreshAnchors()
+	local teleports, ready = ns.UsableTeleports(now)
+	local x, y, _, map = ns.JourneyPosition()
+	if not (x and map == from.map and (x - from.x) ^ 2 + (y - from.y) ^ 2 <= HERE ^ 2) then
+		ready = {}
+	end
 	for id, anchor in pairs(anchors) do
 		if anchorSnapshot[id] ~= anchor.epoch then
 			changed = true
@@ -155,6 +164,8 @@ local function Options(from, to)
 		taxiNodes = ns.TaxiNodes,
 		taxiPaths = ns.TaxiPaths,
 		portals = ns.Portals,
+		teleports = teleports,
+		teleportReady = ready,
 		landmasses = ns.Landmasses,
 		baked = ns.Walks,
 		waterWalking = ns.JourneyWaterWalking(),

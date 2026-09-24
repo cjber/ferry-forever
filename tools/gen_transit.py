@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate lifts, trams, flights and public passages for the pinned Forever client (stdlib only)."""
+"""Generate lifts, trams, flights, public passages and personal teleports for the pinned Forever client (stdlib)."""
 
 import argparse
 import csv
@@ -27,6 +27,12 @@ TRAMS = {176080, 176081, 176082, 176083, 176084, 176085}
 # Nighthaven is druid-only; Plaguewood tower flights depend on PvP control. Neither restriction can be
 # expressed by the planner's faction/known-node contract. Mount IDs alone also admit quest/test nodes.
 RESTRICTED_NODES = {62, 63, 84, 85, 86, 87}
+# Continents with walking maps: the only places a route can continue from.
+MAPS = (0, 1, 2991)
+# SpellEffect.Effect TELEPORT_UNITS (the classic number, and the number this client uses) and its destinations:
+# ImplicitTarget DEST_HOME (the bind point) and DEST_DB (the server's spell_target_position row).
+TELEPORT_EFFECTS = {5, 252}
+DEST_HOME, DEST_DB = 9, 17
 PORTAL_NAMES = {
     527: ("Portal to Rut'theran Village", "portal"),
     542: ("Portal to Darnassus", "portal"),
@@ -50,7 +56,7 @@ def classicdb(refresh=False, offline=False):
         temporary = path.with_suffix(".tmp")
         temporary.write_bytes(data)
         temporary.replace(path)
-    spawns, teleports = defaultdict(list), {}
+    spawns, teleports, positions = defaultdict(list), {}, {}
     # These two tables have one INSERT per line; quoted SQL strings may contain commas and parentheses.
     tuples = re.compile(r"\(((?:'(?:\\.|[^'\\])*'|[^()'])*)\)")
     with gzip.open(path, "rt", encoding="utf-8") as stream:
@@ -73,9 +79,13 @@ def classicdb(refresh=False, offline=False):
                     row = next(csv.reader([match[1]], quotechar="'", escapechar="\\"))
                     if int(row[0]) in PORTAL_NAMES:
                         teleports[int(row[0])] = location(int(row[6]), map(float, row[7:10]))
-    if set(spawns) != LIFTS | TRAMS or set(teleports) != set(PORTAL_NAMES):
-        raise ValueError("classic-db: missing expected transport spawn or public passage")
-    return spawns, teleports
+            elif line.startswith("INSERT INTO `spell_target_position` VALUES "):
+                for match in tuples.finditer(line):
+                    row = match[1].split(",")
+                    positions[int(row[0])] = location(int(row[1]), map(float, row[2:5]))
+    if set(spawns) != LIFTS | TRAMS or set(teleports) != set(PORTAL_NAMES) or not positions:
+        raise ValueError("classic-db: missing expected transport spawn, public passage or spell position")
+    return spawns, teleports, positions
 
 
 def location(map_id, pos):
@@ -266,7 +276,7 @@ def taxis(node_rows, path_rows, geometry, durations):
         if (
             node_id in RESTRICTED_NODES
             or (not flags & 3 and node_id != 3275)
-            or int(row["ContinentID"]) not in (0, 1, 2991)
+            or int(row["ContinentID"]) not in MAPS
             or row["Name_lang"].startswith(("zzOLD", "Quest "))
             or int(row["ConditionID"])
             or int(row["VisibilityConditionID"])
@@ -347,6 +357,56 @@ def portals(triggers, teleports):
     ]
 
 
+def personal_teleports(tables, positions):
+    """Class teleports (SkillLineAbility with a class) and items that return you to your bind point.
+
+    Returns the entries, each with its spell name for the comments, and the class teleports with no sourced
+    destination on a continent with walking maps.
+    """
+    names = {int(r["ID"]): r["Name_lang"] for r in tables["SpellName"]}
+    targets = {
+        int(r["SpellID"]): int(r["ImplicitTarget_1"])
+        for r in tables["SpellEffect"]
+        if int(r["Effect"]) in TELEPORT_EFFECTS and int(r["ImplicitTarget_1"]) in (DEST_HOME, DEST_DB)
+    }
+    classes = {int(r["Spell"]) for r in tables["SkillLineAbility"] if int(r["ClassMask"])}
+    effects = {int(r["ID"]): int(r["SpellID"]) for r in tables["ItemEffect"]}
+    items = {int(r["ID"]) for r in tables["ItemSparse"]}
+    carriers = defaultdict(set)
+    for row in tables["ItemXItemEffect"]:
+        if int(row["ItemID"]) in items and int(row["ItemEffectID"]) in effects:
+            carriers[effects[int(row["ItemEffectID"])]].add(int(row["ItemID"]))
+    casts = {int(r["ID"]): int(r["Base"]) for r in tables["SpellCastTimes"]}
+    cast_index = {
+        int(r["SpellID"]): int(r["CastingTimeIndex"]) for r in tables["SpellMisc"] if r["DifficultyID"] == "0"
+    }
+    reagents = {}
+    for row in tables["SpellReagents"]:
+        needed = {int(row[f"Reagent_{i}"]): int(row[f"ReagentCount_{i}"]) for i in range(8)}
+        reagents[int(row["SpellID"])] = {item: count for item, count in needed.items() if item and count > 0}
+    entries, unsourced = [], []
+    for spell, target in sorted(targets.items()):
+        entry = {"spell": spell}
+        if spell not in classes:
+            # Item destinations other than home (the Everlook rippers) need an engineering specialisation
+            # and can misfire; a quest or PvP item's has no public route onward.
+            if target != DEST_HOME or len(carriers.get(spell, ())) != 1:
+                continue
+            entry["item"] = next(iter(carriers[spell]))
+        if target == DEST_HOME:
+            entry["bind"] = True
+        elif spell in positions and positions[spell]["map"] in MAPS:
+            entry["to"] = positions[spell]
+        else:
+            unsourced.append(f"{names[spell]} ({spell})")
+            continue
+        entry["cast"] = casts[cast_index[spell]]
+        if reagents.get(spell):
+            entry["reagents"] = reagents[spell]
+        entries.append((names[spell], entry))
+    return entries, unsourced
+
+
 def lua(value):
     if value is None:
         return "nil"
@@ -422,9 +482,18 @@ def main():
             "AreaTrigger",
             "Map",
             "UiMapAssignment",
+            "SpellEffect",
+            "SpellName",
+            "SpellMisc",
+            "SpellCastTimes",
+            "SpellReagents",
+            "SkillLineAbility",
+            "ItemEffect",
+            "ItemXItemEffect",
+            "ItemSparse",
         )
     }
-    spawns, teleports = classicdb(args.refresh, args.offline)
+    spawns, teleports, positions = classicdb(args.refresh, args.offline)
     triggers = {int(r["ID"]): r for r in tables["AreaTrigger"]}
     docks, routes = transports(tables["TransportAnimation"], spawns, triggers)
     durations = inflight(
@@ -486,11 +555,30 @@ def main():
             "\t" + render(portal, 1) + ",",
         ]
     portal_lines += ["}", ""]
-    for name, lines in (("Transports", transport_lines), ("Taxi", taxi_lines), ("Portals", portal_lines)):
+    personal, unsourced = personal_teleports(tables, positions)
+    teleport_lines = header("SpellEffect TELEPORT_UNITS + classic-db spell_target_position destinations.")
+    teleport_lines += [
+        "-- Class teleports, and items that take you to your bind point. cast: ms; reagents: [item] = count;",
+        "-- bind: lands where you bound, which the client only reports by name; to: a world point (yards).",
+        "-- No sourced destination on a continent with walking maps: " + (", ".join(unsourced) or "none") + ".",
+        "",
+        "-- stylua: ignore",
+        "ns.Teleports = {",
+    ]
+    for name, entry in personal:
+        teleport_lines += [f"\t-- {name}", "\t" + render(entry, 1) + ","]
+    teleport_lines += ["}", ""]
+    for name, lines in (
+        ("Transports", transport_lines),
+        ("Taxi", taxi_lines),
+        ("Portals", portal_lines),
+        ("Teleports", teleport_lines),
+    ):
         (ROOT / "Data" / f"{name}.lua").write_text("\n".join(lines), encoding="utf-8")
     print(
         f"Transports: {len(routes)} routes, {len(docks)} docks; Taxi: {len(nodes)} nodes, {len(paths)} paths, "
-        f"{covered / len(paths):.1%} measured; {len(islands)} landmasses; Portals: {len(passages)} directed entries"
+        f"{covered / len(paths):.1%} measured; {len(islands)} landmasses; Portals: {len(passages)} directed entries; "
+        f"Teleports: {len(personal)}"
     )
 
 

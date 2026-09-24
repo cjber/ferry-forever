@@ -3,7 +3,7 @@
 -- Public addon-to-addon interface. Coordinates are uiMapID and normalized 0-1 x/y, not world yards.
 -- Additions keep version 1: a caller checks optional members with type(api.Name) == "function".
 
----@alias SPFAPIMode "walk"|"flight"|"boat"|"zeppelin"|"lift"|"tram"|"portal"|"passage"
+---@alias SPFAPIMode "walk"|"flight"|"boat"|"zeppelin"|"lift"|"tram"|"portal"|"passage"|"teleport"
 ---@alias SPFAPINoRoute "combat"|"invalid"|"unreachable" -- retry after combat; never for bad input; unreachable with what this character knows
 
 ---@alias SPFAPIEnded "arrived"|"cleared"|"replaced"|"cancelled" -- reached the last stop; the player cleared it; another journey took over; the owner's own Cancel

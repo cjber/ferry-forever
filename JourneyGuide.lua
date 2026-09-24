@@ -215,6 +215,19 @@ function Guide.To(node, points, goal)
 	ns.PointGuideArrow(points or { point }, GuideWaypoint, node, goal)
 end
 
+-- A teleport is cast where you stand: nothing to walk toward until you land, so no arrow or marker.
+---@param leg SPFLeg
+function Guide.Cast(leg)
+	if not guide or guide.target == leg then
+		return
+	end
+	guide.points, guide.target = nil, leg
+	ns.PointGuideArrow(nil)
+	if guide.waypoint then
+		ClearGuideWaypoint()
+	end
+end
+
 -- The next Guide.To re-points the arrow even at the same target.
 function Guide.Retarget()
 	if guide then

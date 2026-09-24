@@ -27,6 +27,7 @@ local COLORS = {
 	tram = ORANGE_FONT_COLOR,
 	portal = CreateColor(0.85, 0.35, 1),
 	passage = CreateColor(0.85, 0.35, 1),
+	teleport = CreateColor(0.85, 0.35, 1),
 }
 local provider, goal, paths, worldPaths, stops, stopIndex
 ---@class SPFMinimapRoute : Frame

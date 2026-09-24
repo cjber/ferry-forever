@@ -56,6 +56,12 @@ local function vector(x, y)
 end
 local env = setmetatable({
 	CreateFrame = frame,
+	-- A search that throws fails the spec with its own message.
+	geterrorhandler = function()
+		return function(message)
+			error(message, 0)
+		end
+	end,
 	UnitPosition = function()
 		return here.x, here.y, here.z, here.map
 	end,
@@ -72,10 +78,6 @@ local env = setmetatable({
 		return 0
 	end,
 	C_Navigation = { GetFrame = noop },
-	-- A search that throws fails the spec instead of reading as an unreachable walk.
-	geterrorhandler = function()
-		return error
-	end,
 	UnitOnTaxi = noop,
 	InCombatLockdown = noop,
 	UnitFactionGroup = function()
@@ -173,6 +175,10 @@ end, function()
 end
 ns.Locate = function()
 	return { zone = "Test" }
+end
+-- ns.teleports: the usable places; ns.teleportReady: [index] = when each can be cast.
+ns.UsableTeleports = function()
+	return ns.teleports, ns.teleportReady
 end
 ns.FormatCountdown = tostring
 ns.SetJourneyRoute = function(_, route)

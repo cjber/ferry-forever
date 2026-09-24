@@ -21,6 +21,80 @@ local function SamePlace(a, b)
 end
 Costs.SamePlace = SamePlace
 
+-- The bind point moves, so its walks on to the fixed places cannot be baked like a class teleport's: each is searched
+-- once per bind point and water mode, alongside the journey's own endpoint searches.
+local landings = {}
+---@param place SPFTeleportPlace
+---@return {targets: SPFPlace[], costs?: (number|false)[], waiting?: fun()[]}?
+local function Landing(place)
+	if not (ns.Path and place.bind and ns.Path.HasData(place.map)) then
+		return nil
+	end
+	local waterMode = J.WaterMode()
+	local key = string.format("%d:%.17g:%.17g:%s", place.map, place.x, place.y, tostring(waterMode))
+	local entry = landings[key]
+	if not entry then
+		local mass, targets = ns.Planner.Landmass(place, ns.Landmasses or {}), {}
+		local places = ns.Planner.Places({
+			docks = ns.Docks,
+			taxiNodes = ns.TaxiNodes,
+			portals = ns.Portals,
+			faction = UnitFactionGroup("player"),
+		})
+		for _, target in ipairs(places) do
+			if target.map == place.map and ns.Planner.Landmass(target, ns.Landmasses or {}) == mass then
+				targets[#targets + 1] = target
+			end
+		end
+		entry = { targets = targets, waiting = {} }
+		landings[key] = entry
+		ns.Path.FindMany(place.map, place, targets, function(costs)
+			local waiting = entry.waiting or {}
+			entry.costs, entry.waiting = costs, nil
+			for _, callback in ipairs(waiting) do
+				callback()
+			end
+		end, waterMode)
+	end
+	return entry
+end
+
+-- Whether a bind point's walks are still being searched; callback, when given, runs once each search ends. With
+-- ready, only a teleport castable before `before` counts: one ready later cannot beat a route arriving then.
+---@param teleports SPFTeleportPlace[]?
+---@param callback? fun()
+---@param ready? table<number, number>
+---@param before? number
+local function LandingPending(teleports, callback, ready, before)
+	local pending = false
+	for index, place in ipairs(teleports or {}) do
+		local entry = Landing(place)
+		if entry and entry.waiting and (not ready or (ready[index] and ready[index] < before)) then
+			pending = true
+			if callback then
+				entry.waiting[#entry.waiting + 1] = callback
+			end
+		end
+	end
+	return pending
+end
+
+---@param teleports SPFTeleportPlace[]?
+---@return SPFWalkCost[]
+function Costs.LandingWalks(teleports)
+	local walks = {}
+	for _, place in ipairs(teleports or {}) do
+		local entry = Landing(place)
+		local costs = entry and entry.costs
+		if entry and costs then
+			for i, target in ipairs(entry.targets) do
+				walks[#walks + 1] = { from = place, to = target, cost = costs[i] }
+			end
+		end
+	end
+	return walks
+end
+
 -- Reuse only the last two endpoint searches, with starts confirmed by the pathfinder as the same snapped node.
 -- One search owns the callbacks' shared revision, preview and probe budget across resumes
 local function RefreshCosts(includeGoal, forced)
@@ -35,10 +109,12 @@ local function RefreshCosts(includeGoal, forced)
 	J.CancelPaths()
 	J.SetSearch({ started = GetTime(), initial = not J.Result(), forced = forced })
 	local version, faction = J.Version(), UnitFactionGroup("player")
+	local teleports = ns.UsableTeleports(ns.NowMs())
 	local places = ns.Planner.Places({
 		docks = ns.Docks,
 		taxiNodes = ns.TaxiNodes,
 		portals = ns.Portals,
+		teleports = teleports,
 		faction = faction,
 	})
 	local function targets(point, withGoal)
@@ -55,7 +131,13 @@ local function RefreshCosts(includeGoal, forced)
 		return list
 	end
 	local function reuse(batch, point, reverse)
-		if not batch or batch.path ~= ns.Path or batch.water ~= J.WaterMode() or batch.faction ~= faction then
+		if
+			not batch
+			or batch.path ~= ns.Path
+			or batch.water ~= J.WaterMode()
+			or batch.faction ~= faction
+			or batch.teleports ~= teleports
+		then
 			return false
 		end
 		if not reverse and not SamePlace(batch.goal, J.Goal()) then
@@ -82,6 +164,7 @@ local function RefreshCosts(includeGoal, forced)
 			path = ns.Path,
 			water = J.WaterMode(),
 			faction = faction,
+			teleports = teleports,
 			costs = {},
 		}
 	end
@@ -268,7 +351,16 @@ local function RefreshCosts(includeGoal, forced)
 		needGoal = needGoal and not goalBatch.done
 		active(startBatch, needStart)
 		active(goalBatch, needGoal)
-		if not needStart and not needGoal then
+		-- A bind point's walks still being searched, for a teleport that could be faster: settle when they end.
+		local landing = not needStart
+			and not needGoal
+			and LandingPending(
+				teleports,
+				nil,
+				select(2, ns.UsableTeleports(ns.NowMs())),
+				planned and planned.arrive or math.huge
+			)
+		if not needStart and not needGoal and not landing then
 			pendingCosts, settleRound = 0, settleRound + 1
 			J.Render(planned, forced)
 		else
@@ -310,6 +402,9 @@ local function RefreshCosts(includeGoal, forced)
 	end
 	attach(startBatch)
 	attach(goalBatch)
+	LandingPending(teleports, function()
+		consider(true)
+	end)
 	-- Existing settled costs can prove a repeated journey without advancing either frontier.
 	if ns.Path.Pause and (startBatch.job.valid or startBatch.done) and (goalBatch.job.valid or goalBatch.done) then
 		consider(true)
@@ -401,6 +496,12 @@ function Costs.Stale()
 	local stale = not startAt or costsWaiting
 	costsWaiting = nil
 	return stale and true or false
+end
+
+-- A new bind point or teleport since the goal's batch started.
+---@return boolean
+function Costs.TeleportsChanged()
+	return goalBatch ~= nil and goalBatch.teleports ~= ns.UsableTeleports(ns.NowMs())
 end
 
 ---@return SPFPoint? startAt, number refreshedAt

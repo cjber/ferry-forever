@@ -1,12 +1,14 @@
 -- Walking costs between every pair of fixed places the planner routes through (docks, flight masters, portal
--- ends), searched once here rather than guessed as straight lines and measured in game. Run from the repo root
--- after rebaking a walking map or changing the places: luajit tools/bake_walks.lua > Data/Walks.lua
+-- ends, class teleports' landings), searched once here rather than guessed as straight lines and measured in game.
+-- Run from the repo root after rebaking a walking map or changing the places:
+-- luajit tools/bake_walks.lua > Data/Walks.lua
 local ns = { Docks = {}, Routes = {}, TaxiNodes = {}, TaxiPaths = {}, Portals = {} }
 for _, file in ipairs({
 	"Data/Routes.lua",
 	"Data/Transports.lua",
 	"Data/Taxi.lua",
 	"Data/Portals.lua",
+	"Data/Teleports.lua",
 	"PathGrid.lua",
 	"Path.lua",
 	"PathJobs.lua",
@@ -33,6 +35,12 @@ end
 for id, portal in ipairs(ns.Portals) do
 	Add("portal" .. (id * 2 - 1), portal.from)
 	Add("portal" .. id * 2, portal.to)
+end
+-- Where a class teleport lands; the bind point moves, so Journey measures its walks in game.
+for _, teleport in ipairs(ns.Teleports) do
+	if teleport.to then
+		Add("teleport" .. teleport.spell, teleport.to)
+	end
 end
 
 local maps = {}

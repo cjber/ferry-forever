@@ -8,6 +8,8 @@ local REPLAN_EVERY, REFRESH_EVERY = 5, 60
 -- The frames around a timed replan, which Itinerary.lua leaves to it.
 local REPLAN_MARGIN = 0.5
 local DRAW_EVERY, SEARCH_GRACE = 0.5, 3
+-- A teleport step, by the item's or spell's own name in the game's language.
+local USE_ITEM, CAST_SPELL = "Use %s", "Cast %s"
 
 local goal, result
 local nextPoint
@@ -163,7 +165,11 @@ local function UpdateProgress()
 			progress.index = progress.index + 1
 			leg = nextLeg
 		end
-		local aboard = leg.aboard or (leg.route and riding == leg.route) or (leg.mode == "flight" and flying)
+		-- A teleport is cast from wherever you are.
+		local aboard = leg.aboard
+			or leg.mode == "teleport"
+			or (leg.route and riding == leg.route)
+			or (leg.mode == "flight" and flying)
 		if leg.mode ~= "walk" and not progress.departed then
 			if aboard or Near(leg.from) then
 				progress.departed = true
@@ -171,6 +177,10 @@ local function UpdateProgress()
 				Guide.To(leg.from, nil, goal)
 				return
 			end
+		end
+		if leg.mode == "teleport" and not Near(leg.to) then
+			Guide.Cast(leg)
+			return
 		end
 		if not Near(leg.to) or (leg.mode == "flight" and flying) then
 			Guide.To(leg.to, leg.walkPoints, goal)
@@ -225,7 +235,16 @@ function ns.JourneyInfo()
 		local _, spell = WaterWalking()
 		for index = progress.index, #result.legs do
 			local leg = result.legs[index]
-			local text = string.format("%d. %s %s", index, ns.LegVerb(leg), ns.LegLabel(leg))
+			local text
+			local teleport = leg.teleport
+			if teleport then
+				local name = teleport.item and C_Item.GetItemNameByID(teleport.item)
+					or C_Spell.GetSpellName(teleport.spell)
+					or UNKNOWN
+				text = string.format("%d. " .. (teleport.item and USE_ITEM or CAST_SPELL), index, name)
+			else
+				text = string.format("%d. %s %s", index, ns.LegVerb(leg), ns.LegLabel(leg))
+			end
 			if leg.mode == "walk" and leg.to.undiscovered then
 				text = text .. " (new flight path)"
 			end
@@ -443,7 +462,7 @@ local function Retime(planned)
 	for index, leg in ipairs(planned.legs) do
 		local kept = result.legs[index + progress.index - 1]
 		kept.depart, kept.arrive, kept.wait, kept.estimated = leg.depart, leg.arrive, leg.wait, leg.estimated
-		kept.aboard, kept.yards = leg.aboard, leg.yards
+		kept.aboard, kept.yards, kept.ready = leg.aboard, leg.yards, leg.ready
 	end
 end
 
@@ -492,6 +511,8 @@ local function EstimateKept(now)
 			end
 		elseif index == progress.index and leg.aboard then
 			duration, wait = math.max(0, leg.arrive - now), 0
+		elseif leg.ready then
+			wait = math.max(0, leg.ready - estimate.arrive)
 		end
 		local depart = estimate.arrive + wait
 		estimate.arrive = depart + duration
@@ -631,6 +652,11 @@ local function Plan(preview)
 		return result
 	end
 	local anchors = ns.FreshAnchors()
+	local teleports, ready = ns.UsableTeleports(now)
+	local walks = preview and {} or Walks(here)
+	for _, walk in ipairs(Costs.LandingWalks(teleports)) do
+		walks[#walks + 1] = walk
+	end
 	local ride, routeID = nil, ns.CurrentRide()
 	if routeID and anchors[routeID] then
 		local route = ns.Routes[routeID]
@@ -664,8 +690,10 @@ local function Plan(preview)
 		taxiNodes = ns.TaxiNodes,
 		taxiPaths = ns.TaxiPaths,
 		portals = ns.Portals,
+		teleports = teleports,
+		teleportReady = ready,
 		landmasses = ns.Landmasses,
-		walks = preview and {} or Walks(here),
+		walks = walks,
 		baked = ns.Walks,
 		waterWalking = waterMode,
 	})
@@ -753,6 +781,9 @@ local function Update(self, elapsed)
 		if mode ~= waterMode then
 			waterMode, walkCache, walkOrder = mode, {}, {}
 			Costs.Forget()
+			Costs.Refresh(true, false)
+		elseif Costs.TeleportsChanged() then
+			-- A new bind point or teleport: measure the walks on from where it lands.
 			Costs.Refresh(true, false)
 		elseif Costs.Status() == 0 and pendingWalks == 0 then
 			local here, startAt, refreshedAt = Here(), Costs.Started()

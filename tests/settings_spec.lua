@@ -49,25 +49,14 @@ local env = setmetatable({
 }, { __index = _G })
 
 local refreshed = 0
+-- Core.lua's defaults: every row on except the two opt-ins.
 local ns = {
 	db = {},
-	-- Core.lua's defaults, which Settings.lua registers.
-	Defaults = {
-		pins = true,
-		transit = true,
-		portals = true,
-		minimapPins = true,
-		mapFlightMasters = true,
-		mapRoutes = true,
-		otherFaction = true,
-		tracker = true,
-		alerts = true,
-		alertSound = true,
-		journey = true,
-		share = true,
-		guideStops = false,
-		compass = false,
-	},
+	Defaults = setmetatable({ guideStops = false, compass = false }, {
+		__index = function()
+			return true
+		end,
+	}),
 	Init = function(fn)
 		fn()
 	end,
@@ -77,13 +66,13 @@ local ns = {
 }
 setfenv(assert(loadfile("Settings.lua")), env)("ShortestPathForever", ns)
 
-assert(#registered == 14, #registered)
+assert(#registered == 15, #registered)
 for index, initializer in ipairs(registered) do
 	assert(initializer.setting == settings[index], "rows keep their setting and order")
 end
 assert(registered[1].setting.variable == "ShortestPathForever_pins" and registered[1].setting.default)
 assert(registered[5].tooltip == "Also under Transport in the minimap's tracking menu.")
-assert(registered[12].setting.key == "guideStops" and registered[12].setting.default == false)
+assert(registered[13].setting.key == "guideStops" and registered[13].setting.default == false)
 registered[1].setting.onChanged()
 assert(refreshed == 1, "value callbacks still fire")
 print("settings: ok")

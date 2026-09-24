@@ -11,6 +11,13 @@ mapID = 1414
 -- Zoomed in, so the stops' rings stand apart; the overlap checks below zoom out.
 zoom = 1
 ns.Path = nil
+-- A character with a hearthstone and no recorded bind point: no teleport edges, as after a fresh install.
+GetBindLocation = GetBindLocation or function() return "Auberdine" end
+C_SpellBook = C_SpellBook or { IsSpellKnown = function() return false end }
+C_Item = C_Item or {
+ GetItemCount = function(id) return id == 6948 and 1 or 0 end,
+ GetItemCooldown = function() return 0, 0, 1 end,
+}
 ns.Docks, ns.Routes, ns.TaxiNodes, ns.TaxiPaths, ns.Portals, ns.Landmasses = {}, {}, {}, {}, {}, {}
 local api = ShortestPathForever.API
 local lineTemplate, goalTemplate = "ShortestPathForeverRoutePinTemplate", "ShortestPathForeverGoalPinTemplate"

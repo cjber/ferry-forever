@@ -199,3 +199,82 @@ for id, dock in pairs(ns.Docks) do
 	assert(mapped[dock.map] or dock.name and dock.pin and mapped[dock.pin.map], "dock " .. id .. " has no place name")
 end
 print("tram journey: every step is named: ok")
+
+-- Bound beside Gadgetzan's flight master, a ready hearth from Auberdine is the first step, and still the optimum.
+do
+	local arrow
+	ns.PointGuideArrow = function(drawn)
+		arrow = drawn
+	end
+	local gadgetzan = ns.TaxiNodes[39]
+	driver.env.C_Item = {
+		GetItemNameByID = function(id)
+			return id == 6948 and "Hearthstone" or nil
+		end,
+	}
+	ns.teleports = {
+		{
+			map = gadgetzan.map,
+			x = gadgetzan.x + 20,
+			y = gadgetzan.y,
+			spell = 8690,
+			item = 6948,
+			cast = 10000,
+			bind = true,
+		},
+	}
+	ns.teleportReady = { 123456 }
+	driver.begin(ns.TaxiNodes[26], gadgetzan)
+	drain()
+	local shown, exact = driver.shown(), full(options)
+	assert(shown.legs[1].mode == "teleport" and math.abs(shown.arrive - exact.arrive) < 1e-5)
+	local rows = select(2, ns.JourneyInfo())
+	assert(rows[1].text:find("^1%. Use Hearthstone"), rows[1].text)
+	-- Cast where you stand: no arrow or marker points across the world at the landing.
+	assert(ns.IsJourneyGuided() and arrow == nil and driver.waypoint() == nil, "a teleport step points nowhere")
+	-- Cast from anywhere: landing moves on to the next step.
+	driver.move({ map = gadgetzan.map, x = gadgetzan.x + 20, y = gadgetzan.y, z = gadgetzan.z })
+	driver.update(0.2)
+	assert(select(4, ns.JourneyInfo()) == 2, "the hearth step is done on landing")
+	assert(arrow, "the next step is guided again")
+	ns.ClearJourney()
+	-- An hour's cooldown loses to flying.
+	ns.teleportReady = { 123456 + 3600000 }
+	driver.begin(ns.TaxiNodes[26], gadgetzan)
+	drain()
+	assert(driver.shown().legs[1].mode ~= "teleport")
+	ns.ClearJourney()
+	-- A new bind point's walks are searched once; only a hearth that could win waits for them.
+	local findMany, held = ns.Path.FindMany, nil
+	ns.Path.FindMany = function(map, point, targets, callback, ...)
+		if point == ns.teleports[1] then
+			local water = ...
+			held = function()
+				callback(ns.Path.FindManySync(map, point, targets, water))
+			end
+			return
+		end
+		return findMany(map, point, targets, callback, ...) -- multi-value: the batch's job
+	end
+	ns.teleports[1] =
+		{ map = gadgetzan.map, x = gadgetzan.x + 30, y = gadgetzan.y, spell = 8690, cast = 10000, bind = true }
+	driver.begin(ns.TaxiNodes[26], gadgetzan)
+	drain()
+	assert(held and driver.shown().legs[1].mode ~= "teleport", "an hour's cooldown settles without the bind's walks")
+	ns.ClearJourney()
+	ns.teleportReady = { 123456 }
+	driver.begin(ns.TaxiNodes[26], gadgetzan)
+	while nextFrame do
+		local fn = nextFrame
+		nextFrame = nil
+		fn()
+	end
+	assert(ns.JourneyStatus(), "a ready hearth waits for its bind point's walks")
+	held()
+	drain()
+	assert(driver.shown().legs[1].mode == "teleport")
+	ns.Path.FindMany = findMany
+	ns.ClearJourney()
+	ns.teleports, ns.teleportReady, driver.env.C_Item = nil, nil, nil
+end
+print("hearth journey: the first step, named by the game: ok")

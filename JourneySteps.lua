@@ -13,6 +13,7 @@ local VERB = {
 	tram = "Tram to",
 	portal = "Portal to",
 	passage = "Go through to",
+	teleport = "Teleport to",
 }
 
 -- A place with no kind is the destination point as clicked or picked from a quest.
@@ -28,7 +29,7 @@ function ns.PlaceLabel(node, mode)
 		return ns.TaxiNodes[node.id].name
 	elseif node.kind == "portal" then
 		return node.label
-	elseif node.kind == "goal" or node.kind == nil then
+	elseif node.kind == "teleport" or node.kind == "goal" or node.kind == nil then
 		local location = not node.label and ns.Locate(node)
 		return node.label or location and location.zone or UNKNOWN
 	end

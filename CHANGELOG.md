@@ -11,6 +11,14 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+**Journeys can start with your hearthstone.** The Hearthstone, a mage's city teleports (with a Rune of
+Teleportation in your bags), a shaman's Astral Recall and a druid's Teleport: Moonglade are the first step when
+they save time: *1. Use Hearthstone*, named in your game's language. A cooldown counts as waiting time, so a
+hearth due in two minutes can still win. Your bind point is learned when you next set it at an innkeeper, and
+forgotten if you bind somewhere else without the addon, or on a `/reload` or relog while the client does not load
+addons' saved settings. Other addons' estimates from where you stand count
+them too. *Use your hearthstone and teleports* in `/path` turns this off.
+
 Walking legs are round breadcrumb dots, evenly spaced around every bend, instead of dashes, on the map and
 the minimap alike, a little smaller on continent and world maps. Boats, zeppelins and flights keep their solid
 coloured lines.

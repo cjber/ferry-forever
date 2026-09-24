@@ -16,6 +16,7 @@ local DEFAULTS = {
 	alerts = true,
 	alertSound = true,
 	journey = true,
+	teleports = true,
 	share = true,
 	guideStops = false,
 	compass = false,

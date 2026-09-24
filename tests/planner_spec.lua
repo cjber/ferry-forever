@@ -418,6 +418,7 @@ end
 -- The baked walks name the planner's places: a key that no longer names one (places renumbered, added or moved
 -- without rerunning tools/bake_walks.lua) would silently fall back to straight-line guesses.
 assert(loadfile("Data/Portals.lua"))("ShortestPathForever", ns)
+assert(loadfile("Data/Teleports.lua"))("ShortestPathForever", ns)
 assert(loadfile("Data/Walks.lua"))("ShortestPathForever", ns)
 local places = {}
 for id, dock in pairs(ns.Docks) do
@@ -428,6 +429,9 @@ for id, node in pairs(ns.TaxiNodes) do
 end
 for id, entry in ipairs(ns.Portals) do
 	places["portal" .. (id * 2 - 1)], places["portal" .. id * 2] = entry.from, entry.to
+end
+for _, teleport in ipairs(ns.Teleports) do
+	places["teleport" .. teleport.spell] = teleport.to
 end
 for map, walks in pairs(ns.Walks) do
 	for key in pairs(walks) do
