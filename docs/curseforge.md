@@ -1,4 +1,4 @@
-Shortest Path Forever finds the fastest way across WoW: Forever. Shift-click a destination on the map, or pick a quest, and it joins walking paths, flight paths, boats, zeppelins, lifts, the Deeprun Tram and portals into one journey. Walking maps for Eastern Kingdoms, Kalimdor and Zephras Isle come in the same download.
+I wanted a proper "get me there" for WoW: Forever, so Shortest Path Forever finds the fastest way across the world. Shift-click a destination on the map, or pick a quest, and it joins walking paths, flight paths, boats, zeppelins, lifts, the Deeprun Tram and portals into one journey. Directions use the game's own waypoint marker, map pins and objective tracker, so it looks like it came with the game. Walking maps for Eastern Kingdoms, Kalimdor and Zephras Isle come in the same download.
 
 ![Eight-second demo of a route settling, the countdown and compass](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/demo.gif)
 
@@ -10,17 +10,27 @@ Shortest Path Forever finds the fastest way across WoW: Forever. Shift-click a d
 - **Live departures.** Hover a dock, on the world map or the minimap, to see where its boats go, when they arrive and when they leave. Destination docks light up; click one to open the map at the other end. Nearby departures appear in the objective tracker; aboard a timed boat, it shows the next stop.
 - **Lifts, trams and portals.** Landings and stations have their own countdowns. Portals show where they lead, and clicking one opens that map. All three can be part of a journey.
 - **Schedules learned from real rides.** Ride once to sync a transport. Sightings are shared quietly with your guild, party and nearby players. Unsynced services say “no sighting yet”, and a journey shows their guessed wait as “wait about”.
-- **Arrival alerts.** A banner, sound and flashing taskbar icon warn when your boat is due, including when you are waiting away from the keyboard.
+- **Arrival alerts.** A banner, the ship's own bell and a flashing taskbar icon warn when your boat is due, including when you are waiting away from the keyboard. Zeppelins sound their horn instead.
 
 ![Journey steps from Auberdine to Silithus, with time and distance remaining](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/tracker.png)
 
+The journey in the objective tracker, step by step, with time and distance left.
+
 ![Auberdine’s piers on the minimap, with the dotted route and Guide’s native waypoint](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/minimap.png)
+
+On the minimap, the route in dots and Guide using the game's own waypoint.
 
 ![Hovering Auberdine’s piers shows departures and lights destination docks](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/docks.png)
 
+Hover a dock to see where its boats go and when.
+
 ![The optional compass strip with the next turns and destination](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/compass.png)
 
+The optional compass, for your next turns and destination.
+
 ![A journey from Auberdine through Menethil and Theramore to Silithus](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/kalimdor.png)
+
+A longer trip: Auberdine to Menethil, then Theramore, then Silithus.
 
 ## Usage
 

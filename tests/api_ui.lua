@@ -30,7 +30,9 @@ local function check(index, count)
  local pins = active[goalTemplate]
  assert(#pins == count-index+1)
  for i, pin in ipairs(pins) do
-  assert(pin.Numeral.atlas == "services-number-"..(index+i-1), "remaining pins retain original stop numbers")
+  -- Stops up to 9 wear Blizzard's numeral atlas on the Adventure Guide ring; later stops use the font.
+  assert(pin.Numeral.atlas == "services-number-" .. (index+i-1), "remaining pins retain original stop numbers")
+  assert(pin.Number.text == "")
   assert(pin.Texture.atlas == "adventureguide-ring")
   assert(pin.Numeral.alpha == (i == 1 and 1 or 0.55), "only the stop being guided to is at full strength")
   assert(pin.alpha == nil and pin.Disc.alpha == nil, "the disc stays opaque over the POI beneath")
@@ -150,6 +152,7 @@ posX, posY = 0, 0
 -- Pooled numbered pins must revert to the ordinary waypoint for a single destination.
 assert(api.Navigate("Test", 1414, 0.51, 0.5, "Only"))
 assert(#active[goalTemplate] == 1 and active[goalTemplate][1].Number.text == "")
+assert(active[goalTemplate][1].Texture.atlas == "Waypoint-MapPin-Tracked")
 assert(active[goalTemplate][1].stopTitles == nil and arrowFrame.Progress.text == "")
 assert(api.Cancel("Test"))
 posX, posY = 0, 0

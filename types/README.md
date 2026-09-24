@@ -19,8 +19,9 @@ annotations come from their generators, never manual data edits.
 
 The pinned annotation repository's FrameXML directory is empty. `Forever.lua` declares the
 missing interfaces used here, checked against Gethe/wow-ui-source's `forever` branch. It does
-not replace the annotated Core API. Two call-site suppressions in Journey.lua describe actual
-client differences: `IsPlayerSpell` remains available, and `GetQuestUiMapID` accepts two arguments.
+not replace the annotated Core API. Two call-site suppressions, in Journey.lua and JourneyInput.lua,
+describe actual client differences: `IsPlayerSpell` remains available, and `GetQuestUiMapID`
+accepts two arguments.
 
 The tokenizer/parser rejects bare `select(...)` at the end of call arguments, table constructors,
 or returns. Use `(select(...))` for one value. An intentional expansion needs a trailing

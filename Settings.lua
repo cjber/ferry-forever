@@ -56,7 +56,7 @@ end
 -- tainted it: a restricted button in the results (Social's Discord Sign In) was then blocked and blamed on us.
 ns.Init(function()
 	local category = Settings.RegisterVerticalLayoutCategory("Shortest Path Forever")
-	local function Checkbox(key, name, tooltip, onChanged, default)
+	local function Checkbox(key, name, tooltip, onChanged)
 		local setting = Settings.RegisterAddOnSetting(
 			category,
 			"ShortestPathForever_" .. key,
@@ -64,7 +64,7 @@ ns.Init(function()
 			ns.db,
 			Settings.VarType.Boolean,
 			name,
-			default ~= false
+			ns.Defaults[key]
 		)
 		if onChanged then
 			setting:SetValueChangedCallback(onChanged)
@@ -119,15 +119,13 @@ ns.Init(function()
 		"guideStops",
 		"Guide marks only where each step ends",
 		"The next boat, lift, flight master or your destination, rather than each turn of the walk on the way.",
-		ns.RefreshGuideStops,
-		false
+		ns.RefreshGuideStops
 	)
 	Checkbox(
 		"compass",
 		"Show a compass while Guide is on",
 		"Your next turns, the next stop and your destination across the top of the screen.",
-		ns.RefreshCompass,
-		false
+		ns.RefreshCompass
 	)
 	Checkbox(
 		"share",

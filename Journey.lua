@@ -856,7 +856,7 @@ local function Render(planned, forced)
 	FinishSearch()
 end
 
-local function Plan(preview, bounded)
+local function Plan(preview)
 	local here = Here()
 	if not (here and goal) then
 		return nil
@@ -891,14 +891,6 @@ local function Plan(preview, bounded)
 			ride = { route = routeID, dock = dock, arrive = now + arriveIn }
 		end
 	end
-	local exactMaps = {}
-	if not preview and not bounded and ns.Path then
-		for _, continent in ipairs({ here.map, goal.map }) do
-			if ns.Path.HasData(continent) then
-				exactMaps[continent] = true
-			end
-		end
-	end
 	local planned = ns.Planner.Plan({
 		cache = plannerCache,
 		from = here,
@@ -916,7 +908,6 @@ local function Plan(preview, bounded)
 		portals = ns.Portals,
 		landmasses = ns.Landmasses,
 		walks = preview and {} or Walks(here),
-		exactMaps = exactMaps,
 		baked = ns.Walks,
 		waterWalking = waterMode,
 	})
@@ -927,7 +918,7 @@ local function Plan(preview, bounded)
 end
 
 -- Reuse only the last two endpoint searches, with starts confirmed by the pathfinder as the same snapped node.
--- sift: long-function - one search owns the callbacks' shared revision, preview and probe budget across resumes
+-- One search owns the callbacks' shared revision, preview and probe budget across resumes
 local function RefreshCosts(includeGoal, forced)
 	local here = Here()
 	if not (here and goal) then
@@ -1072,13 +1063,13 @@ local function RefreshCosts(includeGoal, forced)
 	local preview
 	if not result and ns.Path.LowerBound then
 		startCosts, goalCosts = walks(startBatch), walks(goalBatch)
-		preview = Plan(false, true)
+		preview = Plan()
 		if preview then
 			preview.preview, search.candidate = true, preview
 		end
 	end
 	local consider
-	-- sift: long-function - bounded search callback; splitting adds calls and upvalues on every frontier update
+	-- Bounded search callback; splitting adds calls and upvalues on every frontier update
 	consider = function(final)
 		if version ~= pathVersion or not goal then
 			return
@@ -1115,7 +1106,7 @@ local function RefreshCosts(includeGoal, forced)
 		end
 		-- Reuse the bounded preview once for probes; commit only after planning with current exact costs.
 		local previewed = preview and not startBatch.reason and not goalBatch.reason
-		local planned = previewed and preview or Plan(false, true)
+		local planned = previewed and preview or Plan()
 		preview = nil
 		-- Short A* cost probes let easy routes prove themselves before expanding a wide frontier. Bound
 		-- their total work, then let shared Dijkstras settle harder alternatives. Finish an active probe:
@@ -1164,7 +1155,7 @@ local function RefreshCosts(includeGoal, forced)
 			end
 		end
 		if previewed then
-			planned = Plan(false, true)
+			planned = Plan()
 		end
 		local needStart = planned and planned.needsStart and ns.Path.HasData(here.map)
 		local needGoal = planned and planned.needsGoal and ns.Path.HasData(goal.map)
@@ -1222,7 +1213,7 @@ end
 
 ---@param self SPFJourneyDriver
 ---@param elapsed number
--- sift: long-function - one throttled frame step; keeping its gates together preserves the search/draw cadence
+-- One throttled frame step; keeping its gates together preserves the search/draw cadence
 local function Update(self, elapsed)
 	if InCombatLockdown() then
 		return
@@ -1304,7 +1295,7 @@ local function Update(self, elapsed)
 			if ns.Path and not flying and not riding and (off or retry or GetTime() - refreshedAt >= REFRESH_EVERY) then
 				RefreshCosts(false, off or retry)
 			else
-				local planned = Plan(false, true)
+				local planned = Plan()
 				if
 					planned
 					and ns.Path

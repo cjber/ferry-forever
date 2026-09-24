@@ -12,6 +12,7 @@ Shift-click the world map or minimap, or pick a quest, and it plans the route: w
 the flight points you know, boats and zeppelins with their live departure times, lifts, the tram and portals. Then it
 walks you there with the game's own navigation marker. Walking maps cover Eastern Kingdoms, Kalimdor and Zephras Isle;
 they come in the same download and load only when a route needs them.
+The route, pins and tracker use the game's own art, so it looks like it came with the game.
 
 ![Eight-second demo of a route settling, the countdown and the optional compass](docs/screenshots/demo.gif)
 
@@ -22,8 +23,7 @@ Each feature has more detail in [docs/features.md](docs/features.md).
 - **Journey planner.** Shift-click the map or minimap, or choose *Plan journey* on a quest, for the fastest way there:
   walking through tunnels and city levels, known flight points, boats, zeppelins, lifts, the tram and portals. The
   route is drawn on both maps and its steps sit in the objective tracker. It replans as you move, switching only for a
-  clearly faster way. New journeys show a destination pin and the Group Finder spinner until ready. After three
-  seconds, the best route appears and pulses gently on both maps until the spinner stops. Later checks stay quiet.
+  clearly faster way.
   ![Journey steps from Auberdine to Silithus with time and distance remaining](docs/screenshots/tracker.png)
 - **Guide.** The game's own waypoint marker leads you along the route turn by turn, round walls rather than straight at
   the stop, and hands your tracked quest back when you arrive. Click the tracker header to turn it off.
@@ -36,14 +36,12 @@ Each feature has more detail in [docs/features.md](docs/features.md).
   map at the other end, where a ping marks the dock; one with several destinations asks which.
   ![Hovering Auberdine’s piers shows departures and lights destination docks](docs/screenshots/docks.png)
 - **Lifts, the Deeprun Tram and portals** count down like the boats; portals are marked with where they go, and
-  clicking a station or portal opens the map where it comes out. Flight
-  masters, known and undiscovered, use the game's own icons. Each layer has a switch in the map's filter menu.
-  Docks, lifts, stations and portals show on the minimap too, with the same tooltips; *Transport* in the minimap's
-  tracking menu turns them off there.
+  clicking a station or portal opens the map where it comes out. Docks, lifts, stations and portals show on the
+  minimap too, with the same tooltips; *Transport* in the minimap's tracking menu turns them off there.
 - **Next departures.** At a dock, lift or tram station, a tracker section above your quests counts down to every
   arrival and departure; on board, it shows the next call.
-- **Arrival alerts.** A raid-warning banner, a sound and a flashing taskbar icon half a minute before your boat
-  arrives, for anyone waiting AFK.
+- **Arrival alerts.** A raid-warning banner, the ship's own bell (the horn for a zeppelin, the tram pulling in
+  for the tram) and a flashing taskbar icon half a minute before your boat arrives, for anyone waiting AFK.
 - **Times from real rides, shared.** One ride, yours or another player's, times a boat for hours. Sightings pass
   quietly over guild, party and yell at the docks; turn sharing off in the settings.
 
@@ -106,22 +104,19 @@ tools/typecheck.sh                  # strict LuaLS + multi-value lint (requires 
 python3 tools/gen_routes.py          # regenerate Data/Routes.lua for the pinned build
 python3 tools/gen_transit.py         # regenerate Data/Transports.lua, Data/Taxi.lua and Data/Portals.lua
 tools/draw_zeppelin.py               # redraw media/zeppelin.tga (the game has no zeppelin map icon)
-luajit tests/model_spec.lua          # timetable, ride fitting and wire format
-luajit tests/planner_spec.lua        # planning and real-nav journey regressions
-luajit tests/path_many_spec.lua      # exact costs, frontier bounds, interleaving and graph symmetry
-luajit tests/journey_optimal_spec.lua # 30 seeded full-search comparisons and cache invalidation
+(for s in tests/*_spec.lua; do luajit "$s" || exit 1; done)  # the headless specs
 luajit -joff tests/journey_bench.lua  # searches, rounds and frames at the 3 ms budget
 luajit tests/walk_sim.lua            # follow four real routes; assert zero route flips
-luajit -joff tests/memory_bench.lua felwood # before/after collection and cache attribution
-luajit tests/activity_ui.lua       # idle sleep, passive rides, combat, tracker and profiler
-luajit -joff tests/activity_bench.lua idle # offline CPU/allocation and login cost (also dock/walking/ride/panel/combat)
 ```
 
-CI runs luacheck, the specs, strict LuaLS type checking, multi-value lint, StyLua, ruff, shellcheck, shfmt,
-actionlint, zizmor and gitleaks on every push and pull request. `tools/typecheck.sh` fetches pinned Ketho WoW
-API annotations into the ignored `.types/` directory on its first run. It checks every addon's runtime Lua,
-including generated data, and fails on every diagnostic. [Type-checking notes](types/README.md) describe
-the local declarations and intentional multi-value calls.
+CI runs luacheck, the specs, LuaLS, StyLua, ruff, shellcheck, shfmt, actionlint, zizmor, gitleaks and sift on pull
+requests and pushes to main. The benches and their budgets are in [tests/journey_performance.md](tests/journey_performance.md)
+and [tests/search_performance.md](tests/search_performance.md); [type-checking notes](types/README.md) cover the
+pinned WoW API annotations, local declarations and intentional multi-value calls.
+
+**Contributing:** [CONTRIBUTING.md](https://github.com/cjber/.github/blob/main/CONTRIBUTING.md), this repository's
+[AGENTS.md](AGENTS.md), and [SECURITY.md](https://github.com/cjber/.github/blob/main/SECURITY.md) for private
+security reports.
 
 **Releasing:** move the `[Unreleased]` notes in `CHANGELOG.md` under `## [X.Y.Z] - YYYY-MM-DD`, then
 `git tag -s vX.Y.Z && git push --tags`. The [BigWigs packager](https://github.com/BigWigsMods/packager) builds the zip
