@@ -56,6 +56,11 @@ before reporting what remains.
 The Journey header's time is the sum of the steps below it. It used to count down to the planned arrival, so
 standing still it slipped a few seconds below the steps and jumped back every five seconds.
 
+Walks in Stormwind no longer loop round the city through the canals. The game never reports your height, and
+the walk started from the lowest floor under you, often the canal bed below a street. A walk from somewhere
+with several levels, or to a map click or stop there, now starts from whichever one is quickest. Zeppelin
+walks end on the tower's platform, not the ground below it, at Grom'gol, Tirisfal and the tower to Zephras.
+
 ## [1.1.0] - 2026-09-23
 
 A new icon across the addon and its walking maps, settings in the minimap's addon compartment, and a fixed place in the objective tracker.

@@ -204,10 +204,10 @@ def generate(nodes):
     routes, docks = {}, []
 
     def dock_of(frame):
-        for index, (map_id, x, y) in enumerate(docks):
+        for index, (map_id, x, y, _) in enumerate(docks):
             if map_id == frame["map"] and math.dist((x, y), frame["pos"][:2]) <= SAME_DOCK:
                 return index
-        docks.append((frame["map"], *frame["pos"][:2]))
+        docks.append((frame["map"], *frame["pos"]))
         return len(docks) - 1
 
     tables = {path: timetable(rows) for path, rows in sorted(transport_paths(nodes).items())}
@@ -257,11 +257,11 @@ def render(routes, docks):
         "---@type string, SPFNamespace",
         "local _, ns = ...",
         "",
-        "-- [dock] = { map = continent, x = world x (north), y = world y (west) }",
+        "-- [dock] = { map = continent, x = world x (north), y = world y (west), z = the transport's height there }",
         "-- stylua: ignore",
         "ns.Docks = {",
     ]
-    lines += [f"\t{{ map = {m}, x = {x:.1f}, y = {y:.1f} }}," for m, x, y in docks]
+    lines += [f"\t{{ map = {m}, x = {x:.1f}, y = {y:.1f}, z = {round(z, 1) + 0:.1f} }}," for m, x, y, z in docks]
     lines += [
         "}",
         "",
