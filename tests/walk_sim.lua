@@ -49,7 +49,9 @@ for _, case in ipairs({
 	while driver.shown() do
 		local leg = driver.shown().legs[1]
 		assert(leg, "empty journey")
-		if current and (leg.to.map ~= current.to.map or leg.to.x ~= current.to.x or leg.to.y ~= current.to.y) then
+		-- A replan restarts the same goal from the player, so its endpoint can move by rounding alone.
+		local to, was = leg.to, current and current.to
+		if was and (to.map ~= was.map or (to.x - was.x) ^ 2 + (to.y - was.y) ^ 2 >= 1) then
 			local gap = here.map == current.to.map
 				and math.sqrt((here.x - current.to.x) ^ 2 + (here.y - current.to.y) ^ 2)
 			if not gap or gap > 15 then

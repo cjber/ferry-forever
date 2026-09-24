@@ -28,13 +28,10 @@ local progress = { index = 1 }
 ---@field drawAt? number
 ---@field drawX? number
 ---@field drawY? number
----@field drawZ? number
 ---@field drawMap? number
 ---@type SPFJourneyDriver
 local driver
 local ARRIVAL = 15
--- A lift's landings share a spot on the map; height tells the top from the bottom.
-local ARRIVAL_HEIGHT = 30
 local lastRunSpeed = 7
 local pathJobs, walkCache, pathVersion = {}, {}, 0
 local pendingWalks, pendingCosts, settleRound = 0, 0, 0
@@ -118,16 +115,13 @@ function ns.JourneyPosition()
 end
 
 local function Here()
-	local x, y, z, map = ns.JourneyPosition()
-	return x and { map = map, x = x, y = y, z = z }
+	local x, y, _, map = ns.JourneyPosition()
+	return x and { map = map, x = x, y = y }
 end
 
 local function Near(node, reach)
-	local x, y, z, map = ns.JourneyPosition()
-	return x
-		and map == node.map
-		and (x - node.x) ^ 2 + (y - node.y) ^ 2 <= (reach or ARRIVAL) ^ 2
-		and not (z and node.z and math.abs(z - node.z) > ARRIVAL_HEIGHT)
+	local x, y, _, map = ns.JourneyPosition()
+	return x and map == node.map and (x - node.x) ^ 2 + (y - node.y) ^ 2 <= (reach or ARRIVAL) ^ 2
 end
 
 local function SameWaypoint(a, b)
@@ -522,9 +516,7 @@ local function OnWalk(points, here, reach)
 		local dx, dy, length = b.x - a.x, b.y - a.y, lengths[index]
 		local t = length > 0 and math.max(0, math.min(1, ((here.x - a.x) * dx + (here.y - a.y) * dy) / length ^ 2)) or 0
 		local off = math.sqrt((a.x + t * dx - here.x) ^ 2 + (a.y + t * dy - here.y) ^ 2)
-		local z = a.z and b.z and a.z + t * (b.z - a.z)
-		local level = not (z and here.z and math.abs(z - here.z) > ARRIVAL_HEIGHT)
-		if here.map == a.map and off <= (reach or ON_PATH) and level and (not best or off < best) then
+		if here.map == a.map and off <= (reach or ON_PATH) and (not best or off < best) then
 			best, found, along, after = off, index, t, total - walked - t * length
 		end
 		walked = walked + length
@@ -542,8 +534,7 @@ local function Refresh()
 		-- Draw the walk you are on from where you stand, not from where it was planned.
 		local leg, here = remaining.legs[1], Here()
 		if here then
-			driver.drawAt, driver.drawX, driver.drawY, driver.drawZ, driver.drawMap =
-				GetTime(), here.x, here.y, here.z, here.map
+			driver.drawAt, driver.drawX, driver.drawY, driver.drawMap = GetTime(), here.x, here.y, here.map
 		end
 		if leg and leg.mode == "walk" and here then
 			local points = leg.walkPoints or ns.Planner.WalkPoints(leg.from, leg.to)
@@ -1365,7 +1356,7 @@ local function Update(self, elapsed)
 		return
 	end
 	self.progressElapsed = 0
-	local x, y, z, map = ns.JourneyPosition()
+	local x, y, _, map = ns.JourneyPosition()
 	if not x then
 		return
 	end
@@ -1460,7 +1451,7 @@ local function Update(self, elapsed)
 		goal
 		and result
 		and GetTime() - (self.drawAt or 0) >= DRAW_EVERY
-		and (x ~= self.drawX or y ~= self.drawY or z ~= self.drawZ or map ~= self.drawMap)
+		and (x ~= self.drawX or y ~= self.drawY or map ~= self.drawMap)
 	then
 		Refresh()
 	end

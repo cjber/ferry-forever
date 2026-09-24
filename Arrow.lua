@@ -102,18 +102,17 @@ end
 function ns.RefreshGuideStops()
 	path = source and (ns.db.guideStops and { source[#source] } or source)
 	index = 1
-	local x, y, z, map = ns.JourneyPosition()
+	local x, y, _, map = ns.JourneyPosition()
 	local nearest
-	-- Guide may be restarted halfway along a walk, including one that crosses itself on another floor.
+	-- Guide may be restarted halfway along a walk: it resumes at the nearest bend.
 	for i = 2, #(path or {}) do
 		local a, b = path[i - 1], path[i]
 		local dx, dy = b.x - a.x, b.y - a.y
 		local length = dx * dx + dy * dy
 		if x and map == a.map and map == b.map then
 			local t = length > 0 and math.max(0, math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length)) or 0
-			local height = a.z and b.z and a.z + t * (b.z - a.z)
 			local off = (a.x + t * dx - x) ^ 2 + (a.y + t * dy - y) ^ 2
-			if not (height and z and math.abs(height - z) > 30) and (not nearest or off < nearest) then
+			if not nearest or off < nearest then
 				index, nearest = i, off
 			end
 		end

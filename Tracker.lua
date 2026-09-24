@@ -121,20 +121,19 @@ local function JourneyDistance(result, index)
 		or (leg.route and ns.CurrentRide() == leg.route)
 		or (leg.mode == "flight" and UnitOnTaxi("player"))
 	if active and leg.mode ~= "portal" then
-		local x, y, z, map = UnitPosition("player")
+		local x, y, _, map = UnitPosition("player")
 		local nearest
 		for pointIndex, a in ipairs(path.points) do
 			if x and map == a.map then
 				local b, length = path.points[pointIndex + 1], path.lengths[pointIndex]
-				local t, px, py, pz = 0, a.x, a.y, a.z
+				local t, px, py = 0, a.x, a.y
 				if length > 0 then
 					local dx, dy = b.x - a.x, b.y - a.y
 					t = math.max(0, math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length ^ 2))
 					px, py = a.x + t * dx, a.y + t * dy
-					pz = a.z and b.z and a.z + t * (b.z - a.z)
 				end
 				local off = (x - px) ^ 2 + (y - py) ^ 2
-				if not (z and pz and math.abs(z - pz) > 30) and (not nearest or off < nearest) then
+				if not nearest or off < nearest then
 					nearest = off
 					yards = path.after[pointIndex] - t * length
 					if leg.mode == "walk" then

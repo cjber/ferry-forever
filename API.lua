@@ -142,9 +142,9 @@ local function Options(from, to)
 	-- Same multimodal planner and baked walks as the arrow's initial plan. Endpoint terrain searches
 	-- are asynchronous and deliberately omitted: this is an estimate, not a settled walking path.
 	-- Uncached, LuaJIT -joff: Auberdine -> Eastern Plaguelands 2.45 ms cold / 0.51 ms warm;
-	-- JIT compilation can make the first call ~4 ms. Forty estimates in an AGF rebuild cost ~12 ms,
-	-- so cache 256 (origin rounded to 0.0001, exact destination) results for at most five seconds.
-	-- Cached calls measured ~0.003 ms; a warm AGF Plan including 40 estimates measured 0.63 ms (-joff).
+	-- JIT compilation can make the first call ~4 ms. Callers should make at most one uncached call per
+	-- frame; AGF fetches its card estimates one per frame while its panel is open. Results are cached, 256
+	-- (origin rounded to 0.0001, exact destination) for at most five seconds; cached calls measured ~0.003 ms.
 	local options = {
 		cache = plannerCache,
 		from = from,
