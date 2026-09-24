@@ -536,13 +536,29 @@ function ShortestPathForeverRoutePinMixin:OnCanvasSizeChanged()
 	self:Draw()
 end
 
+-- Ascending stop numbers as a label: runs joined by a hyphen, the rest by commas (4-7, or 2, 5). Past two parts it
+-- would outgrow the ring, so it names the first and a plus (2+); the tooltip lists them all.
+---@param numbers integer[]
+local function StopLabel(numbers)
+	local parts, i = {}, 1
+	while i <= #numbers do
+		local j = i
+		while numbers[j + 1] == numbers[j] + 1 do
+			j = j + 1
+		end
+		parts[#parts + 1] = j > i and numbers[i] .. "-" .. numbers[j] or tostring(numbers[i])
+		i = j + 1
+	end
+	return #parts > 2 and numbers[1] .. "+" or table.concat(parts, ", ")
+end
+
 ---@class SPFGoalPin : SPFMapPin
 ---@field Texture Texture
 ---@field Disc Texture
 ---@field Glow Texture
 ---@field Numeral Texture
 ---@field Number FontString
----@field stopTitle? string
+---@field stopTitles? string[]
 ShortestPathForeverGoalPinMixin = CreateFromMixins(MapCanvasPinMixin)
 
 function ShortestPathForeverGoalPinMixin:OnLoad()
@@ -557,15 +573,19 @@ end
 
 -- A lone destination wears the waypoint pin; a numbered stop wears the ring the Adventure Guide draws for the same
 -- step. Blizzard's numerals (centred in their atlas boxes, unlike font digits) stop at 9; later stops use the font.
-function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, number, title, later)
+-- Stops whose rings would overlap share one, labelled with their numbers: a run as 4-7, others apart as 2, 5.
+---@param numbers integer[]? the stops this pin marks, in order; nil for a lone destination
+---@param titles string[]
+function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, numbers, titles, later)
 	self:SetPosition(x, y)
 	self:SetAlpha(later and LATER_STOP_ALPHA or 1)
-	self.stopTitle = title
+	self.stopTitles = titles[1] and titles or nil
+	local number = numbers and #numbers == 1 and numbers[1]
 	local numeral = number and number <= MAX_NUMERAL
-	self.Disc:SetShown(number ~= nil)
+	self.Disc:SetShown(numbers ~= nil)
 	self.Numeral:SetShown(numeral == true)
-	self.Number:SetText(number and not numeral and tostring(number) or "")
-	if number then
+	self.Number:SetText(numbers and not numeral and StopLabel(numbers) or "")
+	if numbers then
 		self:SetSize(STOP_SIZE, STOP_SIZE)
 		self.Texture:SetAtlas(STOP_ATLAS)
 		if numeral then
@@ -585,8 +605,13 @@ function ShortestPathForeverGoalPinMixin:OnMouseEnter()
 	end
 	self.Glow:SetShown(self.Disc:IsShown())
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-	GameTooltip_SetTitle(GameTooltip, self.stopTitle or title)
-	for _, row in ipairs(not self.stopTitle and rows or {}) do
+	-- A shared ring names every stop it marks, in order.
+	local stopTitles = self.stopTitles or {}
+	GameTooltip_SetTitle(GameTooltip, stopTitles[1] or title)
+	for i = 2, #stopTitles do
+		GameTooltip_AddColoredLine(GameTooltip, stopTitles[i], HIGHLIGHT_FONT_COLOR)
+	end
+	for _, row in ipairs(not stopTitles[1] and rows or {}) do
 		GameTooltip_AddColoredLine(GameTooltip, row.text, row.current and HIGHLIGHT_FONT_COLOR or NORMAL_FONT_COLOR)
 	end
 	GameTooltip_AddNormalLine(GameTooltip, "Right-click to clear")
@@ -613,7 +638,7 @@ end
 
 function ShortestPathForeverGoalPinMixin:OnReleased()
 	self:OnMouseLeave()
-	self.stopTitle = nil
+	self.stopTitles = nil
 	MapCanvasPinMixin.OnReleased(self)
 end
 
@@ -728,26 +753,70 @@ local ProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
 function ProviderMixin:RemoveAllData()
 	self:GetMap():RemoveAllPinsByTemplate(LINE_TEMPLATE)
 	self:GetMap():RemoveAllPinsByTemplate(GOAL_TEMPLATE)
+	self.stopsKey = nil
 end
 
 function ProviderMixin:RefreshAllData()
 	self:RemoveAllData()
 	local map = self:GetMap()
-	local mapID = map:GetMapID()
 	-- Before the map's first show its zoom levels are unset.
-	if not (mapID and map:IsVisible() and ns.db.journey and goal) then
+	if not (map:GetMapID() and map:IsVisible() and ns.db.journey and goal) then
 		return
 	end
 	if #worldPaths > 0 then
 		map:AcquirePin(LINE_TEMPLATE, worldPaths)
 	end
-	for index = stopIndex or 1, stops and #stops or 1 do
+	self:RefreshStops()
+end
+
+-- The stop being guided to keeps its own ring at full strength. Later stops whose rings would overlap at this zoom
+-- share one, at their middle, as the map's docks do; the rings are rebuilt only when that grouping changes.
+function ProviderMixin:RefreshStops()
+	local map = self:GetMap()
+	local mapID = map:GetMapID()
+	if not (mapID and map:IsVisible() and ns.db.journey and goal) then
+		return
+	end
+	local first, current, later = stopIndex or 1, nil, {}
+	for index = first, stops and #stops or 1 do
 		local point = stops and stops[index] or goal
 		local x, y = MapPosition(point, mapID)
 		if x and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
-			map:AcquirePin(GOAL_TEMPLATE, x, y, stops and index, point.routeTitle, stops and index > (stopIndex or 1))
+			local mark = { x = x, y = y, index = index, title = point.routeTitle }
+			if index == first then
+				current = mark
+			else
+				later[#later + 1] = mark
+			end
 		end
 	end
+	local groups, keys = ns.OverlapGroups(map, later, STOP_SIZE), { mapID, current and current.index or 0 }
+	for _, group in ipairs(groups) do
+		for _, mark in ipairs(group) do
+			keys[#keys + 1] = mark.index
+		end
+		keys[#keys + 1] = 0 -- between groups; stops count from 1
+	end
+	local key = table.concat(keys, ",")
+	if key == self.stopsKey then
+		return
+	end
+	self.stopsKey = key
+	map:RemoveAllPinsByTemplate(GOAL_TEMPLATE)
+	if current then
+		map:AcquirePin(GOAL_TEMPLATE, current.x, current.y, stops and { current.index }, { current.title }, false)
+	end
+	for _, group in ipairs(groups) do
+		local x, y, numbers, titles = 0, 0, {}, {}
+		for i, mark in ipairs(group) do
+			x, y, numbers[i], titles[i] = x + mark.x, y + mark.y, mark.index, mark.title
+		end
+		map:AcquirePin(GOAL_TEMPLATE, x / #group, y / #group, numbers, titles, true)
+	end
+end
+
+function ProviderMixin:OnCanvasScaleChanged()
+	self:RefreshStops()
 end
 
 local function ClipMinimap(x, y, dx, dy, inset, square)

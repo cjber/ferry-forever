@@ -107,12 +107,14 @@ end
 ns.JourneyWaterWalking = WaterWalking
 
 -- A missing/secret sample is not evidence that the journey is unreachable. Planning, Guide and lines share this gate.
+-- UnitPosition's third value is a placeholder, always 0, so the player's height is unknown: never a floor.
+---@return number? x, number? y, nil z, number? map
 function ns.JourneyPosition()
-	local x, y, z, map = UnitPosition("player")
+	local x, y, _, map = UnitPosition("player")
 	if not (canaccessvalue(x) and canaccessvalue(y) and canaccessvalue(map)) or not (x and y and map) then
 		return nil
 	end
-	return x, y, canaccessvalue(z) and z or nil, map
+	return x, y, nil, map
 end
 
 local function Here()

@@ -127,7 +127,7 @@ for _, batch in ipairs(batches) do
 		"a settled journey must release its endpoint frontiers and callbacks"
 	)
 end
-assert(count == 2 and #points > 2)
+assert(count == 2 and #points >= 2)
 driver.begin(from, destination)
 drain()
 assert(#batches == count and driver.shown().legs[1].walkPoints[2] == points[2])

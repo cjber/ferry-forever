@@ -174,27 +174,27 @@ function ns.DockTitle(dockID)
 	return dock.site and dock.site .. ", " .. dock.name or ns.DockPierName(dockID)
 end
 
-local dockX, dockY, dockZ, dockMap, nearestDock, nearestYards
+local dockX, dockY, dockMap, nearestDock, nearestYards
 ---@return number? dockID, number? yards
 function ns.NearestDock()
-	local x, y, z, map = UnitPosition("player")
+	-- The player's height is unknown (UnitPosition's is a placeholder 0), so a lift's landings tie on the map.
+	local x, y, _, map = UnitPosition("player")
 	if not x then
 		return nil
 	end
-	if x == dockX and y == dockY and z == dockZ and map == dockMap then
+	if x == dockX and y == dockY and map == dockMap then
 		return nearestDock, nearestYards
 	end
-	-- Height counts where it is known, so a lift's top and bottom landings stay apart.
 	local nearest, yards
 	for dockID, dock in pairs(ns.Docks) do
 		if dock.map == map then
-			local distance = math.sqrt((dock.x - x) ^ 2 + (dock.y - y) ^ 2 + (dock.z and z and (dock.z - z) ^ 2 or 0))
-			if not yards or distance < yards then
+			local distance = math.sqrt((dock.x - x) ^ 2 + (dock.y - y) ^ 2)
+			if not yards or distance < yards or (distance == yards and dockID < nearest) then
 				nearest, yards = dockID, distance
 			end
 		end
 	end
-	dockX, dockY, dockZ, dockMap = x, y, z, map
+	dockX, dockY, dockMap = x, y, map
 	nearestDock, nearestYards = nearest, yards
 	return nearest, yards
 end
