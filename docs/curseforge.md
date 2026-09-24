@@ -14,13 +14,23 @@ I wanted a proper "get me there" for WoW: Forever, so Shortest Path Forever find
 
 ![Journey steps from Auberdine to Silithus, with time and distance remaining](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/tracker.png)
 
+The journey in the objective tracker, step by step, with time and distance left.
+
 ![Auberdine’s piers on the minimap, with the dotted route and Guide’s native waypoint](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/minimap.png)
+
+On the minimap, the route in dots and Guide using the game's own waypoint.
 
 ![Hovering Auberdine’s piers shows departures and lights destination docks](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/docks.png)
 
+Hover a dock to see where its boats go and when.
+
 ![The optional compass strip with the next turns and destination](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/compass.png)
 
+The optional compass, for your next turns and destination.
+
 ![A journey from Auberdine through Menethil and Theramore to Silithus](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/kalimdor.png)
+
+A longer trip: Auberdine to Menethil, then Theramore, then Silithus.
 
 ## Usage
 
