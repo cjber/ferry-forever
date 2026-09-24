@@ -76,6 +76,7 @@
 ---@field spell number
 ---@field item? number
 ---@field cast number
+---@field bind? boolean
 ---@class SPFLandmass
 ---@field map number
 ---@field minX number

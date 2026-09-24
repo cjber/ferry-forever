@@ -218,6 +218,16 @@ equal(calls, beforeEviction + 1, "bounded cache evicts oldest destination")
 ns.speed, ns.water, ns.faction = nil, nil, "Alliance"
 ns.Planner.Plan = planner
 
+-- Teleports count only from where you stand: 5000 yards on foot, or a hearth 10 yards short of the goal.
+ns.teleports = { { map = 1, x = 0, y = 4990, spell = 8690, item = 6948, cast = 10000, bind = true } }
+ns.teleportReady = { ns.NowMs() }
+driver.move({ map = 1, x = 0, y = 0 })
+near(API.Estimate(1, 0.5, 0.5, 1, 0.4, 0.5), 10 + 10 / 7, "hearth from here")
+near(API.Estimate(1, 0.49, 0.5, 1, 0.4, 0.5), 4500 / 7, "no hearth on a later leg")
+ns.teleportReady = {}
+near(API.Estimate(1, 0.5, 0.5, 1, 0.39, 0.5), 5500 / 7, "no hearth while it cannot be cast")
+ns.teleports, ns.teleportReady = nil, nil
+
 -- Real bundled network; the driver's affine projection keeps these world-yard endpoints exact.
 for _, file in ipairs({
 	"Data/Routes.lua",

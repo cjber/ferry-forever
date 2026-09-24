@@ -76,6 +76,7 @@ function ns.UsableTeleports(now)
 				y = to.y,
 				z = to.z,
 				label = not teleport.to and bind and bind.name or nil,
+				bind = teleport.bind,
 				spell = teleport.spell,
 				item = teleport.item,
 				cast = teleport.cast,

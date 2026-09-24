@@ -197,3 +197,44 @@ for id, dock in pairs(ns.Docks) do
 	assert(mapped[dock.map] or dock.name and dock.pin and mapped[dock.pin.map], "dock " .. id .. " has no place name")
 end
 print("tram journey: every step is named: ok")
+
+-- Bound beside Gadgetzan's flight master, a ready hearth from Auberdine is the first step, and still the optimum.
+do
+	local gadgetzan = ns.TaxiNodes[39]
+	driver.env.C_Item = {
+		GetItemNameByID = function(id)
+			return id == 6948 and "Hearthstone" or nil
+		end,
+	}
+	ns.teleports = {
+		{
+			map = gadgetzan.map,
+			x = gadgetzan.x + 20,
+			y = gadgetzan.y,
+			spell = 8690,
+			item = 6948,
+			cast = 10000,
+			bind = true,
+		},
+	}
+	ns.teleportReady = { 123456 }
+	driver.begin(ns.TaxiNodes[26], gadgetzan)
+	drain()
+	local shown, exact = driver.shown(), full(options)
+	assert(shown.legs[1].mode == "teleport" and math.abs(shown.arrive - exact.arrive) < 1e-5)
+	local rows = select(2, ns.JourneyInfo())
+	assert(rows[1].text:find("^1%. Use Hearthstone"), rows[1].text)
+	-- Cast from anywhere: landing moves on to the next step.
+	driver.move({ map = gadgetzan.map, x = gadgetzan.x + 20, y = gadgetzan.y, z = gadgetzan.z })
+	driver.update(0.2)
+	assert(select(4, ns.JourneyInfo()) == 2, "the hearth step is done on landing")
+	ns.ClearJourney()
+	-- An hour's cooldown loses to flying.
+	ns.teleportReady = { 123456 + 3600000 }
+	driver.begin(ns.TaxiNodes[26], gadgetzan)
+	drain()
+	assert(driver.shown().legs[1].mode ~= "teleport")
+	ns.ClearJourney()
+	ns.teleports, ns.teleportReady, driver.env.C_Item = nil, nil, nil
+end
+print("hearth journey: the first step, named by the game: ok")

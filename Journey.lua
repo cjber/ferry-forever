@@ -18,6 +18,8 @@ local VERB = {
 	portal = "Portal to",
 	passage = "Go through to",
 }
+-- A teleport step, by the item's or spell's own name in the game's language.
+local USE_ITEM, CAST_SPELL = "Use %s", "Cast %s"
 
 local goal, guide, result
 local nextPoint
@@ -102,7 +104,7 @@ local function NodeLabel(node, mode)
 		return ns.TaxiNodes[node.id].name
 	elseif node.kind == "portal" then
 		return node.label
-	elseif node.kind == "goal" or node.kind == nil then
+	elseif node.kind == "teleport" or node.kind == "goal" or node.kind == nil then
 		local location = not node.label and ns.Locate(node)
 		return node.label or location and location.zone or UNKNOWN
 	end
@@ -413,7 +415,11 @@ local function UpdateProgress()
 			progress.index = progress.index + 1
 			leg = nextLeg
 		end
-		local aboard = leg.aboard or (leg.route and riding == leg.route) or (leg.mode == "flight" and flying)
+		-- A teleport is cast from wherever you are.
+		local aboard = leg.aboard
+			or leg.mode == "teleport"
+			or (leg.route and riding == leg.route)
+			or (leg.mode == "flight" and flying)
 		if leg.mode ~= "walk" and not progress.departed then
 			if aboard or Near(leg.from) then
 				progress.departed = true
@@ -484,7 +490,16 @@ function ns.JourneyInfo()
 		local _, spell = WaterWalking()
 		for index = progress.index, #result.legs do
 			local leg = result.legs[index]
-			local text = string.format("%d. %s %s", index, VERB[leg.mode], NodeLabel(leg.to, leg.mode))
+			local text
+			local teleport = leg.teleport
+			if teleport then
+				local name = teleport.item and C_Item.GetItemNameByID(teleport.item)
+					or C_Spell.GetSpellName(teleport.spell)
+					or UNKNOWN
+				text = string.format("%d. " .. (teleport.item and USE_ITEM or CAST_SPELL), index, name)
+			else
+				text = string.format("%d. %s %s", index, VERB[leg.mode], NodeLabel(leg.to, leg.mode))
+			end
 			if leg.mode == "walk" and leg.to.undiscovered then
 				text = text .. " (new flight path)"
 			end
@@ -591,6 +606,76 @@ end
 
 local function SamePlace(a, b)
 	return a.map == b.map and a.x == b.x and a.y == b.y and a.z == b.z
+end
+
+-- The bind point moves, so its walks on to the fixed places cannot be baked like a class teleport's: each is searched
+-- once per bind point and water mode, alongside the journey's own endpoint searches.
+local landings = {}
+---@param place SPFTeleportPlace
+---@return {targets: SPFPlace[], costs?: (number|false)[], waiting?: fun()[]}?
+local function Landing(place)
+	if not (ns.Path and place.bind and ns.Path.HasData(place.map)) then
+		return nil
+	end
+	local key = string.format("%d:%.17g:%.17g:%s", place.map, place.x, place.y, tostring(waterMode))
+	local entry = landings[key]
+	if not entry then
+		local mass, targets = ns.Planner.Landmass(place, ns.Landmasses or {}), {}
+		local places = ns.Planner.Places({
+			docks = ns.Docks,
+			taxiNodes = ns.TaxiNodes,
+			portals = ns.Portals,
+			faction = UnitFactionGroup("player"),
+		})
+		for _, target in ipairs(places) do
+			if target.map == place.map and ns.Planner.Landmass(target, ns.Landmasses or {}) == mass then
+				targets[#targets + 1] = target
+			end
+		end
+		entry = { targets = targets, waiting = {} }
+		landings[key] = entry
+		ns.Path.FindMany(place.map, place, targets, function(costs)
+			local waiting = entry.waiting or {}
+			entry.costs, entry.waiting = costs, nil
+			for _, callback in ipairs(waiting) do
+				callback()
+			end
+		end, waterMode)
+	end
+	return entry
+end
+
+-- Whether a bind point's walks are still being searched; callback, when given, runs once each search ends.
+---@param teleports SPFTeleportPlace[]?
+---@param callback? fun()
+local function LandingPending(teleports, callback)
+	local pending = false
+	for _, place in ipairs(teleports or {}) do
+		local entry = Landing(place)
+		if entry and entry.waiting then
+			pending = true
+			if callback then
+				entry.waiting[#entry.waiting + 1] = callback
+			end
+		end
+	end
+	return pending
+end
+
+---@param teleports SPFTeleportPlace[]?
+---@return SPFWalkCost[]
+local function LandingWalks(teleports)
+	local walks = {}
+	for _, place in ipairs(teleports or {}) do
+		local entry = Landing(place)
+		local costs = entry and entry.costs
+		if entry and costs then
+			for i, target in ipairs(entry.targets) do
+				walks[#walks + 1] = { from = place, to = target, cost = costs[i] }
+			end
+		end
+	end
+	return walks
 end
 
 local function WalkKey(from, to)
@@ -714,7 +799,7 @@ local function Retime(planned)
 	for index, leg in ipairs(planned.legs) do
 		local kept = result.legs[index + progress.index - 1]
 		kept.depart, kept.arrive, kept.wait, kept.estimated = leg.depart, leg.arrive, leg.wait, leg.estimated
-		kept.aboard, kept.yards = leg.aboard, leg.yards
+		kept.aboard, kept.yards, kept.ready = leg.aboard, leg.yards, leg.ready
 	end
 end
 
@@ -763,6 +848,8 @@ local function EstimateKept(now)
 			end
 		elseif index == progress.index and leg.aboard then
 			duration, wait = math.max(0, leg.arrive - now), 0
+		elseif leg.ready then
+			wait = math.max(0, leg.ready - estimate.arrive)
 		end
 		local depart = estimate.arrive + wait
 		estimate.arrive = depart + duration
@@ -909,6 +996,11 @@ local function Plan(preview)
 		return result
 	end
 	local anchors = ns.FreshAnchors()
+	local teleports, ready = ns.UsableTeleports(now)
+	local walks = preview and {} or Walks(here)
+	for _, walk in ipairs(LandingWalks(teleports)) do
+		walks[#walks + 1] = walk
+	end
 	local ride, routeID = nil, ns.CurrentRide()
 	if routeID and anchors[routeID] then
 		local route = ns.Routes[routeID]
@@ -942,8 +1034,10 @@ local function Plan(preview)
 		taxiNodes = ns.TaxiNodes,
 		taxiPaths = ns.TaxiPaths,
 		portals = ns.Portals,
+		teleports = teleports,
+		teleportReady = ready,
 		landmasses = ns.Landmasses,
-		walks = preview and {} or Walks(here),
+		walks = walks,
 		baked = ns.Walks,
 		waterWalking = waterMode,
 	})
@@ -967,10 +1061,12 @@ local function RefreshCosts(includeGoal, forced)
 	CancelPaths()
 	search = { started = GetTime(), initial = not result, forced = forced }
 	local version, faction = pathVersion, UnitFactionGroup("player")
+	local teleports = ns.UsableTeleports(ns.NowMs())
 	local places = ns.Planner.Places({
 		docks = ns.Docks,
 		taxiNodes = ns.TaxiNodes,
 		portals = ns.Portals,
+		teleports = teleports,
 		faction = faction,
 	})
 	local function targets(point, withGoal)
@@ -987,7 +1083,13 @@ local function RefreshCosts(includeGoal, forced)
 		return list
 	end
 	local function reuse(batch, point, reverse)
-		if not batch or batch.path ~= ns.Path or batch.water ~= waterMode or batch.faction ~= faction then
+		if
+			not batch
+			or batch.path ~= ns.Path
+			or batch.water ~= waterMode
+			or batch.faction ~= faction
+			or batch.teleports ~= teleports
+		then
 			return false
 		end
 		if not reverse and not SamePlace(batch.goal, goal) then
@@ -1014,6 +1116,7 @@ local function RefreshCosts(includeGoal, forced)
 			path = ns.Path,
 			water = waterMode,
 			faction = faction,
+			teleports = teleports,
 			costs = {},
 		}
 	end
@@ -1118,6 +1221,9 @@ local function RefreshCosts(includeGoal, forced)
 			(not startBatch.done and not (startBatch.job and startBatch.job.valid))
 			or (not goalBatch.done and not (goalBatch.job and goalBatch.job.valid))
 		then
+			return
+		end
+		if LandingPending(teleports) then
 			return
 		end
 		local hadFixed = startBatch.fixedKey or goalBatch.fixedKey
@@ -1235,6 +1341,9 @@ local function RefreshCosts(includeGoal, forced)
 	end
 	attach(startBatch)
 	attach(goalBatch)
+	LandingPending(teleports, function()
+		consider(true)
+	end)
 	-- Existing settled costs can prove a repeated journey without advancing either frontier.
 	if ns.Path.Pause and (startBatch.job.valid or startBatch.done) and (goalBatch.job.valid or goalBatch.done) then
 		consider(true)
@@ -1311,6 +1420,9 @@ local function Update(self, elapsed)
 		local mode = WaterWalking()
 		if mode ~= waterMode then
 			waterMode, walkCache, walkOrder, startCosts, goalCosts = mode, {}, {}, {}, {}
+			RefreshCosts(true, false)
+		elseif goalBatch and goalBatch.teleports ~= ns.UsableTeleports(ns.NowMs()) then
+			-- A new bind point or teleport: measure the walks on from where it lands.
 			RefreshCosts(true, false)
 		elseif pendingCosts == 0 and pendingWalks == 0 then
 			local here = Here()

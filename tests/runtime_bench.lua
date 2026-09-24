@@ -9,6 +9,13 @@ local driver = assert(loadstring(source .. [[
 ns.Path = actualPath
 ns.db.debug = false
 WorldMapFrame.shown = false
+-- A character with a hearthstone and no recorded bind point: no teleport edges, as after a fresh install.
+GetBindLocation = GetBindLocation or function() return "Auberdine" end
+C_SpellBook = C_SpellBook or { IsSpellKnown = function() return false end }
+C_Item = C_Item or {
+ GetItemCount = function(id) return id == 6948 and 1 or 0 end,
+ GetItemCooldown = function() return 0, 0, 1 end,
+}
 local nextFrame, displayed
 local plannerStats = { calls = 0, cpu = 0, worst = 0, kb = 0 }
 local plan = ns.Planner.Plan

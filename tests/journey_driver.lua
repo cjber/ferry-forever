@@ -170,6 +170,10 @@ end
 ns.Locate = function()
 	return { zone = "Test" }
 end
+-- ns.teleports: the usable places; ns.teleportReady: [index] = when each can be cast.
+ns.UsableTeleports = function()
+	return ns.teleports, ns.teleportReady
+end
 ns.FormatCountdown = tostring
 ns.SetJourneyRoute = function(_, route)
 	shown = route
