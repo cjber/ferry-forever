@@ -28,14 +28,25 @@ local function check(index, count)
  local pins = active[goalTemplate]
  assert(#pins == count-index+1)
  for i, pin in ipairs(pins) do
-  assert(pin.Number.text == index+i-1, "remaining pins retain original stop numbers")
-  assert(pin.Texture.atlas == "Waypoint-MapPin-Tracked")
+  assert(pin.Numeral.atlas == "services-number-"..(index+i-1), "remaining pins retain original stop numbers")
+  assert(pin.Texture.atlas == "adventureguide-ring")
+  assert(pin.alpha == (i == 1 and 1 or 0.55), "only the stop being guided to is at full strength")
   assert(pin.stopTitle == string.format("Stop %d of %d: %s", index+i-1, count, stops[index+i-1].title))
  end
  local line = active[lineTemplate][1]
  assert(line.used > 0 and line.used <= 4096)
  local preview = line.paths[#line.paths]
- assert(preview.preview and #preview.points == count-index+1)
+ assert(index == count or preview.preview and #preview.points == count-index+1)
+ -- The leg being walked draws at full strength and every stroke of the later hops recedes.
+ local current, later = 0, 0
+ for i = 1, line.used do
+  local alpha = line.lines[i].alpha
+  assert(alpha == 1 or alpha == 0.4, "strokes are either current or later")
+  if alpha == 1 then current = current + 1 else later = later + 1 end
+ end
+ assert(current > 0)
+ assert(index == count and later == 0 or later > 0 and line.lines[line.used].alpha == 0.4)
+ assert(line.lines[1].alpha == 1, "the current leg is drawn first, at full strength")
  assert(arrowFrame.Progress.text == string.format("Stop %d of %d: %s", index, count, stops[index].title))
  assert(ns.JourneyInfo() == arrowFrame.Progress.text)
  return line
