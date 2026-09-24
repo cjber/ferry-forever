@@ -14,7 +14,9 @@ for _, case in ipairs({
 		"Data/Taxi.lua",
 		"Data/Portals.lua",
 		"Data/Walks.lua",
+		"PathGrid.lua",
 		"Path.lua",
+		"PathJobs.lua",
 	}) do
 		driver.load(file)
 	end

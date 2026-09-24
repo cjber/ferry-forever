@@ -7,7 +7,9 @@ for _, file in ipairs({
 	"Data/Transports.lua",
 	"Data/Taxi.lua",
 	"Data/Portals.lua",
+	"PathGrid.lua",
 	"Path.lua",
+	"PathJobs.lua",
 	"Planner.lua",
 }) do
 	assert(loadfile(file))("ShortestPathForever", ns)

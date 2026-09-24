@@ -61,7 +61,7 @@ remains 8,000 ms. The animation uses fixed time steps, never the wall clock.
   maps the strip's left edge to the top; clockwise rotation joins all four corners.
   Shared `tooltip_backdrop` implements that mapping. World-map frames also now
   apply Camelot's metal-corner offsets.
-- `Tracker.lua`, `Journey.lua`, `Arrow.lua` and `Compass.lua` supply the text,
+- `Tracker.lua`, `JourneyGuide.lua`, `Arrow.lua` and `Compass.lua` supply the text,
   Guide's 25-yard bend threshold, marker proportions, stock fonts and heading easing.
   Blizzard's ObjectiveTracker templates, WorldMap frame, WaypointLocationDataProvider,
   Minimap XML, Camelot Skin/Diel and Backdrop sources supply the surrounding widgets.

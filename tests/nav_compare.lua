@@ -24,7 +24,13 @@ end
 local function loader(root)
 	local env = setmetatable({}, { __index = _G })
 	local ns = {}
-	setfenv(assert(loadfile(root .. "/Path.lua")), env)("ShortestPathForever", ns)
+	-- A baseline from before the split has Path.lua alone.
+	for _, file in ipairs({ "PathGrid.lua", "Path.lua", "PathJobs.lua" }) do
+		local chunk = loadfile(root .. "/" .. file)
+		if chunk then
+			setfenv(chunk, env)("ShortestPathForever", ns)
+		end
+	end
 	for _, map in ipairs({ 0, 1, 2991 }) do
 		assert(loadfile("tools/load_nav.lua"))(map, root, env)
 	end
