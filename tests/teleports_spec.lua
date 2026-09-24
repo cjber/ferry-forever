@@ -74,4 +74,91 @@ local far = Plan({
 })
 assert(#far.legs == 1 and far.legs[1].arrive == 15000)
 
+-- What this character can cast, read from the client.
+do
+	local secret = {}
+	local items, spells, cooldowns, itemCooldowns = {}, {}, {}, {}
+	local bindName, position, onEvent = "Goldshire", { 10, 20, 30, 0 }, nil
+	local runtime = { charDB = {}, Teleports = ns.Teleports }
+	runtime.Init = function(fn)
+		fn()
+	end
+	runtime.JourneyPosition = function()
+		return unpack(position)
+	end
+	local env = setmetatable({
+		C_Item = {
+			GetItemCount = function(id)
+				return items[id] or 0
+			end,
+			GetItemCooldown = function(id)
+				return unpack(itemCooldowns[id] or { 0, 0, true })
+			end,
+		},
+		C_SpellBook = {
+			IsSpellKnown = function(id)
+				return spells[id] or false
+			end,
+		},
+		C_Spell = {
+			GetSpellCooldown = function(id)
+				return cooldowns[id] or { startTime = 0, duration = 0 }
+			end,
+		},
+		GetBindLocation = function()
+			return bindName
+		end,
+		GetTime = function()
+			return 100
+		end,
+		canaccessvalue = function(value)
+			return value ~= secret
+		end,
+		CreateFrame = function()
+			return {
+				RegisterEvent = function() end,
+				SetScript = function(_, _, fn)
+					onEvent = fn
+				end,
+			}
+		end,
+	}, { __index = _G })
+	setfenv(assert(loadfile("Teleports.lua")), env)("ShortestPathForever", runtime)
+	local Usable = runtime.UsableTeleports
+
+	local places, ready = Usable(5000)
+	assert(#places == 0 and next(ready) == nil, "nothing known, nothing usable")
+
+	spells[3561] = true
+	places, ready = Usable(5000)
+	assert(#places == 1 and places[1].spell == 3561 and places[1].map == 0, "a known teleport is a place")
+	assert(not ready[1], "without its rune it cannot be cast")
+	items[17031] = 1
+	local same
+	same, ready = Usable(5000)
+	assert(same == places and ready[1] == 5000, "the same places, now ready")
+	cooldowns[3561] = { startTime = 90, duration = 60 }
+	assert(select(2, Usable(5000))[1] == 55000, "the cooldown left delays it")
+	cooldowns[3561] = { startTime = secret, duration = secret }
+	assert(not select(2, Usable(5000))[1], "a secret cooldown is never guessed")
+	cooldowns[3561], spells[3561] = nil, nil
+
+	items[6948] = 1
+	assert(#Usable(5000) == 0, "no hearth before a bind point is recorded")
+	onEvent()
+	local bind = runtime.charDB.bind
+	assert(bind.name == "Goldshire" and bind.map == 0 and bind.x == 10 and bind.y == 20 and bind.z == 30)
+	places, ready = Usable(5000)
+	assert(#places == 1 and places[1].item == 6948 and places[1].x == 10 and places[1].label == "Goldshire")
+	assert(ready[1] == 5000)
+	itemCooldowns[6948] = { 50, 3600, true }
+	assert(select(2, Usable(5000))[1] == 5000 + 3550000, "the hearth's own cooldown")
+	bindName = "Razor Hill"
+	assert(#Usable(5000) == 0, "bound elsewhere since: no bind teleport")
+	position = {}
+	onEvent()
+	assert(runtime.charDB.bind == nil, "no position, no bind point")
+	items[6948] = 0
+end
+
 print("teleports_spec: ok")

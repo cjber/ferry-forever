@@ -119,3 +119,7 @@ read_globals[#read_globals + 1] = "InCombatLockdown"
 read_globals[#read_globals + 1] = "C_AddOnProfiler"
 read_globals[#read_globals + 1] = "UpdateAddOnMemoryUsage"
 read_globals[#read_globals + 1] = "GetAddOnMemoryUsage"
+-- Teleports.lua: which teleports this character can cast, and where it is bound.
+read_globals[#read_globals + 1] = "C_Item"
+read_globals[#read_globals + 1] = "C_SpellBook"
+read_globals[#read_globals + 1] = "GetBindLocation"

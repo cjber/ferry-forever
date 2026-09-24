@@ -26,6 +26,7 @@ Observer.lua
 Sync.lua
 Map.xml
 Taxi.lua
+Teleports.lua
 Map.lua
 MinimapPins.lua
 Tracker.lua

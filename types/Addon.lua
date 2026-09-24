@@ -135,6 +135,10 @@
 ---@field taxiVersion number
 ---@field taxiScanned? boolean
 ---@field guideWaypoint? {uiMapID: number, x: number, y: number}
+---@field bind? SPFBindPoint
+-- Where the character stood when it last bound at an inn, with GetBindLocation's name then.
+---@class SPFBindPoint : SPFPoint
+---@field name string
 ---@type SPFDatabase
 ShortestPathForeverDB = nil
 ---@type SPFCharacterDatabase
