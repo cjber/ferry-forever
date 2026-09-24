@@ -51,6 +51,23 @@ local env = setmetatable({
 local refreshed = 0
 local ns = {
 	db = {},
+	-- Core.lua's defaults, which Settings.lua registers.
+	Defaults = {
+		pins = true,
+		transit = true,
+		portals = true,
+		minimapPins = true,
+		mapFlightMasters = true,
+		mapRoutes = true,
+		otherFaction = true,
+		tracker = true,
+		alerts = true,
+		alertSound = true,
+		journey = true,
+		share = true,
+		guideStops = false,
+		compass = false,
+	},
 	Init = function(fn)
 		fn()
 	end,
