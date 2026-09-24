@@ -11,6 +11,15 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+**A stop shows what is there.** When another addon says what stands at a stop, such as a quest to hand in, a quest
+giver, a trainer or a flight master, its map pin shows the game's own mark for it, the “?” or “!”, inside the stop's
+gold ring, rather than a pin that hides it. On the minimap the stop is circled, so the game's own icon there stays
+in sight.
+
+**Guide marks only where each step ends, from the start.** The game's waypoint marker now goes straight to the
+next boat, lift, flight master or your destination rather than to each turn of the walk. Turn off *Guide marks
+only where each step ends* in `/path` to have it lead you round every turn again.
+
 **Journeys can start with your hearthstone.** The Hearthstone, a mage's city teleports (with a Rune of
 Teleportation in your bags), a shaman's Astral Recall and a druid's Teleport: Moonglade are the first step when
 they save time: *1. Use Hearthstone*, after its own icon and named in your game's language. A cooldown counts as waiting time, so a

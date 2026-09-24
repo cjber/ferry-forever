@@ -1,5 +1,6 @@
 local driver = assert(loadfile("tests/journey_driver.lua"))()
 local ns, env, checks = driver.ns, driver.env, 0
+driver.load("Looks.lua")
 driver.load("API.lua")
 driver.load("Itinerary.lua")
 local API = env.ShortestPathForever.API
@@ -71,6 +72,18 @@ equal(API.Navigate("AGF", 1, 0.6, 0.5, {}), false, "invalid title")
 equal(API.Active(), false, "nothing active")
 equal(API.Cancel("AGF"), false, "no journey")
 equal(API.Ended("AGF"), nil, "never started")
+do
+	local start, started = ns.StartJourney, nil
+	ns.StartJourney = function(point)
+		started = point
+		return true
+	end
+	equal(API.Navigate("AGF", 1, 0.6, 0.5, "Quest giver", "pickup"), true, "one stop with a kind")
+	equal(started.look, "pickup", "Navigate passes its kind on")
+	equal(API.Navigate("AGF", 1, 0.6, 0.5, "Quest giver", 7), true, "a kind of the wrong type is ignored")
+	equal(started.look, nil, "no kind")
+	ns.StartJourney = start
+end
 equal(API.Navigate("AGF", 1, 0.6, 0.5, "Quest giver"), true, "start guidance")
 equal(API.Ended("AGF"), nil, "running")
 equal(ns.IsJourneyGuided(), true, "arrow enabled")
@@ -159,15 +172,26 @@ why("invalid", "unprojectable estimate", API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5))
 env.C_Map.GetWorldPosFromMapPos = project
 ns.ClearJourney()
 
+-- A stop's kind is what stands there; one Shortest Path does not know, or cannot read, leaves the plain pin.
 local stops = {
-	{ map = 1, x = 0.502, y = 0.5, title = "First" },
-	{ map = 1, x = 0.504, y = 0.5, title = "Second" },
-	{ map = 1, x = 0.506, y = 0.5, title = "Third" },
-	{ map = 1, x = 0.508, y = 0.5, title = "Last" },
+	{ map = 1, x = 0.502, y = 0.5, title = "First", kind = "turnin" },
+	{ map = 1, x = 0.504, y = 0.5, title = "Second", kind = "zeppelin" },
+	{ map = 1, x = 0.506, y = 0.5, title = "Third", kind = "mailbox" },
+	{ map = 1, x = 0.508, y = 0.5, title = "Last", kind = driver.secret },
 }
 driver.move({ map = 1, x = 0, y = 0 })
 equal(API.CurrentStop("AGF"), nil, "no current stop before starting")
 equal(API.NavigateRoute("AGF", stops), true, "start four-stop route")
+do
+	local points = ns.JourneyStops()
+	equal(points[1].look, "turnin", "a hand-in's kind")
+	equal(points[2].look, "zeppelin", "a transport's kind")
+	equal(points[3].look, nil, "an unknown kind is dropped")
+	equal(points[4].look, nil, "an unreadable kind is dropped")
+	stops[1].kind = "trainer"
+	equal(points[1].look, "turnin", "the caller's later edit changes nothing")
+	stops[1].kind = "turnin"
+end
 equal(API.CurrentStop("AGF"), 1, "first stop")
 equal(API.CurrentStop("OtherAddon"), nil, "foreign current stop")
 equal(API.CurrentStop(driver.secret), nil, "secret owner")

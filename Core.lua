@@ -18,7 +18,7 @@ local DEFAULTS = {
 	journey = true,
 	teleports = true,
 	share = true,
-	guideStops = false,
+	guideStops = true,
 	compass = false,
 }
 ns.Defaults = DEFAULTS

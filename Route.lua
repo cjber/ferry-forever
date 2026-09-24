@@ -15,6 +15,9 @@ local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
 ns.RouteUnderAlpha = UNDER_ALPHA
 local GOAL_ATLAS, GOAL_SCALE = "Waypoint-MapPin-Tracked", 0.8
 local STOP_ATLAS, STOP_SIZE, MAX_NUMERAL = "adventureguide-ring", 26, 9
+-- A stop's own mark sits inside the ring, the size of the map's quest marks; on the minimap the ring alone circles the
+-- game's own icon there.
+local LOOK_SIZE, MINIMAP_GOAL, MINIMAP_RING = 18, 16, 22
 -- Everything past the stop being guided to recedes, so the way ahead reads first. Later lines keep their colour
 -- but drop well back against parchment; later stop rings stay a little stronger so their numbers remain legible.
 local LATER_ALPHA, LATER_STOP_ALPHA = 0.4, 0.55
@@ -554,6 +557,7 @@ end
 
 ---@class SPFGoalPin : SPFMapPin
 ---@field Texture Texture
+---@field Icon Texture
 ---@field Disc Texture
 ---@field Glow Texture
 ---@field Numeral Texture
@@ -574,16 +578,35 @@ end
 -- A lone destination wears the waypoint pin; a numbered stop wears the ring the Adventure Guide draws for the same
 -- step. Blizzard's numerals (centred in their atlas boxes, unlike font digits) stop at 9; later stops use the font.
 -- Stops whose rings would overlap share one, labelled with their numbers: a run as 4-7, others apart as 2, 5.
+-- A stop whose caller said what stands there wears that mark in the ring, numbered small at its foot, so the pin reads
+-- as the quest giver or flight master itself rather than hiding it.
 ---@param numbers integer[]? the stops this pin marks, in order; nil for a lone destination
 ---@param titles string[]
-function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, numbers, titles, later)
+---@param look? SPFAPIStopKind
+function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, numbers, titles, later, look)
 	self:SetPosition(x, y)
 	-- The disc stays opaque, so a faded ring still hides the POI beneath it.
 	local alpha = later and LATER_STOP_ALPHA or 1
 	self.Texture:SetAlpha(alpha)
+	self.Icon:SetAlpha(alpha)
 	self.Numeral:SetAlpha(alpha)
 	self.Number:SetAlpha(alpha)
 	self.stopTitles = titles[1] and titles or nil
+	local marked = look ~= nil and ns.SetStopLook(self.Icon, look, LOOK_SIZE)
+	self.Icon:SetShown(marked)
+	self.Number:ClearAllPoints()
+	if marked then
+		self:SetSize(STOP_SIZE, STOP_SIZE)
+		self.Texture:SetAtlas(STOP_ATLAS)
+		self.Disc:Hide()
+		self.Numeral:Hide()
+		self.Number:SetFontObject("NumberFontNormalSmall")
+		self.Number:SetPoint("CENTER", self, "BOTTOMRIGHT", -4, 4)
+		self.Number:SetText(numbers and StopLabel(numbers) or "")
+		return
+	end
+	self.Number:SetFontObject("GameFontNormal")
+	self.Number:SetPoint("CENTER")
 	local number = numbers and #numbers == 1 and numbers[1]
 	local numeral = number and number <= MAX_NUMERAL
 	self.Disc:SetShown(numbers ~= nil)
@@ -608,7 +631,7 @@ function ShortestPathForeverGoalPinMixin:OnMouseEnter()
 	if not title or not rows then
 		return
 	end
-	self.Glow:SetShown(self.Disc:IsShown())
+	self.Glow:SetShown(self.Disc:IsShown() or self.Icon:IsShown())
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 	-- A shared ring names every stop it marks, in order.
 	local stopTitles = self.stopTitles or {}
@@ -683,7 +706,7 @@ function ProviderMixin:RefreshStops()
 		local point = stops and stops[index] or goal
 		local x, y = MapPosition(point, mapID)
 		if x and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
-			marks[#marks + 1] = { x = x, y = y, index = index, title = point.routeTitle }
+			marks[#marks + 1] = { x = x, y = y, index = index, title = point.routeTitle, look = point.look }
 		end
 	end
 	-- Groups keep their marks in order, so the current stop leads its group.
@@ -706,10 +729,12 @@ function ProviderMixin:RefreshStops()
 			x, y, numbers[i], titles[i] = x + mark.x, y + mark.y, mark.index, mark.title
 		end
 		local lead = group[1]
+		-- A shared ring stands for several places, so only a stop on its own wears its mark.
+		local look = #group == 1 and lead.look or nil
 		if lead.index == first then
-			map:AcquirePin(GOAL_TEMPLATE, lead.x, lead.y, stops and numbers, titles, false)
+			map:AcquirePin(GOAL_TEMPLATE, lead.x, lead.y, stops and numbers, titles, false, look)
 		else
-			map:AcquirePin(GOAL_TEMPLATE, x / #group, y / #group, numbers, titles, true)
+			map:AcquirePin(GOAL_TEMPLATE, x / #group, y / #group, numbers, titles, true, look)
 		end
 	end
 end
@@ -917,6 +942,11 @@ function ns.SetJourneyRoute(destination, route)
 		provider:RefreshAllData()
 	end
 	if minimap then
+		-- Addon textures draw over the minimap's own icons, so a stop with a known mark (a "?", a flight master) is only
+		-- circled there: the game's icon shows through the ring.
+		local ringed = destination and destination.look ~= nil
+		minimap.Goal:SetAtlas(ringed and STOP_ATLAS or GOAL_ATLAS)
+		minimap.Goal:SetSize(ringed and MINIMAP_RING or MINIMAP_GOAL, ringed and MINIMAP_RING or MINIMAP_GOAL)
 		if destination then
 			minimap.elapsed = 0
 			minimap:SetScript("OnUpdate", UpdateMinimap)
@@ -943,7 +973,7 @@ ns.Init(function()
 	StrokeLayer(minimap)
 	minimap.Goal = Minimap:CreateTexture(nil, "OVERLAY")
 	minimap.Goal:SetAtlas(GOAL_ATLAS)
-	minimap.Goal:SetSize(16, 16)
+	minimap.Goal:SetSize(MINIMAP_GOAL, MINIMAP_GOAL)
 	minimap.Goal:Hide()
 	minimap:Hide()
 end)
