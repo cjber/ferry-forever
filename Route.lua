@@ -669,28 +669,25 @@ function ProviderMixin:RefreshAllData()
 	self:RefreshStops()
 end
 
--- The stop being guided to keeps its own ring at full strength. Later stops whose rings would overlap at this zoom
--- share one, at their middle, as the map's docks do; the rings are rebuilt only when that grouping changes.
+-- Stops whose rings would overlap at this zoom share one, as the map's docks do: at their middle, faded, or at the
+-- stop being guided to and at full strength when it is among them. The rings are rebuilt only when that grouping
+-- changes.
 function ProviderMixin:RefreshStops()
 	local map = self:GetMap()
 	local mapID = map:GetMapID()
 	if not (mapID and map:IsVisible() and ns.db.journey and goal) then
 		return
 	end
-	local first, current, later = stopIndex or 1, nil, {}
+	local first, marks = stopIndex or 1, {}
 	for index = first, stops and #stops or 1 do
 		local point = stops and stops[index] or goal
 		local x, y = MapPosition(point, mapID)
 		if x and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
-			local mark = { x = x, y = y, index = index, title = point.routeTitle }
-			if index == first then
-				current = mark
-			else
-				later[#later + 1] = mark
-			end
+			marks[#marks + 1] = { x = x, y = y, index = index, title = point.routeTitle }
 		end
 	end
-	local groups, keys = ns.OverlapGroups(map, later, STOP_SIZE), { mapID, current and current.index or 0 }
+	-- Groups keep their marks in order, so the current stop leads its group.
+	local groups, keys = ns.OverlapGroups(map, marks, STOP_SIZE), { mapID }
 	for _, group in ipairs(groups) do
 		for _, mark in ipairs(group) do
 			keys[#keys + 1] = mark.index
@@ -703,15 +700,17 @@ function ProviderMixin:RefreshStops()
 	end
 	self.stopsKey = key
 	map:RemoveAllPinsByTemplate(GOAL_TEMPLATE)
-	if current then
-		map:AcquirePin(GOAL_TEMPLATE, current.x, current.y, stops and { current.index }, { current.title }, false)
-	end
 	for _, group in ipairs(groups) do
 		local x, y, numbers, titles = 0, 0, {}, {}
 		for i, mark in ipairs(group) do
 			x, y, numbers[i], titles[i] = x + mark.x, y + mark.y, mark.index, mark.title
 		end
-		map:AcquirePin(GOAL_TEMPLATE, x / #group, y / #group, numbers, titles, true)
+		local lead = group[1]
+		if lead.index == first then
+			map:AcquirePin(GOAL_TEMPLATE, lead.x, lead.y, stops and numbers, titles, false)
+		else
+			map:AcquirePin(GOAL_TEMPLATE, x / #group, y / #group, numbers, titles, true)
+		end
 	end
 end
 
