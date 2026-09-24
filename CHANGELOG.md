@@ -15,6 +15,10 @@ Walking legs are round breadcrumb dots, evenly spaced around every bend, instead
 the minimap alike, a little smaller on continent and world maps. Boats, zeppelins and flights keep their solid
 coloured lines.
 
+**Arrival alerts sound like the transport.** A boat rings the ship's bell it rings at the dock, a zeppelin
+sounds its horn and the tram plays its own arrival, instead of the raid-warning sound, which reads as a boss
+mechanic rather than your boat.
+
 **Other addons can offer Shortest Path guidance.** The version 1 public API estimates travel time and starts
 journeys through one or several stops in order. Numbered map pins, drawn as the Adventure Guide's gold-numbered
 rings that glow when you hover them, and dotted previews show the remaining stops,

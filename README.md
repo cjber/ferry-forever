@@ -40,8 +40,8 @@ Each feature has more detail in [docs/features.md](docs/features.md).
   minimap too, with the same tooltips; *Transport* in the minimap's tracking menu turns them off there.
 - **Next departures.** At a dock, lift or tram station, a tracker section above your quests counts down to every
   arrival and departure; on board, it shows the next call.
-- **Arrival alerts.** A raid-warning banner, a sound and a flashing taskbar icon half a minute before your boat
-  arrives, for anyone waiting AFK.
+- **Arrival alerts.** A raid-warning banner, the ship's own bell (the horn for a zeppelin, the tram pulling in
+  for the tram) and a flashing taskbar icon half a minute before your boat arrives, for anyone waiting AFK.
 - **Times from real rides, shared.** One ride, yours or another player's, times a boat for hours. Sightings pass
   quietly over guild, party and yell at the docks; turn sharing off in the settings.
 
