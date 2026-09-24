@@ -113,6 +113,11 @@ ns.Init(function()
 		end
 	end)
 	Checkbox(
+		"teleports",
+		"Use your hearthstone and teleports",
+		"Journeys, and other addons' estimates from where you stand, can start with one, counting its cooldown."
+	)
+	Checkbox(
 		"guideStops",
 		"Guide marks only where each step ends",
 		"The next boat, lift, flight master or your destination, rather than each turn of the walk on the way.",

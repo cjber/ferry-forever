@@ -7,6 +7,8 @@ local ns = select(2, ...)
 -- bind again.
 
 local places, placesKey, sources = {}, nil, {}
+-- The setting off: no teleports for any caller.
+local NONE = {}
 
 ---@return SPFBindPoint?
 local function Bind()
@@ -58,6 +60,9 @@ end
 ---@param now number server ms
 ---@return SPFTeleportPlace[] places, table<number, number> ready
 function ns.UsableTeleports(now)
+	if not ns.db.teleports then
+		return NONE, NONE
+	end
 	local bind, known, keys = Bind(), {}, {}
 	for _, teleport in ipairs(ns.Teleports) do
 		if (teleport.to or (teleport.bind and bind)) and Known(teleport) then

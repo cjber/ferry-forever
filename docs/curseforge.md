@@ -1,4 +1,4 @@
-Shortest Path Forever finds the fastest way across WoW: Forever. Shift-click a destination on the map, or pick a quest, and it joins walking paths, flight paths, boats, zeppelins, lifts, the Deeprun Tram and portals into one journey. Walking maps for Eastern Kingdoms, Kalimdor and Zephras Isle come in the same download.
+Shortest Path Forever finds the fastest way across WoW: Forever. Shift-click a destination on the map, or pick a quest, and it joins walking paths, flight paths, boats, zeppelins, lifts, the Deeprun Tram, portals and your hearthstone or class teleports into one journey. Walking maps for Eastern Kingdoms, Kalimdor and Zephras Isle come in the same download.
 
 ![Eight-second demo of a route settling, the countdown and compass](https://raw.githubusercontent.com/cjber/shortest-path-forever/main/docs/screenshots/demo.gif)
 
@@ -30,6 +30,6 @@ Shift-click the world map or minimap to plan a journey. For a quest, choose **Pl
 - `/path perf` prints CPU timing and memory use (after a full collection) for the addon and its walking maps, or reports when the client's profiler is unavailable.
 - `/path debug` enables a saved trace for reporting a ride that did not sync.
 
-Settings control the planner, Guide's turn-by-turn or step-end markers, the optional compass, departures, alerts, sound and sharing. The world map's filter menu controls flight masters, transport routes, docks, lifts, the tram, portals and the other faction's routes. The compass is off by default.
+Settings control the planner and whether it uses your hearthstone and teleports, Guide's turn-by-turn or step-end markers, the optional compass, departures, alerts, sound and sharing. The world map's filter menu controls flight masters, transport routes, docks, lifts, the tram, portals and the other faction's routes. The compass is off by default.
 
 Source code and issues: [github.com/cjber/shortest-path-forever](https://github.com/cjber/shortest-path-forever) (GPL-3.0).

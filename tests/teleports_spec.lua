@@ -79,7 +79,7 @@ do
 	local secret = {}
 	local items, spells, cooldowns, itemCooldowns = {}, {}, {}, {}
 	local bindName, position, onEvent = "Goldshire", { 10, 20, 30, 0 }, nil
-	local runtime = { charDB = {}, Teleports = ns.Teleports }
+	local runtime = { db = { teleports = true }, charDB = {}, Teleports = ns.Teleports }
 	runtime.Init = function(fn)
 		fn()
 	end
@@ -151,6 +151,10 @@ do
 	places, ready = Usable(5000)
 	assert(#places == 1 and places[1].item == 6948 and places[1].x == 10 and places[1].label == "Goldshire")
 	assert(ready[1] == 5000)
+	runtime.db.teleports = false
+	assert(#Usable(5000) == 0 and next((select(2, Usable(5000)))) == nil, "the setting off hides every teleport")
+	runtime.db.teleports = true
+	assert(Usable(5000) == places, "and on again, the same places")
 	itemCooldowns[6948] = { 50, 3600, true }
 	assert(select(2, Usable(5000))[1] == 5000 + 3550000, "the hearth's own cooldown")
 	bindName = "Razor Hill"

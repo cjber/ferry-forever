@@ -20,8 +20,8 @@ they come in the same download and load only when a route needs them.
 Each feature has more detail in [docs/features.md](docs/features.md).
 
 - **Journey planner.** Shift-click the map or minimap, or choose *Plan journey* on a quest, for the fastest way there:
-  walking through tunnels and city levels, known flight points, boats, zeppelins, lifts, the tram and portals. The
-  route is drawn on both maps and its steps sit in the objective tracker. It replans as you move, switching only for a
+  walking through tunnels and city levels, known flight points, boats, zeppelins, lifts, the tram, portals, and your
+  hearthstone or class teleports when they are ready. The route is drawn on both maps and its steps sit in the objective tracker. It replans as you move, switching only for a
   clearly faster way.
   ![Journey steps from Auberdine to Silithus with time and distance remaining](docs/screenshots/tracker.png)
 - **Guide.** The game's own waypoint marker leads you along the route turn by turn, round walls rather than straight at
@@ -80,7 +80,9 @@ points, and may walk to an undiscovered flight master when learning it makes the
 
 Addons can use `ShortestPathForever.API` (`version = 1`) with uiMapIDs and normalized 0–1 coordinates.
 `Estimate(fromMap, fromX, fromY, toMap, toX, toY)` returns travel seconds or `nil` without changing guidance;
-it omits endpoint terrain searches and caches estimates for five seconds, rounding origins to 0.0001.
+it omits endpoint terrain searches and caches estimates for five seconds, rounding origins to 0.0001. An estimate
+from where the player stands counts their hearthstone and class teleports, with cooldowns, unless the setting
+*Use your hearthstone and teleports* is off; from anywhere else it leaves them out.
 `NavigateRoute(owner, stops)` guides through 1–64 `{map, x, y, title}` stops in order, advancing on arrival
 and ending after the last. Remaining stops have numbered map pins and dotted previews; the tracker and
 arrow show “Stop 2 of 4: …”. `Navigate(owner, map, x, y, title)` is the one-stop form. Both return a boolean;

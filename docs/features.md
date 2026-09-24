@@ -11,6 +11,12 @@ The detail behind each feature in the [README](../README.md).
   of every journey (click the tracker header to turn it off), moves the game's own waypoint marker along the route turn by turn, so it leads you round walls
   rather than straight at the stop (or, with *Guide marks only where each step ends* in `/path`, straight at the next boat, lift or flight master), and hands your tracked quest back when you finish. To head for a quest, pick **Plan journey** from its right-click menu in the objective
   tracker or quest log, or Shift-click its marker on the map; a finished quest routes to its turn-in.
+  A journey can start with your Hearthstone, a mage's city teleport (with a Rune of Teleportation), a shaman's
+  Astral Recall or a druid's Teleport: Moonglade, named in your game's language: *1. Use Hearthstone*. A cooldown
+  counts as waiting, and a jump to another continent adds a few seconds for the loading screen. The client does
+  not say where your bind point is, so it is where you stood when you last bound at an innkeeper with the addon
+  on; bound anywhere else since, the hearth is left out until you bind again. Turn this off with *Use your
+  hearthstone and teleports* in `/path`.
   ![Journey steps from Auberdine to Silithus with time and distance remaining](screenshots/tracker.png)
 
   ![Auberdine’s piers on the minimap, with the dotted route and Guide’s native waypoint](screenshots/minimap.png)
