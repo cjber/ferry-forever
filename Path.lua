@@ -484,16 +484,27 @@ local function run(map, from, to, waterWalking, costOnly)
 		return cost
 	end
 
-	-- Refine each hop into nodes with their global cells and a running count of water nodes.
+	-- Refine each hop into nodes with their global cells and a running count of water nodes. The pruned entrance
+	-- graph may route through an entrance a little off the way, which refines to a spur walked out and back: a node
+	-- reached again cuts the loop since its first visit, so the drawn walk never doubles back.
 	local P = { x = {}, y = {}, w = {}, k = {}, n = {} }
+	local seen = {}
 	local function add(k, node)
-		local n = #P.x
-		if n == 0 or P.k[n] ~= k or P.n[n] ~= node then
-			local cell = node < C * C and node or cellOf(st, k, node)
-			P.x[n + 1], P.y[n + 1] = floor(k / st.ny) * C + floor(cell / C), (k % st.ny) * C + cell % C
-			P.k[n + 1], P.n[n + 1] = k, node
-			P.w[n + 1] = (P.w[n] or 0) + ((st.val[k] or grid(st, k))[node + 1] == 2 and 1 or 0)
+		local id = k * 1048576 + node
+		local at = seen[id]
+		if at then
+			for j = #P.x, at + 1, -1 do
+				seen[P.k[j] * 1048576 + P.n[j]] = nil
+				P.x[j], P.y[j], P.w[j], P.k[j], P.n[j] = nil, nil, nil, nil, nil
+			end
+			return
 		end
+		local n = #P.x
+		local cell = node < C * C and node or cellOf(st, k, node)
+		P.x[n + 1], P.y[n + 1] = floor(k / st.ny) * C + floor(cell / C), (k % st.ny) * C + cell % C
+		P.k[n + 1], P.n[n + 1] = k, node
+		P.w[n + 1] = (P.w[n] or 0) + ((st.val[k] or grid(st, k))[node + 1] == 2 and 1 or 0)
+		seen[id] = n + 1
 	end
 	local function addAll(k, nodes, first, last, step)
 		for i = first, last, step do

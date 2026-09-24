@@ -86,7 +86,7 @@ assert(#active[goalTemplate] == 0 and #active[lineTemplate] == 0)
 assert(not ShortestPathForeverMinimapRoute.scripts.OnUpdate)
 assert(not ShortestPathForeverJourneyDriver:IsShown() and not arrowFrame:IsShown())
 -- Stops whose rings would overlap at this zoom share one ring, labelled with their numbers and naming each stop in
--- order; the stop being guided to always keeps its own ring at full strength.
+-- order. A ring holding the stop being guided to sits on that stop at full strength; the rest sit at their middle.
 local routeProvider
 for _, candidate in ipairs(providers) do
  if candidate.RefreshStops then routeProvider = candidate end
@@ -118,7 +118,12 @@ local function rings(expected)
    assert(pin.Number.text == want.label, tostring(pin.Number.text))
    local x = 0
    for _, n in ipairs(want.stops) do x = x + close[n].x end
-   assert(math.abs(pin.x - x / #want.stops) < 1e-9, "a shared ring sits at its stops' middle")
+   if i == 1 then
+    local lead = want.stops[1]
+    assert(pin.x == close[lead].x, "a ring holding the current stop sits on it")
+   else
+    assert(math.abs(pin.x - x / #want.stops) < 1e-9, "a shared ring sits at its stops' middle")
+   end
   end
  end
  return pins
@@ -127,22 +132,23 @@ posX, posY = 0, 0
 assert(api.NavigateRoute("Test", close))
 zoom = 0
 routeProvider:OnCanvasScaleChanged()
-local zoomedOut = rings({ {stops={1}}, {stops={2,3,4}, label="2-4"}, {stops={5,7}, label="5, 7"}, {stops={6}} })
-zoomedOut[2]:OnMouseEnter()
-assert(tip[1] == "# Stop 2 of 7: B" and tip[2] == "  Stop 3 of 7: C" and tip[3] == "  Stop 4 of 7: D")
-zoomedOut[2]:OnMouseLeave()
+-- The current stop's ring takes the later stops overlapping it, rather than drawing over them.
+local zoomedOut = rings({ {stops={1,2,3,4}, label="1-4"}, {stops={5,7}, label="5, 7"}, {stops={6}} })
+zoomedOut[1]:OnMouseEnter()
+assert(tip[1] == "# Stop 1 of 7: A" and tip[2] == "  Stop 2 of 7: B" and tip[4] == "  Stop 4 of 7: D")
+zoomedOut[1]:OnMouseLeave()
 -- A canvas refresh that keeps the grouping keeps the rings, hover and all.
 local acquisitions, acquire = 0, map.AcquirePin
 map.AcquirePin = function(self, ...) acquisitions = acquisitions + 1 return acquire(self, ...) end
 routeProvider:OnCanvasScaleChanged()
-assert(acquisitions == 0 and active[goalTemplate][2] == zoomedOut[2])
+assert(acquisitions == 0 and active[goalTemplate][1] == zoomedOut[1])
 -- Zooming in splits the rings that no longer overlap, from the pool.
 zoom = 1
 routeProvider:OnCanvasScaleChanged()
 map.AcquirePin = acquire
-assert(acquisitions == 6 and #pools[goalTemplate] == 0, "the split reuses pooled rings, plus two more")
+assert(acquisitions == 6 and #pools[goalTemplate] == 0, "the split reuses pooled rings, plus three more")
 rings({ {stops={1}}, {stops={2}}, {stops={3}}, {stops={4}}, {stops={5,7}, label="5, 7"}, {stops={6}} })
--- Arriving at a stop draws it on its own, never inside the later ring it shared.
+-- Arriving at a stop moves the full-strength ring on, still holding the later stops overlapping it.
 zoom = 0
 routeProvider:OnCanvasScaleChanged()
 local arrive = ns.WorldPoint(close[1].map, close[1].x, close[1].y)
@@ -150,8 +156,8 @@ posX, posY = arrive.x, arrive.y
 tick()
 assert(api.CurrentStop("Test") == 2)
 local pins = active[goalTemplate]
-assert(#pins == 4 and pins[1].Numeral.atlas == "services-number-2" and pins[1].Numeral.alpha == 1)
-assert(pins[2].Number.text == "3-4" and pins[2].Numeral.alpha == 0.55 and #pins[2].stopTitles == 2)
+assert(#pins == 3 and pins[1].Number.text == "2-4" and pins[1].Numeral.alpha == 1 and #pins[1].stopTitles == 3)
+assert(pins[1].x == close[2].x and pins[2].Number.text == "5, 7" and pins[2].Numeral.alpha == 0.55)
 api.Cancel("Test")
 zoom = 1
 posX, posY = 0, 0
@@ -193,9 +199,11 @@ assert(api.NavigateRoute("Test", many))
 local startMS = (os.clock()-started)*1000
 assert(calls == 1, "only the current stop is planned")
 local line = active[lineTemplate][1]
--- The rest share two rings, one per row, too many apart to list on the ring.
-assert(#active[goalTemplate] == 3 and #line.paths[#line.paths].points == 64)
-assert(active[goalTemplate][2].Number.text == "2+" and #active[goalTemplate][3].stopTitles == 31)
+-- They share two rings, one per row, too many apart to list on the ring; the current stop's row sits on it.
+local pins = active[goalTemplate]
+assert(#pins == 2 and #line.paths[#line.paths].points == 64)
+assert(pins[1].Number.text == "1+" and pins[1].Numeral.alpha == 1 and #pins[1].stopTitles == 32)
+assert(pins[2].Number.text == "2+" and #pins[2].stopTitles == 32)
 local drawCPU, drawWorst = 0, 0
 for _=1,30 do
  started = os.clock()
