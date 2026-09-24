@@ -12,6 +12,7 @@ Shift-click the world map or minimap, or pick a quest, and it plans the route: w
 the flight points you know, boats and zeppelins with their live departure times, lifts, the tram and portals. Then it
 walks you there with the game's own navigation marker. Walking maps cover Eastern Kingdoms, Kalimdor and Zephras Isle;
 they come in the same download and load only when a route needs them.
+The route, pins and tracker use the game's own art, so it looks like it came with the game.
 
 ![Eight-second demo of a route settling, the countdown and the optional compass](docs/screenshots/demo.gif)
 
