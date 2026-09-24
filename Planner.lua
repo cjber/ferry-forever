@@ -65,6 +65,22 @@ function Planner.WalkPoints(from, to)
 	return { { map = from.map, x = from.x, y = from.y }, { map = to.map, x = to.x, y = to.y } }
 end
 
+-- Whether a walk's searched cost (a reason or nil when it has no route) contradicts the leg's planned yards. An
+-- estimated leg holds a lower bound, which a longer or unreachable walk refutes without contradicting: a search that
+-- outlasts the grace period shows such a candidate, and only its proof decides.
+---@param leg SPFLeg
+---@param cost number|string?
+---@return boolean
+function Planner.WalkContradicts(leg, cost)
+	local tolerance = math.max(1, leg.yards * 0.1)
+	if type(cost) ~= "number" then
+		return not leg.estimated
+	elseif leg.estimated then
+		return cost < leg.yards - tolerance
+	end
+	return math.abs(cost - leg.yards) > tolerance
+end
+
 -- World points in travel order; jump marks a teleport to the next point. Keep this free of map APIs.
 ---@param leg SPFLeg
 ---@param routes table<number, SPFRoute>

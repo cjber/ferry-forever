@@ -52,7 +52,7 @@ On-demand tools for audits. Output is candidates, never verdicts.
 | Diagnostics (Lua) | `tools/typecheck.sh` (file:line diagnostics and counts; JSON in `.types/diagnostics.json`) | tests/tools are excluded from LuaLS; all TOC runtime files, including generated data, are checked |
 | Dead code (Python) | `uvx vulture tools --min-confidence 60` | clean today |
 | Types (Python) | `uvx --with pillow ty check --extra-search-path tools --python-version 3.10 tools` | 5 inference errors in `gen_nav.py` (tuple unpacking, `dict.get` keys) + Pillow `Image.LANCZOS` — not bugs |
-| Large files | `python3 .sift/gate.py --rule file-size-no-growth --all` | lists Path.lua and Journey.lua, the backlog over 1000 lines; exit 1 by design |
+| Large files | `python3 .sift/gate.py --rule file-size-no-growth --all` | lists files over 1000 lines; none remain, so any listed file is a regression |
 | Duplication | `npx --yes jscpd@4 --silent --reporters json --output .sift/runs/jscpd --ignore '**/ShortestPathForever_Nav*/**,**/Data/**,**/.sift/**,**/media/**,LICENSE' .` | the test harness preambles (`walk_sim`, `journey_bench`, `journey_optimal_spec`) repeat stub setup; whole-file clones among `tests/*_ui.lua` are their long-string bodies |
 | Live roots (Lua) | `rg -n 'RegisterEvent\|SetScript\|hooksecurefunc\|SLASH_\|SlashCmdList\|LoadAddOn\|SendAddonMessage' -g '*.lua'` | — |
 
@@ -68,7 +68,7 @@ Things reached indirectly. The dead-code lens must treat these as referenced.
 - ObjectiveTracker module methods (Tracker.lua) are called by `ObjectiveTrackerManager`.
 - `ns.X` / `function ns.X` exports are the cross-file API; a symbol defined in one file is used in another
   (and by specs via `loadfile(...)("ShortestPathForever", ns)`). Search every `.lua`, not just the file.
-- `C_AddOns.LoadAddOn("ShortestPathForever_Nav" .. map)` (Path.lua) loads the walking maps by built name.
+- `C_AddOns.LoadAddOn("ShortestPathForever_Nav" .. map)` (PathGrid.lua) loads the walking maps by built name.
 - SavedVariables `ShortestPathForeverDB` / `ShortestPathForeverCharDB`: keys (settings in Core.lua
   `DEFAULTS`, `anchors`, debug trace) persist in players' saved files.
 - Sync wire format (Sync.lua, prefix `ShortPath1`): other players run older versions; message fields are
@@ -134,9 +134,9 @@ Audit slices from lowest to highest risk:
 2. `tools/` — offline generators; output is checked in, so a change is visible as a data diff
 3. `tests/`
 4. UI leaves: `Alert.lua`, `Arrow.lua`, `Compass.lua`, `Settings.lua`, `Taxi.lua`, `Tracker.lua`
-5. Map layers: `Map.lua`, `Map.xml`, `Route.lua`
+5. Map layers: `Map.lua`, `Map.xml`, `Route.lua`, `RouteTransports.lua`
 6. State and wire: `Model.lua`, `Core.lua`, `Observer.lua`, `Sync.lua` (SavedVariables, wire format)
-7. Planning core: `Planner.lua`, `Path.lua`, `Journey.lua` (performance-tuned, 3 ms frame budget)
+7. Planning core: `Planner.lua`, `Path*.lua`, `Journey*.lua` (performance-tuned, 3 ms frame budget)
 
 ## Project rules and lenses
 

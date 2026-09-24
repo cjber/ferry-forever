@@ -1,6 +1,8 @@
 local ns = {}
 assert(loadfile("tools/load_nav.lua"))(0)
-assert(loadfile("Path.lua"))("ShortestPathForever", ns)
+for _, file in ipairs({ "PathGrid.lua", "Path.lua", "PathJobs.lua" }) do
+	assert(loadfile(file))("ShortestPathForever", ns)
+end
 local Path = ns.Path
 
 local frames = {}

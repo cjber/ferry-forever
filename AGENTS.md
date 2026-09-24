@@ -24,8 +24,10 @@ The same gate CI runs, plus actionlint, zizmor and gitleaks on the workflows and
   hand-edit.
 - `ShortestPathForever_Nav*/` — load-on-demand walking maps built by `tools/baker/`; loaded only when a
   route needs them.
-- `Planner.lua`, `Path.lua`, `Journey.lua` — the search; `tests/journey_performance.md` records its
-  budgets.
+- `Planner.lua`, `Path*.lua`, `Journey*.lua` — the search; `tests/journey_performance.md` records its
+  budgets. `PathGrid.lua` decodes the walking maps, `Path.lua` searches them, `PathJobs.lua` slices the
+  searches over frames. `Journey.lua` runs the journey, `JourneyCosts.lua` its endpoint costs and
+  `JourneyGuide.lua` the arrow and native waypoint.
 - `docs/curseforge.md` — the store description, pasted into CurseForge and Wago by hand.
 
 ## Rules

@@ -547,4 +547,12 @@ do
 	near(Plan(o).arrive, bounded.arrive)
 end
 
+do -- an exact leg must match its search; an estimate is a lower bound, so only a shorter walk contradicts it
+	local contradicts = ns.Planner.WalkContradicts
+	local exact, bound = { yards = 1000 }, { yards = 1000, estimated = true }
+	assert(not contradicts(exact, 1050) and contradicts(exact, 1200) and contradicts(exact, 800))
+	assert(contradicts(exact, nil))
+	assert(not contradicts(bound, 1200) and not contradicts(bound, nil) and contradicts(bound, 800))
+end
+
 print("planner_spec: ok")

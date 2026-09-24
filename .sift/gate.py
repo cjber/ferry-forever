@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Agent Labs
+# SPDX-License-Identifier: MIT
 """Run a repository's rules and tests; filter their hits through shared markers."""
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 sys.dont_write_bytecode = True
-VERSION = "0.2.0"
+VERSION = "0.2.2"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 CONFIG = ".sift/sgconfig.yml"
 SCRIPT_TIMEOUT = 600.0
@@ -314,7 +316,11 @@ def changes(root: Path, base: str, env: dict[str, str] | None = None) -> list[li
         )
     untracked = ls_z(root, "ls-files", "--others", "--exclude-standard", env=env)
     rows.extend(["A", p] for p in untracked if (root / p).is_file())
-    return sorted(row for row in rows if row[0] in {"A", "M", "D", "R"})
+    # Script-test cases are outside the corpus (see `corpus`), so they are no change a rule can report.
+    rows = [["A", row[2]] if row[0] == "R" and SCRIPT_TEST_CASE.search(row[1]) else row for row in rows]
+    return sorted(
+        row for row in rows if row[0] in {"A", "M", "D", "R"} and not SCRIPT_TEST_CASE.search(row[-1])
+    )
 
 
 def resolve_base(root: Path, base: dict[str, Any], ref: str | None, all_files: bool) -> None:

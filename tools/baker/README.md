@@ -1,7 +1,7 @@
 # Shortest Path Forever baker
 
 Bakes the walkable ground of a WoW map from a local client install and packages it as the load-on-demand addon
-`ShortestPathForever_Nav<map>`, whose TOC-ordered Lua files set `ShortestPathForeverPathData[map]` for `Path.lua`.
+`ShortestPathForever_Nav<map>`, whose TOC-ordered Lua files set `ShortestPathForeverPathData[map]` for `PathGrid.lua`.
 
 ## Usage
 
@@ -39,7 +39,7 @@ Steps, each reusable on its own:
    same cell (lake and sea beds) are dropped. Every graph edge carries two costs: one where a swum yard counts as
    `SWIM` (3) running yards, so walks keep out of water, and one for a player walking on water, where it counts as 1.
 
-Each cluster field is emitted as one base64 string. `Path.lua` reads this format directly. When the original
+Each cluster field is emitted as one base64 string. `PathGrid.lua` reads this format directly. When the original
 `.mmtile` inputs are unavailable, `python3 tools/pack_nav.py` from the repo root converts older shipped chunk
 tables deterministically, without rebaking or reading a client install. It also splits large maps by field into
 files under 8 MiB and updates their TOCs, because LuaLS silently skips files over 10 MiB. `bake.sh` runs this

@@ -8,11 +8,10 @@ local REPLAN_EVERY, REFRESH_EVERY = 5, 60
 -- The frames around a timed replan, which Itinerary.lua leaves to it.
 local REPLAN_MARGIN = 0.5
 local DRAW_EVERY, SEARCH_GRACE = 0.5, 3
-local PROBE_BUDGET = 60 -- ms before switching from candidate costs to shared endpoint searches
 -- A teleport step, by the item's or spell's own name in the game's language.
 local USE_ITEM, CAST_SPELL = "Use %s", "Cast %s"
 
-local goal, guide, result
+local goal, result
 local nextPoint
 local search, FinishSearch
 local plannerCache = {}
@@ -34,12 +33,9 @@ local driver
 local ARRIVAL = 15
 local lastRunSpeed = 7
 local pathJobs, walkCache, pathVersion = {}, {}, 0
-local pendingWalks, pendingCosts, settleRound = 0, 0, 0
-local startBatch, goalBatch, startAt, refreshedAt
-local startCosts, goalCosts = {}, {}
-refreshedAt = 0
-local costError, goalError
-local costsWaiting
+local pendingWalks = 0
+local Costs, Guide = ns.JourneyCosts, ns.JourneyGuide
+local RefreshTracker, StopGuide = Guide.RefreshTracker, Guide.Stop
 -- Walking along a measured path from where you stood, how far off it you may stray and still be on it.
 local ON_PATH = 15
 -- Timed replans replace the followed route only for a worthwhile gain; endpoint costs stay unchanged between
@@ -60,11 +56,6 @@ local WALK_FAILURE = {
 	error = "walking search failed",
 }
 
-local function RefreshTracker()
-	ns.journeyVersion = (ns.journeyVersion or 0) + 1
-	ns.RefreshTracker()
-end
-
 ---@return boolean
 function ns.HasJourney()
 	return goal ~= nil
@@ -75,12 +66,8 @@ local function CancelPaths()
 	for job in pairs(pathJobs) do
 		ns.Path.Cancel(job)
 	end
-	for _, batch in pairs({ start = startBatch, goal = goalBatch }) do
-		if batch.job and batch.path.Pause then
-			batch.path.Pause(batch.job)
-		end
-	end
-	pathJobs, walkPending, pendingWalks, pendingCosts = {}, {}, 0, 0
+	Costs.Pause()
+	pathJobs, walkPending, pendingWalks = {}, {}, 0
 end
 
 -- Whether walks may cross water, and the spell to cast first when none is up.
@@ -124,228 +111,12 @@ local function Near(node, reach)
 	return x and map == node.map and (x - node.x) ^ 2 + (y - node.y) ^ 2 <= (reach or ARRIVAL) ^ 2
 end
 
-local function SameWaypoint(a, b)
-	if a == b then
-		return true
-	end
-	if not (a and b) then
-		return false
-	end
-	-- C_Map.GetUserWaypoint's position is a plain { x, y } table, not a Vector2D (WaypointLocationDataProvider.lua:183).
-	if a.uiMapID == b.uiMapID and a.position.x == b.position.x and a.position.y == b.position.y then
-		return true
-	end
-	local aMap, aWorld = C_Map.GetWorldPosFromMapPos(a.uiMapID, CreateVector2D(a.position.x, a.position.y))
-	local bMap, bWorld = C_Map.GetWorldPosFromMapPos(b.uiMapID, CreateVector2D(b.position.x, b.position.y))
-	-- Map changes can reproject or round the read-back. One yard absorbs that without claiming a different pin.
-	return aWorld and bWorld and aMap == bMap and (aWorld.x - bWorld.x) ^ 2 + (aWorld.y - bWorld.y) ^ 2 <= 1
-end
-
-local waypointProviders = {}
-
--- Guide's waypoint only steers the native marker; our own pins already draw the route and destination.
-local function HideGuideWaypointPin(provider)
-	if provider.pin then
-		local owned = guide and (guide.writingWaypoint or guide.waypoint)
-		provider.pin:SetShown(not (owned and SameWaypoint(C_Map.GetUserWaypoint(), owned)))
-	end
-end
-
-local function RefreshWaypointPins()
-	-- Events may be deferred; a closed map is unsubscribed and may not have initialized its canvas yet.
-	for _, provider in ipairs(waypointProviders) do
-		if provider:GetMap():IsVisible() then
-			provider:RefreshAllData()
-		else
-			provider:RemoveAllData()
-		end
-	end
-end
-
-local function ClearOrphanWaypoint()
-	local saved = ns.charDB.guideWaypoint
-	if guide or not saved then
-		return
-	end
-	-- Journeys do not survive reloads, but the client saves user waypoints independently of this addon.
-	ns.charDB.guideWaypoint = nil
-	local point = UiMapPoint.CreateFromCoordinates(saved.uiMapID, saved.x, saved.y)
-	if SameWaypoint(C_Map.GetUserWaypoint(), point) then
-		C_Map.ClearUserWaypoint()
-		C_SuperTrack.SetSuperTrackedUserWaypoint(false)
-		RefreshWaypointPins()
-	end
-end
-
-local function RememberTracking(state)
-	state.expectedQuest = C_SuperTrack.GetSuperTrackedQuestID()
-	state.expectedTrackedWaypoint = C_SuperTrack.IsSuperTrackingUserWaypoint()
-	state.expectedTrackingType = C_SuperTrack.GetHighestPrioritySuperTrackingType()
-end
-
-local function SameTracking(state)
-	return state.expectedQuest == C_SuperTrack.GetSuperTrackedQuestID()
-		and state.expectedTrackedWaypoint == C_SuperTrack.IsSuperTrackingUserWaypoint()
-		and state.expectedTrackingType == C_SuperTrack.GetHighestPrioritySuperTrackingType()
-end
-
-local function StopGuide()
-	local previous = guide
-	guide = nil
-	ns.PointGuideArrow(nil)
-	if previous then
-		ns.charDB.guideWaypoint = nil
-	end
-	if
-		not previous
-		or not previous.hasDriven
-		or not SameWaypoint(C_Map.GetUserWaypoint(), previous.expectedWaypoint)
-	then
-		RefreshWaypointPins()
-		return
-	end
-	local ownsTracking = not previous.yielded and SameTracking(previous)
-	local restored = previous.previousWaypoint and C_Map.SetUserWaypoint(previous.previousWaypoint)
-	-- A rejected restoration must still remove our bend, rather than leave it behind without an ownership record.
-	if not restored and previous.waypoint then
-		C_Map.ClearUserWaypoint()
-	end
-	if ownsTracking then
-		local tracked = restored and previous.previousTrackedWaypoint or false
-		C_SuperTrack.SetSuperTrackedUserWaypoint(tracked)
-		if not tracked then
-			C_SuperTrack.SetSuperTrackedQuestID(previous.previousQuest or 0)
-		end
-	elseif not restored and C_SuperTrack.IsSuperTrackingUserWaypoint() then
-		C_SuperTrack.SetSuperTrackedUserWaypoint(false)
-	end
-	RefreshWaypointPins()
-end
-
-local function OwnsWaypoint()
-	if not SameWaypoint(C_Map.GetUserWaypoint(), guide.expectedWaypoint) then
-		-- A manual replacement or removal ends guidance; never reclaim the player's waypoint.
-		StopGuide()
-		return false
-	end
-	return true
-end
-
-local function ClearGuideWaypoint()
-	-- Synchronous clear events must see an internal write, and deferred events must see the empty expected point.
-	guide.writing = true
-	C_Map.ClearUserWaypoint()
-	C_SuperTrack.SetSuperTrackedUserWaypoint(false)
-	guide.waypoint, guide.expectedWaypoint = nil, nil
-	ns.charDB.guideWaypoint = nil
-	RememberTracking(guide)
-	guide.writing = nil
-	RefreshWaypointPins()
-end
-
-local function YieldGuide()
-	-- A quest/map-pin click belongs to the player. Keep the route arrow, but never retake tracking.
-	guide.yielded = true
-	if guide.waypoint then
-		ClearGuideWaypoint()
-	end
-end
-
-local function GuideWaypoint(point, fading)
-	if not guide then
-		return false
-	end
-	-- The bend callback can run before deferred notifications of a player's waypoint or tracking change.
-	if not OwnsWaypoint() then
-		RefreshTracker()
-		return false
-	end
-	if not guide.yielded and not SameTracking(guide) then
-		YieldGuide()
-	end
-	if guide.yielded then
-		return false
-	end
-	local uiMap = C_Map.GetBestMapForUnit("player")
-	local bend = guide.bend
-	if
-		not bend
-		or point.map ~= bend.map
-		or point.x ~= bend.x
-		or point.y ~= bend.y
-		or uiMap ~= guide.uiMap
-		or fading ~= guide.fading
-	then
-		guide.bend, guide.uiMap = { map = point.map, x = point.x, y = point.y }, uiMap
-		guide.fading = fading
-		local waypoint
-		-- The native waypoint has no per-pin alpha; near the goal, use the fading fallback instead of stacking icons.
-		if not fading and uiMap and C_Map.CanSetUserWaypointOnMap(uiMap) then
-			local projectedMap, position =
-				C_Map.GetMapPosFromWorldPos(point.map, CreateVector2D(point.x, point.y), uiMap)
-			if projectedMap == uiMap and position then
-				local x, y = position:GetXY()
-				if x >= 0 and x <= 1 and y >= 0 and y <= 1 then
-					waypoint = UiMapPoint.CreateFromVector2D(uiMap, position)
-				end
-			end
-		end
-		-- These APIs may dispatch events synchronously. Only our own writes bypass ownership checks.
-		guide.writing = true
-		guide.writingWaypoint = waypoint
-		if waypoint and C_Map.SetUserWaypoint(waypoint) then
-			guide.waypoint, guide.expectedWaypoint = waypoint, waypoint
-			ns.charDB.guideWaypoint = { uiMapID = waypoint.uiMapID, x = waypoint.position.x, y = waypoint.position.y }
-			guide.hasDriven = true
-			C_SuperTrack.SetSuperTrackedUserWaypoint(true)
-		elseif guide.waypoint then
-			-- Never leave a stale native marker pointing at the preceding bend when projection fails.
-			ClearGuideWaypoint()
-		end
-		-- Deferred events from our own writes must also agree with the expected tracking state.
-		RememberTracking(guide)
-		guide.writing, guide.writingWaypoint = nil, nil
-		for _, provider in ipairs(waypointProviders) do
-			HideGuideWaypointPin(provider)
-		end
-	end
-	return guide.waypoint ~= nil and C_SuperTrack.IsSuperTrackingUserWaypoint()
-end
-
-local function GuideTo(node, points)
-	if not guide or (guide.target == node and guide.points == points) then
-		return
-	end
-	guide.points = points
-	guide.target = node
-	local point = node.kind == "dock" and ns.DockPoint(node.id) or node
-	ns.PointGuideArrow(points or { point }, GuideWaypoint, node, goal)
-end
-
--- A teleport is cast where you stand: nothing to walk toward until you land, so no arrow or marker.
-local function GuideCast(leg)
-	if not guide or guide.target == leg then
-		return
-	end
-	guide.points, guide.target = nil, leg
-	ns.PointGuideArrow(nil)
-	if guide.waypoint then
-		ClearGuideWaypoint()
-	end
-end
-
 ---@param reason "arrived"|"cleared"
 local function EndJourney(reason)
 	CancelPaths()
-	costsWaiting = nil
-	settleRound, costError, goalError = 0, nil, nil
-	for _, batch in pairs({ start = startBatch, goal = goalBatch }) do
-		if batch.job then
-			batch.path.Cancel(batch.job)
-		end
-	end
-	startBatch, goalBatch, search = nil, nil, nil
-	walkCache, walkOrder, startCosts, goalCosts, startAt, plannerCache = {}, {}, {}, {}, nil, {}
+	Costs.Reset()
+	search = nil
+	walkCache, walkOrder, plannerCache = {}, {}, {}
 	if ns.Path and ns.Path.ClearCaches then
 		ns.Path.ClearCaches()
 	end
@@ -403,16 +174,16 @@ local function UpdateProgress()
 			if aboard or Near(leg.from) then
 				progress.departed = true
 			else
-				GuideTo(leg.from)
+				Guide.To(leg.from, nil, goal)
 				return
 			end
 		end
 		if leg.mode == "teleport" and not Near(leg.to) then
-			GuideCast(leg)
+			Guide.Cast(leg)
 			return
 		end
 		if not Near(leg.to) or (leg.mode == "flight" and flying) then
-			GuideTo(leg.to, leg.walkPoints)
+			Guide.To(leg.to, leg.walkPoints, goal)
 			return
 		end
 		progress.index, progress.departed = progress.index + 1, false
@@ -422,30 +193,21 @@ end
 
 ---@return boolean
 function ns.IsJourneyGuided()
-	return guide ~= nil
+	return Guide.Active()
 end
 
 function ns.JourneyStatus()
+	local pendingCosts, settleRound = Costs.Status()
 	return pendingWalks + pendingCosts > 0, settleRound, pendingWalks + pendingCosts
 end
 
 local function StartGuide()
-	ClearOrphanWaypoint()
-	local previous = C_Map.HasUserWaypoint() and C_Map.GetUserWaypoint()
-	local saved = previous
-		and UiMapPoint.CreateFromCoordinates(previous.uiMapID, previous.position.x, previous.position.y, previous.z)
-	guide = {
-		previousQuest = C_SuperTrack.GetSuperTrackedQuestID(),
-		previousWaypoint = saved,
-		expectedWaypoint = previous or nil,
-		previousTrackedWaypoint = saved ~= nil and C_SuperTrack.IsSuperTrackingUserWaypoint(),
-	}
-	RememberTracking(guide)
+	Guide.Start()
 	UpdateProgress()
 end
 
 function ns.ToggleJourneyGuide()
-	if guide then
+	if Guide.Active() then
 		StopGuide()
 	elseif goal then
 		StartGuide()
@@ -499,6 +261,7 @@ function ns.JourneyInfo()
 			}
 		end
 	else
+		local _, _, costError = Costs.Status()
 		rows[1] = { key = "unreachable", text = costError and WALK_FAILURE[costError] or "No way there from here." }
 	end
 	return title, rows, result, progress.index, loading
@@ -567,15 +330,7 @@ local function Remaining(leg, here)
 end
 
 local function Walks(here)
-	local walks = {}
-	for _, walk in ipairs(goalCosts) do
-		walks[#walks + 1] = walk
-	end
-	if startAt and startAt.map == here.map then
-		for _, walk in ipairs(startCosts) do
-			walks[#walks + 1] = { from = here, to = walk.to, cost = walk.cost, estimated = walk.estimated }
-		end
-	end
+	local walks = Costs.Walks(here)
 	local leg = result and result.legs[progress.index]
 	local rest = leg and result.waterMode == waterMode and leg.mode == "walk" and leg.measured and Remaining(leg, here)
 	if rest then
@@ -584,82 +339,7 @@ local function Walks(here)
 	return walks
 end
 
-local function SamePlace(a, b)
-	return a.map == b.map and a.x == b.x and a.y == b.y and a.z == b.z
-end
-
--- The bind point moves, so its walks on to the fixed places cannot be baked like a class teleport's: each is searched
--- once per bind point and water mode, alongside the journey's own endpoint searches.
-local landings = {}
----@param place SPFTeleportPlace
----@return {targets: SPFPlace[], costs?: (number|false)[], waiting?: fun()[]}?
-local function Landing(place)
-	if not (ns.Path and place.bind and ns.Path.HasData(place.map)) then
-		return nil
-	end
-	local key = string.format("%d:%.17g:%.17g:%s", place.map, place.x, place.y, tostring(waterMode))
-	local entry = landings[key]
-	if not entry then
-		local mass, targets = ns.Planner.Landmass(place, ns.Landmasses or {}), {}
-		local places = ns.Planner.Places({
-			docks = ns.Docks,
-			taxiNodes = ns.TaxiNodes,
-			portals = ns.Portals,
-			faction = UnitFactionGroup("player"),
-		})
-		for _, target in ipairs(places) do
-			if target.map == place.map and ns.Planner.Landmass(target, ns.Landmasses or {}) == mass then
-				targets[#targets + 1] = target
-			end
-		end
-		entry = { targets = targets, waiting = {} }
-		landings[key] = entry
-		ns.Path.FindMany(place.map, place, targets, function(costs)
-			local waiting = entry.waiting or {}
-			entry.costs, entry.waiting = costs, nil
-			for _, callback in ipairs(waiting) do
-				callback()
-			end
-		end, waterMode)
-	end
-	return entry
-end
-
--- Whether a bind point's walks are still being searched; callback, when given, runs once each search ends. With
--- ready, only a teleport castable before `before` counts: one ready later cannot beat a route arriving then.
----@param teleports SPFTeleportPlace[]?
----@param callback? fun()
----@param ready? table<number, number>
----@param before? number
-local function LandingPending(teleports, callback, ready, before)
-	local pending = false
-	for index, place in ipairs(teleports or {}) do
-		local entry = Landing(place)
-		if entry and entry.waiting and (not ready or (ready[index] and ready[index] < before)) then
-			pending = true
-			if callback then
-				entry.waiting[#entry.waiting + 1] = callback
-			end
-		end
-	end
-	return pending
-end
-
----@param teleports SPFTeleportPlace[]?
----@return SPFWalkCost[]
-local function LandingWalks(teleports)
-	local walks = {}
-	for _, place in ipairs(teleports or {}) do
-		local entry = Landing(place)
-		local costs = entry and entry.costs
-		if entry and costs then
-			for i, target in ipairs(entry.targets) do
-				walks[#walks + 1] = { from = place, to = target, cost = costs[i] }
-			end
-		end
-	end
-	return walks
-end
+local SamePlace = Costs.SamePlace
 
 local function WalkKey(from, to)
 	return table.concat({ from.map, from.x, from.y, from.z or "", to.x, to.y, to.z or "" }, ":")
@@ -707,7 +387,7 @@ local function FindWalk(planned, leg, key)
 			callback(points, cost)
 		end
 		CacheWalk(key, { points = points or previous, reason = not points and cost or nil, cost = points and cost })
-		if ns.db.debug and (not points or math.abs(cost - leg.yards) > math.max(1, leg.yards * 0.1)) then
+		if ns.db.debug and ns.Planner.WalkContradicts(leg, points and cost) then
 			ns.Print(string.format("walking cost mismatch: planned %.1f, found %s", leg.yards, tostring(cost)))
 		end
 		-- Geometry is private until the entire search can be committed together.
@@ -851,9 +531,7 @@ end
 local function Commit(planned)
 	result = planned
 	progress.index, progress.departed = 1, false
-	if guide then
-		guide.target = nil
-	end
+	Guide.Retarget()
 	if not result then
 		StopGuide()
 	end
@@ -862,7 +540,7 @@ local function Commit(planned)
 end
 
 FinishSearch = function()
-	if not search or pendingCosts > 0 or pendingWalks > 0 then
+	if not search or Costs.Status() > 0 or pendingWalks > 0 then
 		return
 	end
 	local planned, forced, refine = search.candidate, search.forced, search.initial or search.refine
@@ -888,12 +566,7 @@ FinishSearch = function()
 		end
 	end
 	search = nil
-	-- Retain exact endpoint vectors and their lower bounds, never suspended search stacks.
-	for _, batch in pairs({ start = startBatch, goal = goalBatch }) do
-		if batch.job and batch.path.ReleaseMany then
-			batch.path.ReleaseMany(batch.job)
-		end
-	end
+	Costs.Release()
 	if keep then
 		Retime(same and planned or estimate)
 		local changedWater = result.waterMode ~= waterMode
@@ -912,8 +585,8 @@ FinishSearch = function()
 				end
 			end
 			result.prepared = true
-			if refine and guide then
-				guide.target = nil
+			if refine then
+				Guide.Retarget()
 			end
 		end
 		UpdateProgress()
@@ -981,7 +654,7 @@ local function Plan(preview)
 	local anchors = ns.FreshAnchors()
 	local teleports, ready = ns.UsableTeleports(now)
 	local walks = preview and {} or Walks(here)
-	for _, walk in ipairs(LandingWalks(teleports)) do
+	for _, walk in ipairs(Costs.LandingWalks(teleports)) do
 		walks[#walks + 1] = walk
 	end
 	local ride, routeID = nil, ns.CurrentRide()
@@ -1030,314 +703,6 @@ local function Plan(preview)
 	return planned
 end
 
--- Reuse only the last two endpoint searches, with starts confirmed by the pathfinder as the same snapped node.
--- One search owns the callbacks' shared revision, preview and probe budget across resumes
-local function RefreshCosts(includeGoal, forced)
-	local here = Here()
-	if not (here and goal) then
-		return
-	end
-	if not ns.Path then
-		Render(Plan(), forced)
-		return
-	end
-	CancelPaths()
-	search = { started = GetTime(), initial = not result, forced = forced }
-	local version, faction = pathVersion, UnitFactionGroup("player")
-	local teleports = ns.UsableTeleports(ns.NowMs())
-	local places = ns.Planner.Places({
-		docks = ns.Docks,
-		taxiNodes = ns.TaxiNodes,
-		portals = ns.Portals,
-		teleports = teleports,
-		faction = faction,
-	})
-	local function targets(point, withGoal)
-		local list = {}
-		local mass = ns.Planner.Landmass(point, ns.Landmasses or {})
-		for _, place in ipairs(places) do
-			if place.map == point.map and ns.Planner.Landmass(place, ns.Landmasses or {}) == mass then
-				list[#list + 1] = place
-			end
-		end
-		if withGoal and goal.map == point.map and ns.Planner.Landmass(goal, ns.Landmasses or {}) == mass then
-			list[#list + 1] = goal
-		end
-		return list
-	end
-	local function reuse(batch, point, reverse)
-		if
-			not batch
-			or batch.path ~= ns.Path
-			or batch.water ~= waterMode
-			or batch.faction ~= faction
-			or batch.teleports ~= teleports
-		then
-			return false
-		end
-		if not reverse and not SamePlace(batch.goal, goal) then
-			return false
-		end
-		return ns.Path.Resume
-			and (
-				SamePlace(batch.point, point)
-				or (not reverse and ns.Path.ReuseMany and ns.Path.ReuseMany(batch.job, point))
-			)
-	end
-	local function create(previous, point, reverse)
-		if reuse(previous, point, reverse) then
-			return previous
-		end
-		if previous and previous.job then
-			previous.path.Cancel(previous.job)
-		end
-		return {
-			point = point,
-			goal = goal,
-			targets = targets(point, not reverse),
-			reverse = reverse,
-			path = ns.Path,
-			water = waterMode,
-			faction = faction,
-			teleports = teleports,
-			costs = {},
-		}
-	end
-	startBatch = create(startBatch, here, false)
-	if includeGoal then
-		goalBatch = create(goalBatch, goal, true)
-	end
-	startAt, refreshedAt = here, GetTime()
-	pendingCosts, costError = 2, nil
-	if search.initial then
-		Refresh()
-	end
-	local slices, lastRevision, probeCPU = 0, -1, 0
-	local function fixedPlace(batch)
-		if batch.fixedChecked or not (batch.job and batch.job.valid and ns.Path.ReuseMany) then
-			return
-		end
-		batch.fixedChecked = true
-		for _, place in ipairs(places) do
-			if
-				place.map == batch.point.map
-				and math.abs(place.x - batch.point.x) < 0.00001
-				and math.abs(place.y - batch.point.y) < 0.00001
-				and ns.Path.ReuseMany(batch.job, place)
-			then
-				batch.fixedKey = place.kind .. place.id
-				return
-			end
-		end
-	end
-	local function bakedBound(batch, target)
-		local first = batch.fixedKey
-		local last = target.kind and target.kind .. target.id or target == goal and goalBatch.fixedKey
-		local baked = first and last and ns.Walks and ns.Walks[batch.point.map]
-		if not baked then
-			return 0
-		end
-		if first == last then
-			return 0
-		end
-		if batch.reverse then
-			first, last = last, first
-		end
-		local pair = baked[first < last and first .. " " .. last or last .. " " .. first]
-		local cost = pair and pair[(waterMode and 2 or 1) + (first > last and pair[3] ~= nil and 2 or 0)]
-		-- Baked costs round to whole yards. They strengthen the bound but never stand in for exact endpoint costs.
-		return cost and math.max(0, cost - 0.5) or 0
-	end
-	local function walks(batch)
-		local list = {}
-		if not ns.Path.HasData(batch.point.map) then
-			return list
-		end
-		local radius = batch.job and batch.job.radius or 0
-		for i, target in ipairs(batch.reason ~= "nodata" and batch.targets or {}) do
-			local cost = batch.probes and batch.probes[i]
-			if cost == nil then
-				cost = batch.costs[i]
-			end
-			local estimated = cost == nil
-			if estimated then
-				local lower = ns.Path.LowerBound and ns.Path.LowerBound(batch.point.map, batch.point, target) or 0
-				cost = math.max(lower, radius, bakedBound(batch, target))
-			end
-			list[#list + 1] = {
-				from = batch.reverse and target or batch.point,
-				to = batch.reverse and batch.point or target,
-				cost = cost,
-				estimated = estimated,
-			}
-		end
-		return list
-	end
-	local function active(batch, needed)
-		if ns.Path.Pause then
-			if needed then
-				ns.Path.Resume(batch.job)
-			else
-				ns.Path.Pause(batch.job)
-			end
-		end
-	end
-	local preview
-	if not result and ns.Path.LowerBound then
-		startCosts, goalCosts = walks(startBatch), walks(goalBatch)
-		preview = Plan()
-		if preview then
-			preview.preview, search.candidate = true, preview
-		end
-	end
-	local consider
-	-- Bounded search callback; splitting adds calls and upvalues on every frontier update
-	consider = function(final)
-		if version ~= pathVersion or not goal then
-			return
-		end
-		if not ns.JourneyPosition() then
-			costsWaiting = true
-			return
-		end
-		if
-			(not startBatch.done and not (startBatch.job and startBatch.job.valid))
-			or (not goalBatch.done and not (goalBatch.job and goalBatch.job.valid))
-		then
-			return
-		end
-		local hadFixed = startBatch.fixedKey or goalBatch.fixedKey
-		fixedPlace(startBatch)
-		fixedPlace(goalBatch)
-		if not hadFixed and (startBatch.fixedKey or goalBatch.fixedKey) then
-			preview = nil
-		end
-		slices = slices + 1
-		local revision = (startBatch.job and startBatch.job.revision or 0)
-			+ (goalBatch.job and goalBatch.job.revision or 0)
-		if not final and revision == lastRevision and slices < 16 then
-			return
-		end
-		slices, lastRevision = 0, revision
-		startCosts, goalCosts = walks(startBatch), walks(goalBatch)
-		goalError = goalBatch.reason
-		costError = startBatch.reason == "error" and "error" or goalError == "error" and "error" or nil
-		-- An invalid goal also rules out the direct start -> goal edge without searching toward it.
-		if goalError and goalError ~= "nodata" then
-			startCosts[#startCosts + 1] = { from = here, to = goal, cost = false }
-		end
-		-- Reuse the bounded preview once for probes; commit only after planning with current exact costs.
-		local previewed = preview and not startBatch.reason and not goalBatch.reason
-		local planned = previewed and preview or Plan()
-		preview = nil
-		-- Short A* cost probes let easy routes prove themselves before expanding a wide frontier. Bound
-		-- their total work, then let shared Dijkstras settle harder alternatives. Finish an active probe:
-		-- abandoning it near completion would make the batch repeat its work.
-		if ns.Path.FindCost and probeCPU < PROBE_BUDGET then
-			local probes = {}
-			for _, leg in ipairs(planned and planned.pendingWalks or {}) do
-				local batch = leg.from.kind == "start" and startBatch or goalBatch
-				local target = batch.reverse and leg.from or leg.to
-				for i, point in ipairs(batch.targets) do
-					if
-						SamePlace(point, target)
-						and batch.costs[i] == nil
-						and (not batch.probes or batch.probes[i] == nil)
-					then
-						probes[#probes + 1] = { batch = batch, index = i, leg = leg }
-						break
-					end
-				end
-			end
-			if #probes > 0 then
-				planned.preview, search.candidate = true, planned
-				active(startBatch, false)
-				active(goalBatch, false)
-				local left = #probes
-				for _, probe in ipairs(probes) do
-					local leg, batch = probe.leg, probe.batch
-					local job = ns.Path.FindCost(leg.from.map, leg.from, leg.to, function(cost, reason, finished)
-						pathJobs[finished] = nil
-						if version ~= pathVersion then
-							return
-						end
-						if cost or reason == "unreachable" or reason == "offmesh" or reason == "outside" then
-							batch.probes = batch.probes or {}
-							batch.probes[probe.index] = cost or false
-						end
-						probeCPU = probeCPU + finished.cpu
-						left = left - 1
-						if left == 0 then
-							consider(true)
-						end
-					end, waterMode)
-					pathJobs[job] = true
-				end
-				return
-			end
-		end
-		if previewed then
-			planned = Plan()
-		end
-		local needStart = planned and planned.needsStart and ns.Path.HasData(here.map)
-		local needGoal = planned and planned.needsGoal and ns.Path.HasData(goal.map)
-		-- Missing-map estimates remain the existing terminal fallback, never an endless search.
-		needStart = needStart and not startBatch.done
-		needGoal = needGoal and not goalBatch.done
-		active(startBatch, needStart)
-		active(goalBatch, needGoal)
-		-- A bind point's walks still being searched, for a teleport that could be faster: settle when they end.
-		local landing = not needStart
-			and not needGoal
-			and LandingPending(
-				teleports,
-				nil,
-				select(2, ns.UsableTeleports(ns.NowMs())),
-				planned and planned.arrive or math.huge
-			)
-		if not needStart and not needGoal and not landing then
-			pendingCosts, settleRound = 0, settleRound + 1
-			Render(planned, forced)
-		else
-			if planned then
-				planned.preview = true
-			end
-			search.candidate = planned
-		end
-	end
-	local function attach(batch)
-		local function update(costs, reason, job)
-			if version ~= pathVersion or not goal then
-				return
-			end
-			batch.costs, batch.reason, batch.job = costs or {}, reason, job
-			if job.done or not ns.Path.Pause then
-				batch.done = true
-				for i = 1, #batch.targets do
-					if batch.costs[i] == nil then
-						batch.costs[i] = false
-					end
-				end
-			end
-			consider(batch.done)
-		end
-		if batch.job then
-			batch.job.callback, batch.job.progress = update, update
-		else
-			batch.job =
-				ns.Path.FindMany(batch.point.map, batch.point, batch.targets, update, waterMode, batch.reverse, update)
-		end
-	end
-	attach(startBatch)
-	attach(goalBatch)
-	LandingPending(teleports, function()
-		consider(true)
-	end)
-	-- Existing settled costs can prove a repeated journey without advancing either frontier.
-	if ns.Path.Pause and (startBatch.job.valid or startBatch.done) and (goalBatch.job.valid or goalBatch.done) then
-		consider(true)
-	end
-end
 -- The timed replan in Update plans in the frame; Itinerary.lua keeps its own planning and drawing off that frame. A
 -- frame's GetTime is fixed, and the margin covers the frame the replan will take whichever handler runs first.
 ---@return boolean
@@ -1366,11 +731,10 @@ local function Update(self, elapsed)
 	if not x then
 		return
 	end
-	if not startAt or costsWaiting then
-		costsWaiting = nil
+	if Costs.Stale() then
 		-- Search callbacks may finish while position is unavailable; resume from readable endpoints.
 		if ns.Path then
-			RefreshCosts(true, true)
+			Costs.Refresh(true, true)
 		end
 	end
 	if
@@ -1415,13 +779,14 @@ local function Update(self, elapsed)
 		self.elapsed, self.replannedAt = 0, GetTime()
 		local mode = WaterWalking()
 		if mode ~= waterMode then
-			waterMode, walkCache, walkOrder, startCosts, goalCosts = mode, {}, {}, {}, {}
-			RefreshCosts(true, false)
-		elseif goalBatch and goalBatch.teleports ~= ns.UsableTeleports(ns.NowMs()) then
+			waterMode, walkCache, walkOrder = mode, {}, {}
+			Costs.Forget()
+			Costs.Refresh(true, false)
+		elseif Costs.TeleportsChanged() then
 			-- A new bind point or teleport: measure the walks on from where it lands.
-			RefreshCosts(true, false)
-		elseif pendingCosts == 0 and pendingWalks == 0 then
-			local here = Here()
+			Costs.Refresh(true, false)
+		elseif Costs.Status() == 0 and pendingWalks == 0 then
+			local here, startAt, refreshedAt = Here(), Costs.Started()
 			local leg = result and result.legs[progress.index]
 			local off = here and leg and leg.mode == "walk" and leg.measured and not OnWalk(leg.walkPoints, here)
 			local moved = here and startAt and not SamePlace(startAt, here)
@@ -1430,7 +795,7 @@ local function Update(self, elapsed)
 				and moved
 				and (not result or (leg and leg.walkError) or here.map ~= startAt.map)
 			if ns.Path and not flying and not riding and (off or retry or GetTime() - refreshedAt >= REFRESH_EVERY) then
-				RefreshCosts(false, off or retry)
+				Costs.Refresh(false, off or retry)
 			else
 				local planned = Plan()
 				if
@@ -1443,7 +808,7 @@ local function Update(self, elapsed)
 				then
 					-- A timed replan can expose an alternative left bounded by the previous proof.
 					-- Resume its costs before letting it replace the route with settled geometry.
-					RefreshCosts(false, changedRide)
+					Costs.Refresh(false, changedRide)
 				else
 					Render(planned, changedRide)
 				end
@@ -1471,11 +836,9 @@ function ns.StartJourney(point)
 	local previous = repeated and result
 	local index, departed = progress.index, progress.departed
 	CancelPaths()
-	costsWaiting = nil
-	settleRound, costError, goalError = 0, nil, nil
-	walkCache, walkOrder, startCosts, goalCosts, startAt =
-		repeated and walkCache or {}, repeated and walkOrder or {}, {}, {}, nil
-	if guide then
+	Costs.Clear()
+	walkCache, walkOrder = repeated and walkCache or {}, repeated and walkOrder or {}
+	if Guide.Active() then
 		StopGuide()
 	end
 	goal, nextPoint = point, nil
@@ -1491,7 +854,7 @@ function ns.StartJourney(point)
 	ns.WakeTravel()
 	waterMode = mode
 	if ns.Path then
-		RefreshCosts(true, false)
+		Costs.Refresh(true, false)
 		if search and not search.candidate and not ns.Path.LowerBound then
 			search.candidate = Plan(true)
 		end
@@ -1505,6 +868,35 @@ function ns.StartJourney(point)
 	end
 	return true
 end
+
+Costs.Bind({
+	Here = Here,
+	Plan = Plan,
+	Render = Render,
+	Refresh = Refresh,
+	CancelPaths = CancelPaths,
+	Goal = function()
+		return goal
+	end,
+	Result = function()
+		return result
+	end,
+	Search = function()
+		return search
+	end,
+	SetSearch = function(value)
+		search = value
+	end,
+	WaterMode = function()
+		return waterMode
+	end,
+	Version = function()
+		return pathVersion
+	end,
+	Jobs = function()
+		return pathJobs
+	end,
+})
 
 ns.Init(function()
 	local journeyDriver = CreateFrame("Frame", "ShortestPathForeverJourneyDriver", UIParent)
@@ -1521,34 +913,21 @@ ns.Init(function()
 	driver:RegisterEvent("PLAYER_ENTERING_WORLD")
 	driver:SetScript("OnEvent", function(self, event, questID)
 		if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
-			ClearOrphanWaypoint()
+			Guide.ClearOrphan()
 		elseif event == "PLAYER_REGEN_DISABLED" then
 			self:Hide()
 		elseif event == "PLAYER_REGEN_ENABLED" and goal then
 			self:Show()
 		end
-		if (event == "QUEST_TURNED_IN" or event == "QUEST_REMOVED") and guide and guide.previousQuest == questID then
-			guide.previousQuest = nil
+		local questGone = event == "QUEST_TURNED_IN" or event == "QUEST_REMOVED"
+		if questGone then
+			Guide.QuestGone(questID)
 		end
-		if (event == "QUEST_TURNED_IN" or event == "QUEST_REMOVED") and goal and goal.questID == questID then
+		if questGone and goal and goal.questID == questID then
 			ns.ClearJourney()
-		elseif
-			guide
-			and not guide.writing
-			and (event == "SUPER_TRACKING_CHANGED" or event == "USER_WAYPOINT_UPDATED")
-		then
-			if not OwnsWaypoint() then
-				RefreshTracker()
-			elseif event == "SUPER_TRACKING_CHANGED" and not SameTracking(guide) then
-				YieldGuide()
-			end
+		elseif event == "SUPER_TRACKING_CHANGED" or event == "USER_WAYPOINT_UPDATED" then
+			Guide.TrackingChanged(event)
 		end
 	end)
 	driver:Hide()
-	for provider in pairs(WorldMapFrame.dataProviders) do
-		if provider.RefreshAllData == WaypointLocationDataProviderMixin.RefreshAllData then
-			waypointProviders[#waypointProviders + 1] = provider
-			hooksecurefunc(provider, "RefreshAllData", HideGuideWaypointPin)
-		end
-	end
 end)

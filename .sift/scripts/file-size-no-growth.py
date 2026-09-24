@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Agent Labs
+# SPDX-License-Identifier: MIT
 # catalog: file-size-no-growth@0.2.0
 # sift-scope: changed
 # sift-fix: split the file along its responsibilities before adding to it, or put the new code in a new file
