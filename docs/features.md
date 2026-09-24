@@ -15,8 +15,10 @@ The detail behind each feature in the [README](../README.md).
   Astral Recall or a druid's Teleport: Moonglade, named in your game's language: *1. Use Hearthstone*. A cooldown
   counts as waiting, and a jump to another continent adds a few seconds for the loading screen. The client does
   not say where your bind point is, so it is where you stood when you last bound at an innkeeper with the addon
-  on; bound anywhere else since, the hearth is left out until you bind again. Turn this off with *Use your
-  hearthstone and teleports* in `/path`.
+  on; bound anywhere else since, the hearth is left out until you bind again. It is kept with the addon's saved
+  settings, which the WoW: Forever client does not load yet, so after a `/reload` or relog the hearth is left out
+  until you next bind. Class teleports need no bind point. Turn this off with *Use your hearthstone and teleports*
+  in `/path`.
   ![Journey steps from Auberdine to Silithus with time and distance remaining](screenshots/tracker.png)
 
   ![Auberdine’s piers on the minimap, with the dotted route and Guide’s native waypoint](screenshots/minimap.png)
