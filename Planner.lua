@@ -375,7 +375,6 @@ function Planner.Plan(options)
 				docks[place.id] = index
 			elseif place.kind == "taxi" then
 				taxis[place.id] = index
-				nodes[index].undiscovered = options.taxiKnown ~= nil and not options.taxiKnown[place.id]
 			elseif place.kind == "teleport" then
 				teleports[place.id] = index
 			else

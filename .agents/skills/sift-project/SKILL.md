@@ -54,6 +54,8 @@ On-demand tools for audits. Output is candidates, never verdicts.
 | Types (Python) | `uvx --with pillow ty check --extra-search-path tools --python-version 3.10 tools` | 5 inference errors in `gen_nav.py` (tuple unpacking, `dict.get` keys) + Pillow `Image.LANCZOS` — not bugs |
 | Large files | `python3 .sift/gate.py --rule file-size-no-growth --all` | lists files over 1000 lines; none remain, so any listed file is a regression |
 | Duplication | `npx --yes jscpd@4 --silent --reporters json --output .sift/runs/jscpd --ignore '**/ShortestPathForever_Nav*/**,**/Data/**,**/.sift/**,**/media/**,LICENSE' .` | the test harness preambles (`walk_sim`, `journey_bench`, `journey_optimal_spec`) repeat stub setup; whole-file clones among `tests/*_ui.lua` are their long-string bodies |
+| Unread `ns` members | the `ns-defined`/`ns-once` pipeline in the sift skill's `languages/lua.md` | its regex has no word boundary, so `options.revision` reads as `ns.revision` |
+| Standards pack | `SIFT_STANDARDS_PATH=$HOME/skills python3 <sift>/scripts/agents.py standards` | `wow-forever-addon` lives in `~/skills`, which the default search path misses |
 | Live roots (Lua) | `rg -n 'RegisterEvent\|SetScript\|hooksecurefunc\|SLASH_\|SlashCmdList\|LoadAddOn\|SendAddonMessage' -g '*.lua'` | — |
 
 ## Live roots
@@ -84,6 +86,12 @@ Things reached indirectly. The dead-code lens must treat these as referenced.
   debug-gated write there is a live output, not residue.
 - `tests/journey_driver.lua` is a helper loaded by the journey specs; `journey_bench.lua` and
   `walk_sim.lua` are run by hand (README).
+- `tests/api_ui.lua` rebinds `ns.Routes`/`ns.Docks` after load, which keeps Route.lua's geometry-cache
+  identity reset and the `ns.JourneyStops` guard live. `Path.decodes` exists for `runtime_bench.lua`.
+- `tools/pack_nav.py`'s chunk-table `pack()` converts older shipped maps; `tools/baker/README.md` documents it,
+  so it is live even though current bakes never need it.
+- `tools/.cache` from the primary checkout is not enough for `gen_transit.py --offline`: it looks for
+  `InFlight-<rev>-Defaults.lua`/`-LICENSE` and the cache holds unversioned names. `gen_routes.py --offline` works.
 
 ## Zones
 
@@ -133,9 +141,10 @@ Audit slices from lowest to highest risk:
 1. docs + config (`README.md`, `tools/baker/README.md`, `tests/journey_performance.md`, config files)
 2. `tools/` — offline generators; output is checked in, so a change is visible as a data diff
 3. `tests/`
-4. UI leaves: `Alert.lua`, `Arrow.lua`, `Compass.lua`, `Settings.lua`, `Taxi.lua`, `Tracker.lua`
+4. UI leaves: `Alert.lua`, `Arrow.lua`, `Compass.lua`, `Settings.lua`, `Taxi.lua`, `Tracker.lua`, `MinimapPins.lua`
 5. Map layers: `Map.lua`, `Map.xml`, `Route.lua`, `RouteTransports.lua`
-6. State and wire: `Model.lua`, `Core.lua`, `Observer.lua`, `Sync.lua` (SavedVariables, wire format)
+6. State and wire: `Model.lua`, `Core.lua`, `Observer.lua`, `Sync.lua`, `API.lua` (SavedVariables, wire format,
+   public API)
 7. Planning core: `Planner.lua`, `Path*.lua`, `Journey*.lua` (performance-tuned, 3 ms frame budget)
 
 ## Project rules and lenses
@@ -144,3 +153,17 @@ Audit slices from lowest to highest risk:
   a file over 1000 lines or grows one. Generated `Data/*.lua` and `ShortestPathForever_Nav*/*.lua`
   are excluded.
 - Lenses: none yet.
+
+## Anti-patterns
+
+Shapes this codebase keeps producing. Check new code against them.
+
+- A comment left behind when the code it explains moves (`comment-narration`): `Route.lua` GoalPin atlas note
+  after #27; `gen_nav.py` naming the wrong setter for its globals.
+- A closed set passed around as bare strings with `string` types (`stringly-typed`): Path failure reasons
+  (`Journey.lua` `WALK_FAILURE`), sighting `source` `"you"|"player"` (`Model.lua`), crossing modes in `Route.lua`.
+- A second copy of another module's fact (`parallel-implementations`): Compass's `transportIcons` beside
+  `ns.SetTransportIcon`; walk progress in `Arrow.lua`, `Tracker.lua` and Journey's `OnWalk`; `bakedBound`
+  (`Journey.lua`) re-deriving Planner's Walks.lua keys.
+- Spec and bench stubs outliving the production field they stood in for (`dead-code`): `owner.loading` in
+  `memory_bench.lua`, a `NewTicker` stub in `sync_spec.lua`.

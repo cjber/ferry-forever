@@ -11,8 +11,8 @@ ns.Model = Model
 local AGREE = 8000
 -- A position this far from every leg of a route is not on that route.
 local NEAR = 40
-Model.MIN_SAMPLES = 10
-Model.MIN_SPAN = 30000
+local MIN_SAMPLES = 10
+local MIN_SPAN = 30000
 local CLEAR_LEAD = 1.25
 -- How far ahead of this client's clock a sighting may be dated (both read the server's time).
 local CLOCK_SLACK = 5
@@ -136,11 +136,11 @@ function Model.FitEpoch(route, samples)
 				first, last = math.min(first, other.now), math.max(last, other.now)
 			end
 		end
-		if members > support and last - first >= (fit.span or Model.MIN_SPAN) then
+		if members > support and last - first >= (fit.span or MIN_SPAN) then
 			best, support = (center.offset + sum / members) % period, members
 		end
 	end
-	if support < (fit.samples or Model.MIN_SAMPLES) then
+	if support < (fit.samples or MIN_SAMPLES) then
 		return nil, support
 	end
 	return best, support

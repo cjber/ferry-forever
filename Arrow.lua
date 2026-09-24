@@ -33,7 +33,7 @@ local function Update()
 		frame:SetAlpha(0)
 		return
 	end
-	while x and index < #path and map == target.map and (target.x - x) ^ 2 + (target.y - y) ^ 2 <= PASSED ^ 2 do
+	while index < #path and map == target.map and (target.x - x) ^ 2 + (target.y - y) ^ 2 <= PASSED ^ 2 do
 		index = index + 1
 		target = path[index]
 	end
@@ -52,7 +52,7 @@ local function Update()
 	if not path then
 		return
 	end
-	if not (x and facing and map == target.map) or (native and C_Navigation.GetFrame()) then
+	if not (facing and map == target.map) or (native and C_Navigation.GetFrame()) then
 		frame:SetAlpha(0)
 		return
 	end
