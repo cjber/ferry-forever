@@ -566,7 +566,6 @@ function ShortestPathForeverGoalPinMixin:OnLoad()
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_WAYPOINT_LOCATION")
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScalingLimits(1, 1, 1)
-	-- The native waypoint pin (SuperTrackedFrame.lua:219) that Guide's marker wears, so map and marker agree.
 	self.Number = self:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	self.Number:SetPoint("CENTER")
 	self:SetScript("OnHide", self.OnMouseLeave)
@@ -597,6 +596,7 @@ function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, numbers, titles, later
 			self.Numeral:SetAtlas("services-number-" .. number)
 		end
 	else
+		-- The native waypoint pin (SuperTrackedFrame.lua:219) that Guide's marker wears, so map and marker agree.
 		local atlas = C_Texture.GetAtlasInfo(GOAL_ATLAS)
 		self:SetSize(atlas.width * GOAL_SCALE, atlas.height * GOAL_SCALE)
 		self.Texture:SetAtlas(GOAL_ATLAS)
@@ -785,6 +785,7 @@ local function DrawMinimap(self)
 	end
 	local width, height = self:GetWidth(), self:GetHeight()
 	local scale = self:GetEffectiveScale()
+	-- GetMinimapShape is an optional addon convention (HBD-Pins:215), not a Blizzard global.
 	local square = GetMinimapShape and GetMinimapShape() == "SQUARE"
 	if
 		self.lastX == x
@@ -822,7 +823,6 @@ local function DrawMinimap(self)
 			-- Fade the line near arrival so it does not obscure the goal.
 			self:SetAlpha(math.max(0, math.min(1, (distance - 15) / 25)))
 		end
-		-- GetMinimapShape is an optional addon convention (HBD-Pins:215), not a Blizzard global.
 		local inset = 1 - border / math.min(width, height)
 		for _, path in ipairs(paths) do
 			self.walked = 0

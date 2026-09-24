@@ -80,8 +80,8 @@ function TransportProviderMixin:RefreshAllData()
 	for _, id in ipairs(ids) do
 		local route = ns.Routes[id]
 		local cached = transportGeometry[id]
-		if not cached or cached.route ~= route or cached.docks ~= ns.Docks then
-			cached = { route = route, docks = ns.Docks, paths = {} }
+		if not cached or cached.route ~= route then
+			cached = { route = route, paths = {} }
 			transportGeometry[id] = cached
 			-- Dock-to-dock legs preserve intermediate calls and give overview maps the actual crossing endpoints.
 			for index, stop in ipairs(route.stops) do
