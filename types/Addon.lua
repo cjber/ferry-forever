@@ -7,6 +7,7 @@
 ---@field TaxiNodes table<number, SPFTaxiNode>
 ---@field TaxiPaths SPFTaxiPath[]
 ---@field Portals SPFPortal[]
+---@field Teleports SPFTeleport[]
 ---@field Landmasses SPFLandmass[]
 ---@field Walks table<number, table<string, (number|false)[]>>
 ---@field WalkPlaces table<number, table<string, number[]>>
@@ -63,6 +64,13 @@
 ---@field faction? string
 ---@field requires? string
 ---@field seconds number
+---@class SPFTeleport
+---@field spell number
+---@field item? number
+---@field bind? boolean
+---@field to? SPFPoint
+---@field cast number
+---@field reagents? table<number, number>
 ---@class SPFLandmass
 ---@field map number
 ---@field minX number

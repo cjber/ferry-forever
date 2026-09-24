@@ -17,6 +17,7 @@ Data\Routes.lua
 Data\Transports.lua
 Data\Taxi.lua
 Data\Portals.lua
+Data\Teleports.lua
 Data\Walks.lua
 Model.lua
 Planner.lua
