@@ -57,9 +57,10 @@ ROWS = COLS = range(0)
 CX0 = CY0 = NX = NY = GW = GH = 0
 X0 = Y0 = 0.0
 ORD = {}  # (rr, cc) -> canonical tile ordinal (rows outer, cols inner)
+# Set by components(): each tile's first poly id and each poly's component size.
 BASE = {}  # (rr, cc) -> first dense poly id of the tile
 SIZE = array("i")  # dense poly id -> poly count of its navmesh component; kept when >= MIN_COMPONENT
-# Nodes are cells (the base surface, ids below GW * GH) and floors (GW * GH + floor index), set in main().
+# Nodes are cells (the base surface, ids below GW * GH) and floors (GW * GH + floor index), filled by assemble_floors().
 FLOOR_CELL, FLOOR_VAL, FLOOR_Z, FLOOR_LAYER = array("i"), bytearray(), array("f"), bytearray()  # layer: 1 = lowest
 BASE_Z = array("f")  # cell -> height of its base surface
 LINKS = defaultdict(set)  # node -> nodes it steps to besides the base grid's own steps
@@ -361,8 +362,7 @@ def rasterize_tile(rc):
     window = [(rr + dr, cc + dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1) if (rr + dr, cc + dc) in TILES]
     polys, adj, portal = load_window(window)
     k = cluster_of_tile(rr, cc)
-    kx, ky = divmod(k, NY)
-    tx0, tx1, ty0, ty1 = kx * CELLS, kx * CELLS + CELLS - 1, ky * CELLS, ky * CELLS + CELLS - 1
+    tx0, tx1, ty0, ty1 = cluster_box(k)
     ax0, ax1, ay0, ay1 = max(0, tx0 - 2), min(GW - 1, tx1 + 2), max(0, ty0 - 2), min(GH - 1, ty1 + 2)
     layers = rasterize_layers(polys, adj, portal, (ax0, ax1, ay0, ay1))
 

@@ -602,7 +602,7 @@ def render_minimap(ui):
     return scene(ui, [(canvas, 0, 0)])
 
 
-def render_demo(ui):
+def render_demo():
     # Route.lua fixes stroke widths in physical pixels; render at the GIF's final size.
     ui = Art(scale=1)
     frames = []
@@ -658,7 +658,7 @@ SCENES = {
 
 def encode(ui, name):
     if name == "demo":
-        return render_demo(ui), ".gif"
+        return render_demo(), ".gif"
     buffer = io.BytesIO()
     SCENES[name](ui).image.save(buffer, format="PNG", optimize=True)
     return buffer.getvalue(), ".png"
