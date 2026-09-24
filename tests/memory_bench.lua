@@ -148,9 +148,6 @@ release("pooled stroke Lua bookkeeping (UI region storage is client-owned)", fun
 	local active = upvalue(map.RemoveAllPinsByTemplate, "active")
 	local function strokes(owner)
 		owner.lines, owner.underlines, owner.hits = nil, nil, nil
-		if owner.loading then
-			strokes(owner.loading)
-		end
 	end
 	for _, list in ipairs({ pools, active }) do
 		for _, pins in pairs(list) do

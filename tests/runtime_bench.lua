@@ -66,7 +66,6 @@ return {
  refresh = function() for _, provider in ipairs(providers) do provider:RefreshAllData() end end,
  open = function(value) visible = value WorldMapFrame.shown = value end,
  minimap = function(value) miniEnabled = value end,
- sample = function() tickers[1].fn() end,
  sail = function(id, phase)
   ns.CurrentRide = function() return id end
   ns.db.anchors[GetRealmName()][id] = { epoch = ns.NowMs() - phase, seen = GetServerTime(), source = "you" }

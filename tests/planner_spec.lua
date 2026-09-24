@@ -417,7 +417,6 @@ end
 
 -- The baked walks name the planner's places: a key that no longer names one (places renumbered, added or moved
 -- without rerunning tools/bake_walks.lua) would silently fall back to straight-line guesses.
-assert(loadfile("Data/Portals.lua"))("ShortestPathForever", ns)
 assert(loadfile("Data/Teleports.lua"))("ShortestPathForever", ns)
 assert(loadfile("Data/Walks.lua"))("ShortestPathForever", ns)
 local places = {}

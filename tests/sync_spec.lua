@@ -47,7 +47,6 @@ local env = setmetatable({
 		After = function(delay, fn)
 			timers[#timers + 1] = { at = now + delay, fn = fn }
 		end,
-		NewTicker = noop,
 	},
 	CreateFrame = function()
 		return {
