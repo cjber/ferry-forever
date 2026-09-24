@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Agent Labs
+# SPDX-License-Identifier: MIT
 """Check repository agent instructions and resolve declared standards without running project code."""
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from urllib.parse import unquote, urlsplit
 
 sys.dont_write_bytecode = True
 
-VERSION = "0.2.0"
+VERSION = "0.2.2"
 MAX_BYTES = 32 * 1024
 NOTE_BYTES = 12 * 1024
 SKIP_DIRS = {".git", "node_modules", "vendor", "dist", "build", ".venv", "target", "__pycache__"}
@@ -277,14 +279,14 @@ def skill_error(value: str, directory: Path, root: Path, *, link: bool) -> str |
 
 
 def inline_context(prefix: str, value: str, directory: Path, root: Path) -> list[Path]:
-    """Use only directories/files explicitly mentioned earlier on this line, never a repo-wide search."""
+    """Use only directories named or `cd`-ed into earlier on this line, never a repo-wide search."""
     context = []
     for _, target in links(Markdown([prefix], [])):
         if (path := relative_link(target)) and (directory / path).exists():
             candidate = directory / path
             context.append(candidate if candidate.is_dir() else candidate.parent)
     for match in INLINE_CODE.finditer(LINK.sub("", prefix)):
-        path = prose_path(match[2].strip())
+        path = prose_path(re.sub(r"^cd\s+(\S+)(?:\s*&&.*)?$", r"\1", match[2].strip()))
         if (
             path_like(path.rstrip("/") + "/", command=True)
             and (candidate := existing_path(path, directory, root))
