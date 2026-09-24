@@ -6,6 +6,8 @@ local Model = ns.Model
 local Planner = {}
 ns.Planner = Planner
 
+-- Talking to the flight master and picking the destination. Taxis leave at once, so this is part of the flight's
+-- time, never a wait.
 local BOARDING = 3000
 -- A teleport to another continent shows a loading screen: the same allowance as a portal's.
 local LOADING = 5000
@@ -644,13 +646,14 @@ function Planner.Plan(options)
 					else
 						wait, estimated = route.period / 2, true
 					end
-				elseif edge.mode == "flight" and not flying then
-					wait = BOARDING
 				elseif edge.ready then
 					wait = math.max(0, edge.ready - earliest)
 				end
 				local depart = earliest + wait
 				local finish = depart + edge.duration
+				if edge.mode == "flight" and not flying then
+					finish = finish + BOARDING
+				end
 				local target = edge.to + (edge.mode == "flight" and count or 0)
 				if edge.mode == "walk" and (walked or edge.yards > 0) then
 					target = edge.to + count * 2

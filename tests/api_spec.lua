@@ -92,6 +92,15 @@ local function steps(legs, from)
 	end
 	return sum * 1000
 end
+-- Only timed transports and teleport cooldowns show a wait, worded as what you are waiting for.
+equal(ns.LegTime({ mode = "flight", depart = 0, arrive = 133000, wait = 0 }), "133000", "a flight shows only its time")
+equal(ns.LegTime({ mode = "boat", depart = 0, arrive = 9000, wait = 45000 }), "leaves in 45000 · 9000", "boat wait")
+equal(
+	ns.LegTime({ mode = "zeppelin", depart = 0, arrive = 9000, wait = 45000, estimated = true }),
+	"leaves in about 45000 · 9000",
+	"untimed zeppelin wait"
+)
+equal(ns.LegTime({ mode = "teleport", depart = 0, arrive = 1000, wait = 60000 }), "ready in 60000 · 1000", "cooldown")
 local total = ns.JourneyTime(plan.legs, index)
 equal(total, steps(plan.legs, index), "header adds up the steps")
 for _, seconds in ipairs({ 2, 4 }) do

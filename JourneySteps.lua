@@ -54,14 +54,16 @@ local function Seconds(ms)
 	return math.max(0, math.ceil(ms / 1000))
 end
 
--- A transport nobody has timed yet waits half its round trip on average; "about" marks that guess.
+-- Only a timed transport's departure and a teleport's cooldown make a step wait; a flight leaves at once. A
+-- transport nobody has timed yet waits half its round trip on average; "about" marks that guess.
 ---@param leg SPFLeg
 ---@return string
 function ns.LegTime(leg)
 	local text = ns.FormatCountdown(leg.arrive - leg.depart)
 	if leg.wait and leg.wait > 0 then
 		local guess = leg.estimated and SCHEDULED[leg.mode] and "about " or ""
-		text = "wait " .. guess .. ns.FormatCountdown(leg.wait) .. " · " .. text
+		local lead = leg.mode == "teleport" and "ready in " or "leaves in "
+		text = lead .. guess .. ns.FormatCountdown(leg.wait) .. " · " .. text
 	end
 	return text
 end

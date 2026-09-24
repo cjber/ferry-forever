@@ -255,7 +255,9 @@ flight.taxiNodes[1].faction, flight.taxiNodes[2].faction = "Alliance", "Alliance
 flight.taxiPaths = { { from = 1, to = 2, seconds = 10 } }
 local flying = only(Plan(flight), "flight")
 near(flying.arrive, 14000)
-near(flying.wait, 3000)
+-- Taxis leave at once: the flight master's boarding time is part of the flight, never a wait.
+near(flying.wait, 0)
+near(flying.arrive - flying.depart, 13000)
 flight.taxiKnown = { [1] = true }
 only(Plan(flight), "walk")
 flight.taxiKnown = { [2] = true }
@@ -295,7 +297,7 @@ flight.taxiPaths[1].points = { 1, 0, 0, 1, 3500, 200, 1, 7000, 0 }
 flight.taxiPaths[2].points = { 1, 7000, 0, 1, 10500, -200, 1, 14000, 0 }
 flying = only(Plan(flight), "flight")
 near(flying.arrive, 34000)
-near(flying.wait, 3000)
+near(flying.wait, 0)
 assert(flying.from.id == 1 and flying.to.id == 3 and flying.estimated)
 assert(#flying.hops == 2 and flying.hops[1] == flight.taxiPaths[1] and flying.hops[2] == flight.taxiPaths[2])
 points = LegPoints(flying, {})
@@ -349,14 +351,14 @@ competing.taxiPaths[1].seconds = 1
 competing.taxiPaths[2] = { from = 3, to = 4, seconds = 10 }
 result = Plan(competing)
 assert(#result.legs == 3 and result.legs[2].mode == "walk")
-near(result.legs[1].wait, 3000)
-near(result.legs[3].wait, 3000)
+near(result.legs[1].wait, 0)
+near(result.legs[3].wait, 0)
 near(result.arrive, 28000)
 -- Co-located but disconnected taxi nodes still require landing and boarding another flight.
 competing.taxiNodes[3] = point(1, 70)
 result = Plan(competing)
 assert(#result.legs == 2 and #result.legs[1].hops == 1 and #result.legs[2].hops == 1)
-near(result.legs[2].wait, 3000)
+near(result.legs[2].wait, 0)
 near(result.arrive, 18000)
 
 -- Multi-stop rides include the middle dwell, and the final destination may wrap past phase zero.
