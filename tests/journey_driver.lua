@@ -181,6 +181,8 @@ end
 load("Model.lua")
 load("Planner.lua")
 load("JourneySteps.lua")
+load("JourneyCosts.lua")
+load("JourneyGuide.lua")
 load("Journey.lua")
 load("JourneyInput.lua")
 

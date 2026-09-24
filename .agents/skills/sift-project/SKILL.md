@@ -52,7 +52,7 @@ On-demand tools for audits. Output is candidates, never verdicts.
 | Diagnostics (Lua) | `tools/typecheck.sh` (file:line diagnostics and counts; JSON in `.types/diagnostics.json`) | tests/tools are excluded from LuaLS; all TOC runtime files, including generated data, are checked |
 | Dead code (Python) | `uvx vulture tools --min-confidence 60` | clean today |
 | Types (Python) | `uvx --with pillow ty check --extra-search-path tools --python-version 3.10 tools` | 5 inference errors in `gen_nav.py` (tuple unpacking, `dict.get` keys) + Pillow `Image.LANCZOS` — not bugs |
-| Large files | `python3 .sift/gate.py --rule file-size-no-growth --all` | lists Path.lua and Journey.lua, the backlog over 1000 lines; exit 1 by design |
+| Large files | `python3 .sift/gate.py --rule file-size-no-growth --all` | lists files over 1000 lines; none remain, so any listed file is a regression |
 | Duplication | `npx --yes jscpd@4 --silent --reporters json --output .sift/runs/jscpd --ignore '**/ShortestPathForever_Nav*/**,**/Data/**,**/.sift/**,**/media/**,LICENSE' .` | the test harness preambles (`walk_sim`, `journey_bench`, `journey_optimal_spec`) repeat stub setup; whole-file clones among `tests/*_ui.lua` are their long-string bodies |
 | Live roots (Lua) | `rg -n 'RegisterEvent\|SetScript\|hooksecurefunc\|SLASH_\|SlashCmdList\|LoadAddOn\|SendAddonMessage' -g '*.lua'` | — |
 
@@ -136,7 +136,7 @@ Audit slices from lowest to highest risk:
 4. UI leaves: `Alert.lua`, `Arrow.lua`, `Compass.lua`, `Settings.lua`, `Taxi.lua`, `Tracker.lua`
 5. Map layers: `Map.lua`, `Map.xml`, `Route.lua`, `RouteTransports.lua`
 6. State and wire: `Model.lua`, `Core.lua`, `Observer.lua`, `Sync.lua` (SavedVariables, wire format)
-7. Planning core: `Planner.lua`, `Path.lua`, `Journey.lua` (performance-tuned, 3 ms frame budget)
+7. Planning core: `Planner.lua`, `Path*.lua`, `Journey*.lua` (performance-tuned, 3 ms frame budget)
 
 ## Project rules and lenses
 

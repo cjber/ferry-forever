@@ -452,7 +452,7 @@ def map_canvas(ui, map_id=947, alpha=1, hover=False):
         bend = next(p for p in points[1:] if math.hypot(p["x"] - START["x"], p["y"] - START["y"]) > 25)
         bp = point(bend)
         if bp:
-            # Journey.lua places Guide's native 30-unit waypoint beneath the player's map arrow.
+            # JourneyGuide.lua places Guide's native 30-unit waypoint beneath the player's map arrow.
             icon(canvas, "Waypoint-MapPin-Tracked", mx + bp[0], my + bp[1], 30)
     sp = point(START)
     if sp:

@@ -34,6 +34,8 @@ PathGrid.lua
 Path.lua
 PathJobs.lua
 JourneySteps.lua
+JourneyCosts.lua
+JourneyGuide.lua
 Journey.lua
 JourneyInput.lua
 Route.lua

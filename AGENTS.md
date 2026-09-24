@@ -26,7 +26,8 @@ The same gate CI runs, plus actionlint, zizmor and gitleaks on the workflows and
   route needs them.
 - `Planner.lua`, `Path*.lua`, `Journey*.lua` — the search; `tests/journey_performance.md` records its
   budgets. `PathGrid.lua` decodes the walking maps, `Path.lua` searches them, `PathJobs.lua` slices the
-  searches over frames.
+  searches over frames. `Journey.lua` runs the journey, `JourneyCosts.lua` its endpoint costs and
+  `JourneyGuide.lua` the arrow and native waypoint.
 - `docs/curseforge.md` — the store description, pasted into CurseForge and Wago by hand.
 
 ## Rules
