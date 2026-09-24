@@ -50,6 +50,18 @@ assert(pts[1].x == GOLDSHIRE.x and pts[#pts].y == STORMWIND_FM.y and pts[1].map 
 pts, len = Path.FindSync(0, NORTHSHIRE, GOLDSHIRE)
 assert(pts and len > 580 and len < 700, len)
 
+-- Landing at Stormwind's flight master and walking to the Mage Quarter, the pruned entrance graph routes through a
+-- border entrance just east of the Trade District; the walk once ran out to it and straight back along one street.
+pts = Path.FindSync(0, { x = STORMWIND_FM.x, y = STORMWIND_FM.y, z = 109.61 }, { x = -9100, y = 1200 })
+assert(pts)
+for i = 2, #pts - 1 do
+	local a, b, c = pts[i - 1], pts[i], pts[i + 1]
+	local level = a.z and c.z and math.abs(a.z - b.z) < 5 and math.abs(c.z - b.z) < 5
+	local ux, uy, vx, vy = b.x - a.x, b.y - a.y, c.x - b.x, c.y - b.y
+	local turn = (ux * vx + uy * vy) / (dist(a.x, a.y, b.x, b.y) * dist(b.x, b.y, c.x, c.y))
+	assert(not (level and turn < -0.95), ("doubles back at %.0f, %.0f"):format(b.x, b.y))
+end
+
 -- A rooftop endpoint moves to the street below instead of failing.
 assert(Path.FindSync(0, { x = -9010, y = 870 }, STORMWIND_FM))
 
