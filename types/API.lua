@@ -8,11 +8,16 @@
 
 ---@alias SPFAPIEnded "arrived"|"cleared"|"replaced"|"cancelled" -- reached the last stop; the player cleared it; another journey took over; the owner's own Cancel
 
+-- What stands at a stop. Its pin on the world map becomes that mark (a quest's "!" or "?", a trainer, a flight
+-- master, a dock) in a gold ring, and the minimap rings the spot instead of covering the game's own icon there.
+---@alias SPFAPIStopKind "pickup"|"turnin"|"objective"|"trainer"|"innkeeper"|"flightmaster"|"battlemaster"|"dungeon"|"boat"|"zeppelin"|"lift"|"tram"|"portal"
+
 ---@class SPFAPIStop
 ---@field map integer -- uiMapID
 ---@field x number -- normalized 0-1
 ---@field y number -- normalized 0-1
 ---@field title? string
+---@field kind? SPFAPIStopKind -- any other value is ignored and the stop keeps the plain pin
 
 ---@class SPFAPILeg
 ---@field mode SPFAPIMode
@@ -28,7 +33,7 @@
 ---@class SPFPublicAPI
 ---@field version integer -- 1
 ---@field Estimate fun(fromMap: integer, fromX: number, fromY: number, toMap: integer, toX: number, toY: number): seconds: number?, reason: SPFAPINoRoute? -- travel seconds; nil comes with the reason
----@field Navigate fun(owner: string, map: integer, x: number, y: number, title?: string): boolean -- starts/replaces guidance outside combat when journeys are enabled
+---@field Navigate fun(owner: string, map: integer, x: number, y: number, title?: string, kind?: SPFAPIStopKind): boolean -- starts/replaces guidance outside combat when journeys are enabled
 ---@field NavigateRoute fun(owner: string, stops: SPFAPIStop[]): boolean -- starts/replaces guidance through 1-64 stops in order; false leaves the current journey intact
 ---@field CurrentStop fun(owner: string): integer? -- 1-based current stop, nil unless owner owns the active journey
 ---@field Cancel fun(owner: string): boolean -- true only when this owner's current journey was cancelled

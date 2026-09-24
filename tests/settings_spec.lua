@@ -49,10 +49,10 @@ local env = setmetatable({
 }, { __index = _G })
 
 local refreshed = 0
--- Core.lua's defaults: every row on except the two opt-ins.
+-- Core.lua's defaults: every row on except the compass.
 local ns = {
 	db = {},
-	Defaults = setmetatable({ guideStops = false, compass = false }, {
+	Defaults = setmetatable({ compass = false }, {
 		__index = function()
 			return true
 		end,
@@ -72,7 +72,7 @@ for index, initializer in ipairs(registered) do
 end
 assert(registered[1].setting.variable == "ShortestPathForever_pins" and registered[1].setting.default)
 assert(registered[5].tooltip == "Also under Transport in the minimap's tracking menu.")
-assert(registered[13].setting.key == "guideStops" and registered[13].setting.default == false)
+assert(registered[13].setting.key == "guideStops" and registered[13].setting.default == true)
 registered[1].setting.onChanged()
 assert(refreshed == 1, "value callbacks still fire")
 print("settings: ok")

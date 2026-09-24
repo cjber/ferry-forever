@@ -295,6 +295,8 @@ function API.NavigateRoute(owner, stops)
 			return false
 		end
 		point.label = stop.title
+		-- An unknown kind is dropped, not refused: a caller written for a later vocabulary still gets its route.
+		point.look = ns.StopKind(stop.kind)
 		if count > 1 then
 			local location = not point.label and ns.Locate(point)
 			point.routeTitle =
@@ -312,8 +314,8 @@ function API.NavigateRoute(owner, stops)
 	return ns.StartJourney(points[1])
 end
 
-function API.Navigate(owner, map, x, y, title)
-	return API.NavigateRoute(owner, { { map = map, x = x, y = y, title = title } })
+function API.Navigate(owner, map, x, y, title, kind)
+	return API.NavigateRoute(owner, { { map = map, x = x, y = y, title = title, kind = kind } })
 end
 
 function API.CurrentStop(owner)

@@ -25,6 +25,7 @@
 ---@field jump? number
 ---@field label? string
 ---@field routeTitle? string
+---@field look? SPFAPIStopKind -- what the caller said stands there (API.lua)
 ---@field questID? number
 ---@class SPFPlace : SPFPoint
 ---@field kind SPFKind

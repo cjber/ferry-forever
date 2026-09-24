@@ -11,6 +11,7 @@ for _, file in ipairs({
 	"PathGrid.lua",
 	"Path.lua",
 	"PathJobs.lua",
+	"Looks.lua",
 	"API.lua",
 	"Itinerary.lua",
 }) do

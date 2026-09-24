@@ -28,6 +28,7 @@ Map.xml
 Taxi.lua
 Teleports.lua
 Map.lua
+Looks.lua
 MinimapPins.lua
 Tracker.lua
 Arrow.lua

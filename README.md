@@ -25,8 +25,9 @@ Each feature has more detail in [docs/features.md](docs/features.md).
   hearthstone or class teleports when they are ready. The route is drawn on both maps and its steps sit in the objective tracker. It replans as you move, switching only for a
   clearly faster way.
   ![Journey steps from Auberdine to Silithus with time and distance remaining](docs/screenshots/tracker.png)
-- **Guide.** The game's own waypoint marker leads you along the route turn by turn, round walls rather than straight at
-  the stop, and hands your tracked quest back when you arrive. Click the tracker header to turn it off.
+- **Guide.** The game's own waypoint marker leads you to where each step ends, the next boat, lift, flight master or
+  your destination, and hands your tracked quest back when you arrive. Turn off *Guide marks only where each step
+  ends* in `/path` and it leads you turn by turn instead, round walls. Click the tracker header to turn Guide off.
   ![Auberdine’s piers on the minimap, with the dotted route and Guide’s native waypoint](docs/screenshots/minimap.png)
 - **Optional compass.** A slim strip at the top of the screen marks Guide's next two turns, the next stop and your
   destination. Turn it on in `/path`.
@@ -89,8 +90,13 @@ from anywhere else it leaves them out. `EstimateDetail` takes the same arguments
 `NavigateRoute(owner, stops)` guides through 1–64 `{map, x, y, title}` stops in order, advancing on arrival
 and ending after the last. Remaining stops have numbered map pins, and the way between them is drawn as
 planned, walks along the walking map, once worked out behind the current leg; the tracker and arrow show
-“Stop 2 of 4: …”. `Navigate(owner, map, x, y, title)` is the one-stop form. Both return a boolean;
+“Stop 2 of 4: …”. `Navigate(owner, map, x, y, title, kind)` is the one-stop form. Both return a boolean;
 invalid input, combat or disabled Journeys return `false` without replacing guidance. Titles are optional.
+A stop's optional `kind` says what stands there: `"pickup"`, `"turnin"`, `"objective"`, `"trainer"`,
+`"innkeeper"`, `"flightmaster"`, `"battlemaster"`, `"dungeon"`, `"boat"`, `"zeppelin"`, `"lift"`, `"tram"` or
+`"portal"`. Its map pin then shows the game's own mark for it (a quest's “!” or “?”, say) in the stop's gold ring,
+and the minimap circles the spot rather than covering the game's icon there. Any other kind is ignored, as is a
+kind whose art the client lacks: the stop keeps the plain pin.
 `CurrentStop(owner)` returns the current 1-based stop or `nil`; `Cancel(owner)` returns `true` only when it
 clears that owner's whole route. Use your addon's name as `owner`; starting another journey replaces ownership.
 `Active()` says whether any journey is guiding, yours or another addon's. `Ended(owner)` says why that owner's
