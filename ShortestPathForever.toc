@@ -30,7 +30,9 @@ MinimapPins.lua
 Tracker.lua
 Arrow.lua
 Compass.lua
+PathGrid.lua
 Path.lua
+PathJobs.lua
 JourneySteps.lua
 Journey.lua
 JourneyInput.lua

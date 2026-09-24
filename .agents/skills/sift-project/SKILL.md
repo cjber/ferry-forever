@@ -68,7 +68,7 @@ Things reached indirectly. The dead-code lens must treat these as referenced.
 - ObjectiveTracker module methods (Tracker.lua) are called by `ObjectiveTrackerManager`.
 - `ns.X` / `function ns.X` exports are the cross-file API; a symbol defined in one file is used in another
   (and by specs via `loadfile(...)("ShortestPathForever", ns)`). Search every `.lua`, not just the file.
-- `C_AddOns.LoadAddOn("ShortestPathForever_Nav" .. map)` (Path.lua) loads the walking maps by built name.
+- `C_AddOns.LoadAddOn("ShortestPathForever_Nav" .. map)` (PathGrid.lua) loads the walking maps by built name.
 - SavedVariables `ShortestPathForeverDB` / `ShortestPathForeverCharDB`: keys (settings in Core.lua
   `DEFAULTS`, `anchors`, debug trace) persist in players' saved files.
 - Sync wire format (Sync.lua, prefix `ShortPath1`): other players run older versions; message fields are

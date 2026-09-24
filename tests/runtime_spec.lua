@@ -78,7 +78,9 @@ env.C_AddOns.LoadAddOn = function()
 	loaded = loaded + 1
 	assert(loadfile("tools/load_nav.lua"))(0, nil, env)
 end
-setfenv(assert(loadfile("Path.lua")), env)("ShortestPathForever", ns)
+for _, file in ipairs({ "PathGrid.lua", "Path.lua", "PathJobs.lua" }) do
+	setfenv(assert(loadfile(file)), env)("ShortestPathForever", ns)
+end
 local path = ns.Path
 path.after = function(fn)
 	nextFrame = fn
