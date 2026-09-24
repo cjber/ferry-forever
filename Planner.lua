@@ -244,8 +244,9 @@ function Planner.Places(options)
 			add("portal", id * 2, portal.to, Planner.PortalDestination(portal))
 		end
 	end
-	for id, teleport in ipairs(options.teleports or {}) do
-		add("teleport", id, teleport)
+	-- Keyed by spell, so a fixed destination finds its baked walks.
+	for _, teleport in ipairs(options.teleports or {}) do
+		add("teleport", teleport.spell, teleport)
 	end
 	return places
 end
@@ -483,8 +484,8 @@ function Planner.Plan(options)
 	-- Teleports leave from where you stand, once each is ready: its cooldown is a wait, like a boat's.
 	local ready = options.teleportReady or {}
 	for id, teleport in ipairs(options.teleports or {}) do
-		if ready[id] and teleports[id] then
-			Edge(start, teleports[id], {
+		if ready[id] and teleports[teleport.spell] then
+			Edge(start, teleports[teleport.spell], {
 				mode = "teleport",
 				teleport = teleport,
 				ready = ready[id],
