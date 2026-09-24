@@ -92,7 +92,11 @@ planned, walks along the walking map, once worked out behind the current leg; th
 invalid input, combat or disabled Journeys return `false` without replacing guidance. Titles are optional.
 `CurrentStop(owner)` returns the current 1-based stop or `nil`; `Cancel(owner)` returns `true` only when it
 clears that owner's whole route. Use your addon's name as `owner`; starting another journey replaces ownership.
-`Active()` says whether any journey is guiding, yours or another addon's.
+`Active()` says whether any journey is guiding, yours or another addon's. `Ended(owner)` says why that owner's
+last journey ended: `"arrived"` after its last stop, `"cleared"` by the player (or by turning Journeys off),
+`"replaced"` by another addon's or the player's journey, or `"cancelled"` by the owner's own `Cancel`; its second
+return is the `GetTime()` it ended. It is `nil` while the journey runs, before the owner's first, and after a
+reload. Poll it: Shortest Path fires no event of its own when a journey ends.
 
 ## Development
 

@@ -59,15 +59,20 @@ end
 ---@type {owner: string, points: SPFPoint[], index: integer}?
 local route
 local MAX_STOPS = 64
+-- Why each owner's last journey ended, and when (GetTime); an owner's new journey forgets it.
+---@type table<string, {reason: SPFAPIEnded, at: number}>
+local ended = {}
 
 ---@param point SPFPoint?
-function ns.JourneyChanged(point)
+---@param reason? "arrived"|"cleared" -- why a nil point ended the journey
+function ns.JourneyChanged(point, reason)
 	if not route then
 		return
 	end
 	if point and point == route.points[route.index + 1] then
 		route.index = route.index + 1
 	elseif not point or point ~= route.points[route.index] then
+		ended[route.owner] = { reason = point and "replaced" or reason or "cleared", at = GetTime() }
 		route = nil
 	else
 		return
@@ -298,6 +303,10 @@ function API.NavigateRoute(owner, stops)
 		points[index] = point
 	end
 	-- Validate and copy every stop before replacing guidance. Caller mutations cannot redirect a journey.
+	if route and route.owner ~= owner then
+		ended[route.owner] = { reason = "replaced", at = GetTime() }
+	end
+	ended[owner] = nil
 	route = { owner = owner, points = points, index = 1 }
 	ns.ItineraryChanged()
 	return ns.StartJourney(points[1])
@@ -316,7 +325,15 @@ function API.Cancel(owner)
 		return false
 	end
 	ns.ClearJourney()
+	ended[owner] = { reason = "cancelled", at = GetTime() }
 	return true
+end
+
+function API.Ended(owner)
+	local entry = Owner(owner) and ended[owner]
+	if entry then
+		return entry.reason, entry.at
+	end
 end
 
 -- Anyone's journey counts, the player's own included, so a caller can ask before replacing it.

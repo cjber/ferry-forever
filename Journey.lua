@@ -334,7 +334,8 @@ local function GuideCast(leg)
 	end
 end
 
-function ns.ClearJourney()
+---@param reason "arrived"|"cleared"
+local function EndJourney(reason)
 	CancelPaths()
 	costsWaiting = nil
 	settleRound, costError, goalError = 0, nil, nil
@@ -351,7 +352,7 @@ function ns.ClearJourney()
 	StopGuide()
 	goal, result, nextPoint = nil, nil, nil
 	if ns.JourneyChanged then
-		ns.JourneyChanged(nil)
+		ns.JourneyChanged(nil, reason)
 	end
 	progress.index, progress.departed = 1, false
 	driver:Hide()
@@ -359,12 +360,17 @@ function ns.ClearJourney()
 	RefreshTracker()
 end
 
+-- Menus and settings pass their own arguments to callbacks, so the player's clear takes none.
+function ns.ClearJourney()
+	EndJourney("cleared")
+end
+
 -- Completion may run inside a planner callback. Start at most one next stop on the driver's next step,
 -- after that callback unwinds; coincident stops must never recurse through the whole route in one frame.
 local function Arrive()
 	nextPoint = ns.NextJourneyStop and ns.NextJourneyStop(goal)
 	if not nextPoint then
-		ns.ClearJourney()
+		EndJourney("arrived")
 	end
 end
 
