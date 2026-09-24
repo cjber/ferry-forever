@@ -65,7 +65,6 @@ function GameTooltip_AddColoredDoubleLine(tooltip, left, right, leftColor, right
 
 ---@class SPFMapCanvas : Frame
 ---@field dataProviders table<SPFMapProvider, boolean>
----@field ScrollContainer Frame
 ---@field AddDataProvider fun(self: SPFMapCanvas, provider: SPFMapProvider)
 ---@field RemoveDataProvider fun(self: SPFMapCanvas, provider: SPFMapProvider)
 ---@field GetMapID fun(self: SPFMapCanvas): number
@@ -80,12 +79,6 @@ function GameTooltip_AddColoredDoubleLine(tooltip, left, right, leftColor, right
 ---@field EnumeratePinsByTemplate fun(self: SPFMapCanvas, template: string): fun(): SPFMapPin
 ---@field AddCanvasClickHandler fun(self: SPFMapCanvas, handler: fun(map: SPFMapCanvas, button: string): boolean)
 ---@field AddGlobalPinMouseActionHandler fun(self: SPFMapCanvas, handler: fun(map: SPFMapCanvas, action: number, button: string): boolean)
----@field GetPinFrameLevelsManager fun(self: SPFMapCanvas): SPFFrameLevels
----@field IsMaxZoom fun(self: SPFMapCanvas): boolean
----@field SetAreaLabel fun(self: SPFMapCanvas, labelType: number, name: string, description?: string)
----@class SPFFrameLevels
----@field AddFrameLevel fun(self: SPFFrameLevels, name: string)
----@field InsertFrameLevelAbove fun(self: SPFFrameLevels, name: string, relative: string)
 ---@type SPFMapCanvas
 WorldMapFrame = nil
 ---@type {MouseAction: {Click: number}}
@@ -103,9 +96,6 @@ POIButtonUtil = nil
 ---@field SetPosition fun(self: SPFMapPin, x: number, y: number)
 ---@field UseFrameLevelType fun(self: SPFMapPin, frameLevelType: string)
 ---@field SetScalingLimits fun(self: SPFMapPin, style: number, minScale: number, maxScale: number)
----@field SetAlphaLimits fun(self: SPFMapPin, style: number, minAlpha: number, maxAlpha: number)
----@field SetFixedFrameLevel fun(self: SPFMapPin, level: number)
----@field GetPosition fun(self: SPFMapPin): number, number
 ---@field SetNumLoops fun(self: SPFMapPin, loops: number)
 ---@field PlayAt fun(self: SPFMapPin, x: number, y: number)
 ---@type SPFMapPin
@@ -113,8 +103,6 @@ MapCanvasPinMixin = nil
 
 ---@class SPFMapProvider
 ---@field GetMap fun(self: SPFMapProvider): SPFMapCanvas
----@field OnAdded fun(self: SPFMapProvider, map: SPFMapCanvas)
----@field OnRemoved fun(self: SPFMapProvider, map: SPFMapCanvas)
 ---@field RefreshAllData fun(self: SPFMapProvider, fromOnShow?: boolean)
 ---@field RemoveAllData fun(self: SPFMapProvider)
 ---@type SPFMapProvider

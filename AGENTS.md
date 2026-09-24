@@ -16,7 +16,8 @@ luajit -joff tests/journey_bench.lua   # after touching the planner: frames stay
 python3 .sift/gate.py --base origin/main && python3 .sift/agents.py check
 ```
 
-The same gate CI runs, plus actionlint, zizmor and gitleaks on the workflows and history.
+The same gate CI runs, plus shellcheck and shfmt on `tools/`, actionlint and zizmor on the workflows, gitleaks on
+the history, and the pinned sift checks.
 
 ## Layout
 
