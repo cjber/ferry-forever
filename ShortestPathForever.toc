@@ -33,9 +33,11 @@ Tracker.lua
 Arrow.lua
 Compass.lua
 Path.lua
+JourneySteps.lua
 Journey.lua
 JourneyInput.lua
 Route.lua
 Alert.lua
 Settings.lua
 API.lua
+Itinerary.lua

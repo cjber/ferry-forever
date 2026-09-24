@@ -5,19 +5,10 @@ local ns = select(2, ...)
 -- with the boats' live waits. Search candidates stay private until costs and geometry settle, with a grace
 -- period for longer searches. The tracker owns the list; closing the map leaves the journey running.
 local REPLAN_EVERY, REFRESH_EVERY = 5, 60
+-- The frames around a timed replan, which Itinerary.lua leaves to it.
+local REPLAN_MARGIN = 0.5
 local DRAW_EVERY, SEARCH_GRACE = 0.5, 3
 local PROBE_BUDGET = 60 -- ms before switching from candidate costs to shared endpoint searches
-local SCHEDULED = { boat = true, zeppelin = true, lift = true, tram = true }
-local VERB = {
-	walk = "Walk to",
-	flight = "Fly to",
-	boat = "Boat to",
-	zeppelin = "Zeppelin to",
-	lift = "Lift to",
-	tram = "Tram to",
-	portal = "Portal to",
-	passage = "Go through to",
-}
 -- A teleport step, by the item's or spell's own name in the game's language.
 local USE_ITEM, CAST_SPELL = "Use %s", "Cast %s"
 
@@ -30,6 +21,7 @@ local WALK_CACHE_LIMIT = 64
 local progress = { index = 1 }
 ---@class SPFJourneyDriver : Frame
 ---@field elapsed number
+---@field replannedAt? number GetTime of the last timed replan
 ---@field progressElapsed number
 ---@field riding? number
 ---@field flying? boolean
@@ -94,23 +86,6 @@ local function CancelPaths()
 	pathJobs, walkPending, pendingWalks, pendingCosts = {}, {}, 0, 0
 end
 
--- A place with no kind is the destination point as clicked or picked from a quest.
-local function NodeLabel(node, mode)
-	if node.kind == "start" then
-		return "your position"
-	elseif node.kind == "dock" then
-		return (mode == "boat" or mode == "zeppelin") and ns.DockLabel(node.id) or ns.DockTitle(node.id)
-	elseif node.kind == "taxi" then
-		return ns.TaxiNodes[node.id].name
-	elseif node.kind == "portal" then
-		return node.label
-	elseif node.kind == "teleport" or node.kind == "goal" or node.kind == nil then
-		local location = not node.label and ns.Locate(node)
-		return node.label or location and location.zone or UNKNOWN
-	end
-	error("unknown journey node kind " .. tostring(node.kind))
-end
-
 -- Whether walks may cross water, and the spell to cast first when none is up.
 local function WaterWalking()
 	for _, id in ipairs(WATER_AURAS) do
@@ -130,16 +105,6 @@ end
 
 -- Read-only capability query shared by the public estimator and the guided planner.
 ns.JourneyWaterWalking = WaterWalking
-
--- A transport nobody has timed yet waits half its round trip on average; "about" marks that guess.
-local function LegTime(leg)
-	local text = ns.FormatCountdown(leg.arrive - leg.depart)
-	if leg.wait and leg.wait > 0 then
-		local guess = leg.estimated and SCHEDULED[leg.mode] and "about " or ""
-		text = "wait " .. guess .. ns.FormatCountdown(leg.wait) .. " · " .. text
-	end
-	return text
-end
 
 -- A missing/secret sample is not evidence that the journey is unreachable. Planning, Guide and lines share this gate.
 function ns.JourneyPosition()
@@ -497,7 +462,7 @@ function ns.JourneyInfo()
 	if not goal then
 		return nil
 	end
-	local title = goal.routeTitle or ("Journey to " .. NodeLabel(goal))
+	local title = goal.routeTitle or ("Journey to " .. ns.PlaceLabel(goal))
 	local rows = {}
 	local loading = search and search.initial or false
 	if not result and loading then
@@ -514,7 +479,7 @@ function ns.JourneyInfo()
 					or UNKNOWN
 				text = string.format("%d. " .. (teleport.item and USE_ITEM or CAST_SPELL), index, name)
 			else
-				text = string.format("%d. %s %s", index, VERB[leg.mode], NodeLabel(leg.to, leg.mode))
+				text = string.format("%d. %s %s", index, ns.LegVerb(leg), ns.LegLabel(leg))
 			end
 			if leg.mode == "walk" and leg.to.undiscovered then
 				text = text .. " (new flight path)"
@@ -527,7 +492,7 @@ function ns.JourneyInfo()
 			end
 			rows[#rows + 1] = {
 				key = index,
-				text = loading and text or text .. "   " .. LegTime(leg),
+				text = loading and text or text .. "   " .. ns.LegTime(leg),
 				current = index == progress.index,
 			}
 		end
@@ -1374,6 +1339,13 @@ local function RefreshCosts(includeGoal, forced)
 		consider(true)
 	end
 end
+-- The timed replan in Update plans in the frame; Itinerary.lua keeps its own planning and drawing off that frame. A
+-- frame's GetTime is fixed, and the margin covers the frame the replan will take whichever handler runs first.
+---@return boolean
+function ns.JourneyReplanning()
+	return driver ~= nil and (driver.elapsed >= REPLAN_EVERY - REPLAN_MARGIN or driver.replannedAt == GetTime())
+end
+
 ---@param self SPFJourneyDriver
 ---@param elapsed number
 -- sift: long-function - one throttled frame step; keeping its gates together preserves the search/draw cadence
@@ -1441,7 +1413,7 @@ local function Update(self, elapsed)
 	local changedRide = riding ~= self.riding or flying ~= self.flying
 	self.riding, self.flying = riding, flying
 	if self.elapsed >= REPLAN_EVERY or changedRide then
-		self.elapsed = 0
+		self.elapsed, self.replannedAt = 0, GetTime()
 		local mode = WaterWalking()
 		if mode ~= waterMode then
 			waterMode, walkCache, walkOrder, startCosts, goalCosts = mode, {}, {}, {}, {}

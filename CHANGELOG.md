@@ -25,9 +25,14 @@ coloured lines.
 
 **Other addons can offer Shortest Path guidance.** The version 1 public API estimates travel time and starts
 journeys through one or several stops in order. Numbered map pins, drawn as the Adventure Guide's gold-numbered
-rings that glow when you hover them, and dotted previews show the remaining stops,
-while guidance advances on arrival and shows your progress. An addon can check the current stop and cancel
-only its own whole route, preserving a journey you start yourself.
+rings that glow when you hover them, mark the remaining stops, and the way on to each is drawn as you will
+travel it: walks follow the paths round hills like the current leg, and boats, zeppelins and flights show in
+their colours, never a line across the sea. A dotted straight line stands in only until that stretch is worked
+out, a moment after the current leg's.
+Guidance advances on arrival and shows your progress. An addon can check the current stop and cancel
+only its own whole route, preserving a journey you start yourself. It can also show how a trip goes, such as
+the boat, the flight and a new flight path to pick up on the way, say why no time is shown (in combat, or no
+way there yet), and warn you before replacing a journey you are already on.
 
 Docks, lifts, tram stations and portals now show on the minimap with the world map's icons, and hovering one
 gives the same departures tooltip. They vanish at the minimap's rim like the game's own tracking icons, and
@@ -55,6 +60,9 @@ spinner turns, the route pulses gently on the world map and minimap, becoming st
 Later checks happen quietly without pulsing routes or changing “finding” messages. Journey searches
 retain less memory, clearing a journey frees its caches, and `/path perf` now collects unused memory
 before reporting what remains.
+
+The Journey header's time is the sum of the steps below it. It used to count down to the planned arrival, so
+standing still it slipped a few seconds below the steps and jumped back every five seconds.
 
 ## [1.1.0] - 2026-09-23
 

@@ -180,6 +180,7 @@ ns.SetJourneyRoute = function(_, route)
 end
 load("Model.lua")
 load("Planner.lua")
+load("JourneySteps.lua")
 load("Journey.lua")
 load("JourneyInput.lua")
 

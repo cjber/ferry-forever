@@ -1,6 +1,7 @@
 local driver = assert(loadfile("tests/journey_driver.lua"))()
 local ns, env, checks = driver.ns, driver.env, 0
 driver.load("API.lua")
+driver.load("Itinerary.lua")
 local API = env.ShortestPathForever.API
 local function equal(actual, expected, label)
 	checks = checks + 1
@@ -10,18 +11,64 @@ local function near(actual, expected, label)
 	checks = checks + 1
 	assert(type(actual) == "number" and math.abs(actual - expected) < 1e-6, label)
 end
+local function why(expected, label, value, reason)
+	equal(value, nil, label)
+	equal(reason, expected, label .. " reason")
+end
+-- Detail agrees with Estimate, and its legs add up to the whole journey, waits included.
+local function detail(label, ...)
+	local seconds, found = API.Estimate(...), API.EstimateDetail(...)
+	near(found.seconds, seconds, label .. " detail seconds")
+	local sum = 0
+	for _, leg in ipairs(found.legs) do
+		sum = sum + leg.seconds
+	end
+	near(sum, seconds, label .. " legs add up")
+	return found
+end
 
 equal(API.version, 1, "version")
 near(API.Estimate(1, 0.5, 0.5, 1, 0.5014, 0.5), 10, "world conversion and milliseconds to seconds")
-equal(API.Estimate(1, 0.5, 0.5, 2, 0.5, 0.5), nil, "unconnected continents")
+local walk = detail("walk", 1, 0.5, 0.5, 1, 0.5014, 0.5)
+equal(#walk.legs, 1, "one walking leg")
+equal(walk.legs[1].mode, "walk", "walking mode")
+equal(walk.legs[1].to, "Test", "leg named as the tracker names it")
+equal(walk.legs[1].wait, nil, "no wait on foot")
+equal(walk.legs[1].newFlightPath, nil, "no flight path to learn")
+walk.legs[1].seconds, walk.legs[1].to, walk.legs[2] = 0, "Changed by caller", {}
+local again = API.EstimateDetail(1, 0.5, 0.5, 1, 0.5014, 0.5)
+near(again.legs[1].seconds, 10, "caller edits leave the cached detail intact")
+equal(again.legs[1].to, "Test", "caller edits leave labels intact")
+equal(#again.legs, 1, "caller edits leave the leg list intact")
+equal(again.legs == walk.legs, false, "every call returns new tables")
+why("unreachable", "no detail across unconnected continents", API.EstimateDetail(1, 0.5, 0.5, 2, 0.5, 0.5))
+why("invalid", "no detail for a bad coordinate", API.EstimateDetail(1, 2, 0.5, 1, 0.5, 0.5))
+why("unreachable", "unconnected continents", API.Estimate(1, 0.5, 0.5, 2, 0.5, 0.5))
+why("unreachable", "cached unconnected continents", API.Estimate(1, 0.5, 0.5, 2, 0.5, 0.5))
+-- The itinerary keeps its own hop legs; a long route's hops never push the API's estimates out of the cache.
+do
+	local plan, plans = ns.Planner.Plan, 0
+	ns.Planner.Plan = function(options)
+		plans = plans + 1
+		return plan(options)
+	end
+	for hop = 1, 300 do
+		equal(ns.EstimateLegs({ map = 1, x = hop, y = 0 }, { map = 1, x = hop + 20, y = 0 }) ~= nil, true, "hop legs")
+	end
+	equal(plans, 300, "every hop is planned")
+	near(API.Estimate(1, 0.5, 0.5, 1, 0.5014, 0.5), 10, "estimate after a long route's hops")
+	equal(plans, 300, "the API's cached estimate survives the hops")
+	ns.Planner.Plan = plan
+end
 for _, value in ipairs({ -1, 1.01, math.huge, 0 / 0, "0.5", false, driver.secret }) do
-	equal(API.Estimate(1, value, 0.5, 1, 0.5, 0.5), nil, "bad coordinate")
+	why("invalid", "bad coordinate", API.Estimate(1, value, 0.5, 1, 0.5, 0.5))
 	equal(API.Navigate("AGF", 1, value, 0.5), false, "bad navigation coordinate")
 end
-equal(API.Estimate(0, 0.5, 0.5, 1, 0.5, 0.5), nil, "invalid UI map")
+why("invalid", "invalid UI map", API.Estimate(0, 0.5, 0.5, 1, 0.5, 0.5))
 equal(API.Navigate("", 1, 0.6, 0.5), false, "empty owner")
 equal(API.Navigate(" ", 1, 0.6, 0.5), false, "blank owner")
 equal(API.Navigate("AGF", 1, 0.6, 0.5, {}), false, "invalid title")
+equal(API.Active(), false, "nothing active")
 equal(API.Cancel("AGF"), false, "no journey")
 equal(API.Navigate("AGF", 1, 0.6, 0.5, "Quest giver"), true, "start guidance")
 equal(ns.IsJourneyGuided(), true, "arrow enabled")
@@ -34,16 +81,40 @@ equal(driver.waypoint(), waypoint, "estimate leaves waypoint untouched")
 local _, _, after, afterIndex = ns.JourneyInfo()
 equal(after, plan, "estimate leaves plan untouched")
 equal(afterIndex, index, "estimate leaves progress untouched")
+-- Standing still, the header total stays the sum of the steps shown, before and after the timed retime.
+local function steps(legs, from)
+	local sum = 0
+	for legIndex = from, #legs do
+		local leg = legs[legIndex]
+		sum = sum + math.ceil((leg.arrive - leg.depart) / 1000) + math.ceil((leg.wait or 0) / 1000)
+	end
+	return sum * 1000
+end
+local total = ns.JourneyTime(plan.legs, index)
+equal(total, steps(plan.legs, index), "header adds up the steps")
+for _, seconds in ipairs({ 2, 4 }) do
+	driver.update(seconds)
+	local _, _, still, stillIndex = ns.JourneyInfo()
+	equal(
+		ns.JourneyTime(still.legs, stillIndex),
+		steps(still.legs, stillIndex),
+		"header matches steps after " .. seconds
+	)
+	equal(ns.JourneyTime(still.legs, stillIndex), total, "standing still keeps the total after " .. seconds)
+end
 equal(API.Cancel("OtherAddon"), false, "foreign cancellation")
 equal(API.Navigate("OtherAddon", 1, 0.7, 0.5), true, "ownership replaced")
+equal(API.Active(), true, "another addon's journey is active")
 equal(API.Cancel("AGF"), false, "old owner cannot cancel")
 equal(API.Cancel("OtherAddon"), true, "current owner cancels")
+equal(API.Active(), false, "cancelled journey is not active")
 equal(ns.HasJourney(), false, "journey cleared")
 equal(API.Cancel("OtherAddon"), false, "cancel is idempotent")
 API.Navigate("AGF", 1, 0.6, 0.5)
 driver.begin({ map = 1, x = 0, y = 0 }, { map = 1, x = 2000, y = 0 })
 equal(API.Cancel("AGF"), false, "manual journey revokes ownership")
 equal(ns.HasJourney(), true, "manual journey preserved")
+equal(API.Active(), true, "the player's own journey is active")
 ns.db.journey = false
 equal(API.Navigate("AGF", 1, 0.6, 0.5), false, "journey setting respected")
 near(API.Estimate(1, 0.5, 0.5, 1, 0.5014, 0.5), 10, "estimate independent of journey setting")
@@ -52,16 +123,21 @@ env.InCombatLockdown = function()
 	return true
 end
 equal(API.Navigate("AGF", 1, 0.6, 0.5), false, "combat navigation deferred to caller")
-equal(API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5), nil, "no combat search")
+why("combat", "no combat search", API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5))
+why("combat", "no combat detail", API.EstimateDetail(1, 0.5, 0.5, 1, 0.6, 0.5))
 env.InCombatLockdown = function()
 	return false
 end
+local db = ns.db
+ns.db = nil
+why("invalid", "not loaded yet", API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5))
+ns.db = db
 local project = env.C_Map.GetWorldPosFromMapPos
 env.C_Map.GetWorldPosFromMapPos = function()
 	return nil
 end
 equal(API.Navigate("AGF", 1, 0.6, 0.5), false, "unprojectable destination")
-equal(API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5), nil, "unprojectable estimate")
+why("invalid", "unprojectable estimate", API.Estimate(1, 0.5, 0.5, 1, 0.6, 0.5))
 env.C_Map.GetWorldPosFromMapPos = project
 ns.ClearJourney()
 
@@ -241,12 +317,14 @@ end
 env.C_Map.GetWorldPosFromMapPos = function(map, point)
 	return project(map == 2 and 0 or map, point)
 end
-local function estimate(fromID, toID)
+-- offset moves the start that many yards along both axes from the first flight master.
+local function estimate(fromID, toID, call, offset)
 	local a, b = ns.TaxiNodes[fromID], ns.TaxiNodes[toID]
-	return API.Estimate(
+	offset = offset or 0
+	return (call or API.Estimate)(
 		a.map == 0 and 2 or a.map,
-		0.5 - a.y / 50000,
-		0.5 - a.x / 50000,
+		0.5 - (a.y + offset) / 50000,
+		0.5 - (a.x + offset) / 50000,
 		b.map == 0 and 2 or b.map,
 		0.5 - b.y / 50000,
 		0.5 - b.x / 50000
@@ -282,6 +360,26 @@ for _ = 1, 250 do
 	estimate(26, 27)
 end
 local short = (os.clock() - start) * 4
+for _, pair in ipairs({ { 26, 39 }, { 26, 67 }, { 26, 27 } }) do
+	detail(
+		"flight " .. pair[1] .. "-" .. pair[2],
+		estimate(pair[1], pair[2], function(...)
+			return ...
+		end)
+	)
+end
+local boat = estimate(26, 67, API.EstimateDetail).legs[2]
+equal(boat.mode, "boat", "Auberdine boat to Menethil")
+equal(boat.wait ~= nil and boat.wait >= 60, true, "an untimed boat's average wait is reported in seconds")
+equal(estimate(26, 67, API.EstimateDetail).legs[4].wait, nil, "flight boarding is too short to report")
+ns.known[26] = nil
+local learn = estimate(26, 39, API.EstimateDetail, 300)
+for position, leg in ipairs(learn.legs) do
+	equal(leg.newFlightPath, position == 1 or nil, "only the walk to the unknown flight master learns it")
+end
+equal(learn.legs[1].mode, "walk", "walk to Auberdine's flight master")
+equal(learn.legs[2].mode, "flight", "then fly from it")
+ns.known[26] = true
 print(
 	string.format(
 		"api_spec: %d checks passed; Estimate cached short %.3f ms, cross-continent cold %.3f / cached %.3f ms",

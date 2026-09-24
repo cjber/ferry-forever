@@ -14,6 +14,9 @@ local DOT_TEXTURE = "Interface\\AddOns\\ShortestPathForever\\media\\Dot"
 local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
 local GOAL_ATLAS, GOAL_SCALE = "Waypoint-MapPin-Tracked", 0.8
 local STOP_ATLAS, STOP_SIZE, MAX_NUMERAL = "adventureguide-ring", 26, 9
+-- Everything past the stop being guided to recedes, so the way ahead reads first. Later lines keep their colour
+-- but drop well back against parchment; later stop rings stay a little stronger so their numbers remain legible.
+local LATER_ALPHA, LATER_STOP_ALPHA = 0.4, 0.55
 local COLORS = {
 	walk = NORMAL_FONT_COLOR,
 	flight = CreateColor(0.2, 1, 0.35),
@@ -140,7 +143,7 @@ local function Stroke(owner, x1, y1, x2, y2, color, scale, dot)
 		owner.underlines[owner.used] = underline
 	end
 	Paint(owner, owner.used, dot or false)
-	local alpha = owner.strokeAlpha or 1
+	local alpha = (owner.strokeAlpha or 1) * (owner.pathAlpha or 1)
 	if owner.fadeX then
 		local dx = ((x1 + x2) / 2 - owner.fadeX) * owner.fadeScaleX
 		local dy = ((y1 + y2) / 2 - owner.fadeY) * owner.fadeScaleY
@@ -276,6 +279,7 @@ end
 ---@field dot number
 ---@field spacing number
 ---@field strokeLayer? SPFStrokeLayer
+---@field pathAlpha? number
 ---@field UpdateAlpha? fun(self: SPFRoutePin)
 ShortestPathForeverRoutePinMixin = CreateFromMixins(MapCanvasPinMixin)
 
@@ -439,9 +443,12 @@ function ShortestPathForeverRoutePinMixin:Draw()
 	if self.hits then
 		self.hits = {}
 	end
-	for _, path in ipairs(self.paths) do
+	-- The journey's own paths come first; the later hops Itinerary.lua adds after them recede.
+	local current = self.paths == worldPaths and #paths or math.huge
+	for pathIndex, path in ipairs(self.paths) do
 		local color = COLORS[path.mode]
 		self.drawingRoute = path.route
+		self.pathAlpha = pathIndex > current and LATER_ALPHA or nil
 		self.walked = 0
 		local previous, px, py
 		local crossing = OverviewCrossing(self, path, color)
@@ -452,7 +459,11 @@ function ShortestPathForeverRoutePinMixin:Draw()
 				self:Mark(x, y, color)
 			elseif previous then
 				if path.preview then
-					if px and x then
+					-- A hop still planning has no geometry to draw; a straight line would cross the sea.
+					if previous.map ~= point.map then
+						self:Mark(px, py, color)
+						self:Mark(x, y, color)
+					elseif px and x then
 						self:Line(px, py, x, y, color, true)
 					end
 				elseif previous.jump or previous.map ~= point.map then
@@ -469,6 +480,7 @@ function ShortestPathForeverRoutePinMixin:Draw()
 			previous, px, py = point, x, y
 		end
 	end
+	self.pathAlpha = nil
 	HideUnused(self)
 	Pulse(self)
 	if self.hits then
@@ -545,8 +557,9 @@ end
 
 -- A lone destination wears the waypoint pin; a numbered stop wears the ring the Adventure Guide draws for the same
 -- step. Blizzard's numerals (centred in their atlas boxes, unlike font digits) stop at 9; later stops use the font.
-function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, number, title)
+function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, number, title, later)
 	self:SetPosition(x, y)
+	self:SetAlpha(later and LATER_STOP_ALPHA or 1)
 	self.stopTitle = title
 	local numeral = number and number <= MAX_NUMERAL
 	self.Disc:SetShown(number ~= nil)
@@ -732,7 +745,7 @@ function ProviderMixin:RefreshAllData()
 		local point = stops and stops[index] or goal
 		local x, y = MapPosition(point, mapID)
 		if x and x >= 0 and x <= 1 and y >= 0 and y <= 1 then
-			map:AcquirePin(GOAL_TEMPLATE, x, y, stops and index, point.routeTitle)
+			map:AcquirePin(GOAL_TEMPLATE, x, y, stops and index, point.routeTitle, stops and index > (stopIndex or 1))
 		end
 	end
 end
@@ -889,6 +902,31 @@ local function UpdateMinimap(self, elapsed)
 	end
 end
 
+-- The world map adds the later hops as Itinerary.lua plans them; the minimap guides along the current leg only.
+local function WorldPaths()
+	worldPaths = paths
+	if stops then
+		worldPaths = {}
+		for _, path in ipairs(paths) do
+			worldPaths[#worldPaths + 1] = path
+		end
+		for _, path in ipairs(ns.JourneyPreview()) do
+			worldPaths[#worldPaths + 1] = path
+		end
+	end
+end
+
+-- A later hop, or one of its walks, finished planning; only the world map draws the itinerary.
+function ns.RefreshJourneyPreview()
+	if not stops then
+		return
+	end
+	WorldPaths()
+	if provider and WorldMapFrame:IsShown() then
+		provider:RefreshAllData()
+	end
+end
+
 ---@param destination SPFPoint?
 ---@param route SPFPlan?
 function ns.SetJourneyRoute(destination, route)
@@ -905,19 +943,7 @@ function ns.SetJourneyRoute(destination, route)
 	if destination and ns.JourneyStops then
 		stops, stopIndex = ns.JourneyStops()
 	end
-	worldPaths = paths
-	if stops then
-		worldPaths = {}
-		for _, path in ipairs(paths) do
-			worldPaths[#worldPaths + 1] = path
-		end
-		-- Later legs are only an itinerary preview. Search the current leg and keep its minimap guidance exact.
-		local points = {}
-		for index = stopIndex, #stops do
-			points[#points + 1] = stops[index]
-		end
-		worldPaths[#worldPaths + 1] = { mode = "walk", points = points, preview = true }
-	end
+	WorldPaths()
 	-- The map refreshes every provider when it opens, so a closed one is left until then.
 	if provider and (WorldMapFrame:IsShown() or not destination) then
 		provider:RefreshAllData()
