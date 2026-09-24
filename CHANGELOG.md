@@ -74,6 +74,8 @@ Walks in Stormwind no longer loop round the city through the canals. The game ne
 the walk started from the lowest floor under you, often the canal bed below a street. A walk from somewhere
 with several levels, or to a map click or stop there, now starts from whichever one is quickest. Zeppelin
 walks end on the tower's platform, not the ground below it, at Grom'gol, Tirisfal and the tower to Zephras.
+A walk no longer runs out and back along the same street, as one from Stormwind's flight master to the Mage
+Quarter did past the Trade District.
 
 ## [1.1.0] - 2026-09-23
 
