@@ -75,6 +75,8 @@ read_globals = {
 	"UnitName",
 	"UnitOnTaxi",
 	"UnitPosition",
+	"UnitIsGhost",
+	"C_DeathInfo",
 	"UNKNOWN",
 	"WorldMapFrame",
 	"Minimap",

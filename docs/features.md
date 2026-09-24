@@ -40,6 +40,13 @@ The detail behind each feature in the [README](../README.md).
   two turns, the next stop and your destination. Turn it on in `/path`.
   ![The optional compass strip with the next turns and destination](screenshots/compass.png)
 
+- **Back to your corpse.** Release as a ghost and a red-orange dotted path, the colour of your corpse's tombstone,
+  walks you back to it on the world map and minimap, round walls like any walk. Guide leads the way and the tracker
+  reads *Return to your corpse* with the time and distance left. Your journey, or one another addon asks for while
+  you are a ghost, waits and plans again from wherever you come back to life: at your corpse, at the spirit healer
+  or from another player's resurrection. A corpse in another world map, such as a dungeon, gets no path. *Show the
+  way back to your corpse* in `/path` turns it off.
+
 - **Docks on the world map.** Each pier gets the stock ferry icon and each zeppelin tower a matching
   zeppelin, on its zone and continent map. Hover one to see where each boat goes next, when it arrives and
   when it leaves; the docks it sails to light up. Docks too close to tell apart at the current zoom share

@@ -27,6 +27,7 @@
 ---@field routeTitle? string
 ---@field look? SPFAPIStopKind -- what the caller said stands there (API.lua)
 ---@field questID? number
+---@field corpse? boolean -- where your corpse lies (Corpse.lua)
 ---@class SPFPlace : SPFPoint
 ---@field kind SPFKind
 ---@field id? number
@@ -129,6 +130,7 @@
 ---@field share? boolean
 ---@field guideStops? boolean
 ---@field compass? boolean
+---@field corpse? boolean
 ---@field debug? boolean
 ---@field anchors table<string, table<number, SPFAnchor>>
 ---@field trace? (number|string)[][]
@@ -170,6 +172,7 @@ ShortestPathForeverPathData = nil
 ---@field points SPFWalkPoints
 ---@field preview? boolean
 ---@field route? number
+---@field color? ColorMixin
 ---@class SPFLeg
 ---@field mode SPFMode
 ---@field from SPFPlace
@@ -190,6 +193,7 @@ ShortestPathForeverPathData = nil
 ---@field walkError? string
 ---@field wet? number
 ---@field measured? boolean
+---@field color? ColorMixin -- drawn in this colour rather than its mode's
 ---@class SPFPlan
 ---@field arrive number
 ---@field legs SPFLeg[]
