@@ -8,8 +8,10 @@ local REPLAN_EVERY, REFRESH_EVERY = 5, 60
 -- The frames around a timed replan, which Itinerary.lua leaves to it.
 local REPLAN_MARGIN = 0.5
 local DRAW_EVERY, SEARCH_GRACE = 0.5, 3
--- A teleport step, by the item's or spell's own name in the game's language.
+-- A teleport step, by the item's or spell's own name in the game's language, after its own icon at the font's
+-- height: the one step you act on from your bags or spellbook stands out from the travel around it.
 local USE_ITEM, CAST_SPELL = "Use %s", "Cast %s"
+local ICON = "|T%d:0|t "
 
 local goal, result
 local nextPoint
@@ -241,7 +243,14 @@ function ns.JourneyInfo()
 				local name = teleport.item and C_Item.GetItemNameByID(teleport.item)
 					or C_Spell.GetSpellName(teleport.spell)
 					or UNKNOWN
-				text = string.format("%d. " .. (teleport.item and USE_ITEM or CAST_SPELL), index, name)
+				local icon = teleport.item and C_Item.GetItemIconByID(teleport.item)
+					or (C_Spell.GetSpellTexture(teleport.spell))
+				text = string.format(
+					"%d. %s" .. (teleport.item and USE_ITEM or CAST_SPELL),
+					index,
+					icon and ICON:format(icon) or "",
+					name
+				)
 			else
 				text = string.format("%d. %s %s", index, ns.LegVerb(leg), ns.LegLabel(leg))
 			end
