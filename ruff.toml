@@ -2,6 +2,9 @@
 line-length = 120
 target-version = "py310"
 
+# Vendored byte for byte by sift setup; sift update refreshes them.
+extend-exclude = [".sift/gate.py", ".sift/agents.py"]
+
 [lint]
 select = ["E", "F", "I", "UP", "B"]
 

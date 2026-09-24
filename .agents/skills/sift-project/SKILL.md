@@ -30,10 +30,11 @@ Run in order from the repository root. All must pass before and after any audit 
 | Types (Lua) | `tools/typecheck.sh` | zero diagnostics at Information level; multi-value lint and gate regression tests pass |
 | Tests | `for s in tests/*_spec.lua; do luajit "$s" \|\| exit 1; done` | every spec prints `…: ok`; ~25 s total |
 | Workflows | `actionlint && zizmor --offline .github` | exit 0 / "No findings" |
+| Secrets | `gitleaks git --redact --no-banner .` | `no leaks found` |
+| Project rules | `python3 .sift/gate.py --base origin/main && python3 .sift/agents.py check` | exit 0 |
 
 When the two workflow linters are not on PATH, `go run github.com/rhysd/actionlint/cmd/actionlint@latest`
 and `uvx zizmor --offline .github` run the same checks.
-| Secrets | `gitleaks git --redact --no-banner .` | `no leaks found` |
 
 Not in the gate but worth running after touching the planner: `luajit -joff tests/journey_bench.lua`,
 `luajit tests/walk_sim.lua` (README lists both). After touching Map, Route, Tracker, Settings or the
@@ -51,8 +52,7 @@ On-demand tools for audits. Output is candidates, never verdicts.
 | Diagnostics (Lua) | `tools/typecheck.sh` (file:line diagnostics and counts; JSON in `.types/diagnostics.json`) | tests/tools are excluded from LuaLS; all TOC runtime files, including generated data, are checked |
 | Dead code (Python) | `uvx vulture tools --min-confidence 60` | clean today |
 | Types (Python) | `uvx --with pillow ty check --extra-search-path tools --python-version 3.10 tools` | 5 inference errors in `gen_nav.py` (tuple unpacking, `dict.get` keys) + Pillow `Image.LANCZOS` — not bugs |
-| Pinned sift engine | `uvx --from 'sift[treesitter] @ git+https://github.com/agent-labs-dev/sift@5f6949e653d009056e9ce12554f9248be6e03c80' sift check --all` | warns only that Path.lua and Journey.lua exceed 1000 lines |
-| Suppressions | `findings.py suppressions` | the local skill's checker may not know `long-function`, which the pinned engine CI runs defines; those seven markers are valid |
+| Large files | `python3 .sift/gate.py --rule file-size-no-growth --all` | lists Path.lua and Journey.lua, the backlog over 1000 lines; exit 1 by design |
 | Duplication | `npx --yes jscpd@4 --silent --reporters json --output .sift/runs/jscpd --ignore '**/ShortestPathForever_Nav*/**,**/Data/**,**/.sift/**,**/media/**,LICENSE' .` | the test harness preambles (`walk_sim`, `journey_bench`, `journey_optimal_spec`) repeat stub setup; whole-file clones among `tests/*_ui.lua` are their long-string bodies |
 | Live roots (Lua) | `rg -n 'RegisterEvent\|SetScript\|hooksecurefunc\|SLASH_\|SlashCmdList\|LoadAddOn\|SendAddonMessage' -g '*.lua'` | — |
 
@@ -140,5 +140,7 @@ Audit slices from lowest to highest risk:
 
 ## Project rules and lenses
 
-- Rules: none yet.
+- Rules: `file-size-no-growth` (`.sift/scripts/`, from the sift catalog) fails a change that adds
+  a file over 1000 lines or grows one. Generated `Data/*.lua` and `ShortestPathForever_Nav*/*.lua`
+  are excluded.
 - Lenses: none yet.
