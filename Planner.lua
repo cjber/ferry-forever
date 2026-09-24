@@ -7,6 +7,8 @@ local Planner = {}
 ns.Planner = Planner
 
 local BOARDING = 3000
+-- A teleport to another continent shows a loading screen: the same allowance as a portal's.
+local LOADING = 5000
 
 local function checkpoint()
 	if ns.Path and ns.Path.Checkpoint then
@@ -78,6 +80,9 @@ function Planner.LegPoints(leg, routes)
 				points[#points + 1] = { map = hop.points[i], x = hop.points[i + 1], y = hop.points[i + 2] }
 			end
 		end
+	elseif leg.mode == "teleport" then
+		-- Nothing to draw between the ends: a jump, marked at both.
+		points[1].jump = 1
 	elseif leg.route then
 		local route = routes[leg.route]
 		local boarding, alighting = leg.boarding, leg.alighting
@@ -239,6 +244,9 @@ function Planner.Places(options)
 			add("portal", id * 2, portal.to, Planner.PortalDestination(portal))
 		end
 	end
+	for id, teleport in ipairs(options.teleports or {}) do
+		add("teleport", id, teleport)
+	end
 	return places
 end
 
@@ -278,6 +286,7 @@ local CACHE_KEYS = {
 	"taxiNodes",
 	"taxiPaths",
 	"portals",
+	"teleports",
 	"landmasses",
 	"baked",
 	"faction",
@@ -301,10 +310,10 @@ function Planner.Plan(options)
 		end
 	end
 	local nodes, edges, masses = {}, {}, {}
-	local docks, taxis, portals = {}, {}, {}
+	local docks, taxis, portals, teleports = {}, {}, {}, {}
 	if topology then
 		nodes, edges, masses = topology.nodes, topology.edges, topology.masses
-		docks, taxis = topology.docks, topology.taxis
+		docks, taxis, teleports = topology.docks, topology.taxis, topology.teleports
 		for index, adjacent in ipairs(edges) do
 			for i = #adjacent, topology.counts[index] + 1, -1 do
 				adjacent[i] = nil
@@ -350,6 +359,8 @@ function Planner.Plan(options)
 			elseif place.kind == "taxi" then
 				taxis[place.id] = index
 				nodes[index].undiscovered = options.taxiKnown ~= nil and not options.taxiKnown[place.id]
+			elseif place.kind == "teleport" then
+				teleports[place.id] = index
 			else
 				portals[place.id] = index
 			end
@@ -425,6 +436,7 @@ function Planner.Plan(options)
 			masses = masses,
 			docks = docks,
 			taxis = taxis,
+			teleports = teleports,
 			counts = counts,
 			options = saved,
 			pairs = pairs,
@@ -466,6 +478,18 @@ function Planner.Plan(options)
 				})
 				break
 			end
+		end
+	end
+	-- Teleports leave from where you stand, once each is ready: its cooldown is a wait, like a boat's.
+	local ready = options.teleportReady or {}
+	for id, teleport in ipairs(options.teleports or {}) do
+		if ready[id] and teleports[id] then
+			Edge(start, teleports[id], {
+				mode = "teleport",
+				teleport = teleport,
+				ready = ready[id],
+				duration = teleport.cast + (teleport.map ~= options.from.map and LOADING or 0),
+			})
 		end
 	end
 	for pair = 1, #topology.pairs, 2 do
@@ -606,6 +630,8 @@ function Planner.Plan(options)
 					end
 				elseif edge.mode == "flight" and not flying then
 					wait = BOARDING
+				elseif edge.ready then
+					wait = math.max(0, edge.ready - earliest)
 				end
 				local depart = earliest + wait
 				local finish = depart + edge.duration
@@ -672,6 +698,8 @@ function Planner.Plan(options)
 			alighting = edge.alighting,
 			hops = edge.path and { edge.path } or nil,
 			yards = edge.yards,
+			teleport = edge.teleport,
+			ready = edge.ready,
 		}
 		-- Zero-cost lower bounds may disappear from the displayed steps, but still need proof.
 		if leg.mode == "walk" and leg.estimated then

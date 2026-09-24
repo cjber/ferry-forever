@@ -22,4 +22,56 @@ assert(bySpell[556].bind and not bySpell[556].item, "Astral Recall is a shaman s
 assert(not bySpell[1297659], "Teleport: Dalaran has no sourced destination")
 assert(not bySpell[23442], "the Everlook ripper is not a personal teleport")
 
+-- The planner: a teleport is an edge from where you stand, its remaining cooldown a wait.
+assert(loadfile("Model.lua"))("ShortestPathForever", ns)
+assert(loadfile("Planner.lua"))("ShortestPathForever", ns)
+local Plan = ns.Planner.Plan
+
+-- 7000 yards on foot is 1000 s; the hearth lands 70 yards short of the goal (10 s) after a 10 s cast.
+local hearths = { { map = 1, x = 6930, y = 0, spell = 8690, item = 6948, cast = 10000, label = "Goldshire" } }
+local function trip(ready, cache)
+	return Plan({
+		cache = cache,
+		from = { map = 1, x = 0, y = 0 },
+		to = { map = 1, x = 7000, y = 0 },
+		now = 1000,
+		walkSpeed = 7,
+		teleports = hearths,
+		teleportReady = ready and { ready } or nil,
+	})
+end
+
+local hearthed = trip(1000)
+assert(#hearthed.legs == 2 and hearthed.legs[1].mode == "teleport", "the hearth beats a long walk")
+local cast = hearthed.legs[1]
+assert(cast.teleport.item == 6948 and cast.wait == 0 and cast.arrive == 11000 and cast.ready == 1000)
+assert(cast.to.kind == "teleport" and cast.to.label == "Goldshire")
+assert(hearthed.legs[2].mode == "walk" and hearthed.legs[2].from == cast.to, "walk on from where it lands")
+assert(ns.Planner.LegPoints(cast, {})[1].jump, "no line is drawn across the world")
+
+local waited = trip(1000 + 300000)
+assert(waited.legs[1].mode == "teleport" and waited.legs[1].wait == 300000, "a cooldown shorter than the walk waits")
+assert(trip(1000 + 2000000).legs[1].mode == "walk", "a cooldown longer than the walk is ignored")
+assert(trip(nil).legs[1].mode == "walk", "a teleport that cannot be cast is ignored")
+
+-- The same topology serves a new cooldown: readiness is per plan, never a rebuild.
+local cache = {}
+assert(trip(1000, cache).legs[1].mode == "teleport")
+local topology = cache.topology
+assert(trip(1000 + 2000000, cache).legs[1].mode == "walk" and cache.topology == topology)
+assert(trip(1000, cache).legs[1].mode == "teleport" and cache.topology == topology)
+-- A new set of destinations (a new bind point) is a new topology.
+hearths = { { map = 1, x = -700, y = 0, spell = 8690, item = 6948, cast = 10000 } }
+assert(trip(1000, cache).legs[1].mode == "walk" and cache.topology ~= topology)
+
+-- Another continent adds the loading screen.
+local far = Plan({
+	from = { map = 0, x = 0, y = 0 },
+	to = { map = 1, x = 7000, y = 0 },
+	now = 0,
+	teleports = { { map = 1, x = 7000, y = 0, spell = 3566, cast = 10000 } },
+	teleportReady = { 0 },
+})
+assert(#far.legs == 1 and far.legs[1].arrive == 15000)
+
 print("teleports_spec: ok")

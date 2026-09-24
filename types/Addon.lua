@@ -15,8 +15,8 @@
 ---@field charDB SPFCharacterDatabase
 ---@field Defaults table<string, boolean>
 
----@alias SPFMode 'walk'|'flight'|'boat'|'zeppelin'|'lift'|'tram'|'portal'|'passage'
----@alias SPFKind 'start'|'goal'|'dock'|'taxi'|'portal'
+---@alias SPFMode 'walk'|'flight'|'boat'|'zeppelin'|'lift'|'tram'|'portal'|'passage'|'teleport'
+---@alias SPFKind 'start'|'goal'|'dock'|'taxi'|'portal'|'teleport'
 ---@class SPFPoint
 ---@field map number
 ---@field x number
@@ -71,6 +71,11 @@
 ---@field to? SPFPoint
 ---@field cast number
 ---@field reagents? table<number, number>
+-- A teleport the character can use, at its destination (the bind point for bind teleports).
+---@class SPFTeleportPlace : SPFPoint
+---@field spell number
+---@field item? number
+---@field cast number
 ---@class SPFLandmass
 ---@field map number
 ---@field minX number
@@ -167,6 +172,8 @@ ShortestPathForeverPathData = nil
 ---@field alighting? SPFStop
 ---@field hops? SPFTaxiPath[]
 ---@field yards? number
+---@field teleport? SPFTeleportPlace
+---@field ready? number
 ---@field walkPoints? SPFWalkPoints
 ---@field walkError? string
 ---@field wet? number
@@ -194,6 +201,8 @@ ShortestPathForeverPathData = nil
 ---@field waterWalking? boolean
 ---@field revision? number
 ---@field ride? {route: number, dock: number, arrive: number}
+-- [teleport index] = server ms when it can be cast; absent when it cannot.
+---@field teleportReady? table<number, number>
 ---@class SPFPlaceOptions
 ---@field faction? string
 ---@field docks? table<number, SPFDock>
@@ -202,6 +211,7 @@ ShortestPathForeverPathData = nil
 ---@field taxiPaths? SPFTaxiPath[]
 ---@field taxiKnown? table<number, boolean>
 ---@field portals? SPFPortal[]
+---@field teleports? SPFTeleportPlace[]
 ---@field landmasses? SPFLandmass[]
 ---@field anchors? table<number, SPFAnchor>
 ---@field baked? table<number, table<string, (number|false)[]>>
@@ -216,6 +226,7 @@ ShortestPathForeverPathData = nil
 ---@field masses table<number, number>
 ---@field docks table<number, number>
 ---@field taxis table<number, number>
+---@field teleports table<number, number>
 ---@field counts number[]
 ---@field options SPFPlanOptions
 ---@field pairs number[]
@@ -231,6 +242,8 @@ ShortestPathForeverPathData = nil
 ---@field aboard? boolean
 ---@field estimated? boolean
 ---@field yards? number
+---@field teleport? SPFTeleportPlace
+---@field ready? number
 ---@class SPFLabels
 ---@field node number[]
 ---@field state number[]
