@@ -134,7 +134,7 @@ Audit slices from lowest to highest risk:
 2. `tools/` — offline generators; output is checked in, so a change is visible as a data diff
 3. `tests/`
 4. UI leaves: `Alert.lua`, `Arrow.lua`, `Compass.lua`, `Settings.lua`, `Taxi.lua`, `Tracker.lua`
-5. Map layers: `Map.lua`, `Map.xml`, `Route.lua`
+5. Map layers: `Map.lua`, `Map.xml`, `Route.lua`, `RouteTransports.lua`
 6. State and wire: `Model.lua`, `Core.lua`, `Observer.lua`, `Sync.lua` (SavedVariables, wire format)
 7. Planning core: `Planner.lua`, `Path.lua`, `Journey.lua` (performance-tuned, 3 ms frame budget)
 

@@ -37,6 +37,7 @@ JourneySteps.lua
 Journey.lua
 JourneyInput.lua
 Route.lua
+RouteTransports.lua
 Alert.lua
 Settings.lua
 API.lua
