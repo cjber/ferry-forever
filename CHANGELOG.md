@@ -11,6 +11,8 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-25
+
 - **Ready for translation.** Every line the addon writes, from the settings to the tracker and the map's tooltips,
   now comes from one list of phrases, so the addon can be translated. Translations are welcome on GitHub; anything
   not yet translated stays in English, as before.
