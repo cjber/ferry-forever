@@ -47,5 +47,6 @@ Route.lua
 RouteTransports.lua
 Alert.lua
 Settings.lua
+WhatsNew.lua
 API.lua
 Itinerary.lua

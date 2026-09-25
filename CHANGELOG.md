@@ -11,6 +11,10 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+- **A line on what changed after an update.** The first time you log in on a new version, one line in chat says
+  which version you are on and the main thing it changed. It stays quiet on a fresh install, and *Tell me what's new
+  after an update* in `/path` turns it off.
+
 ## [1.3.0] - 2026-09-25
 
 - **The flight map shows which flight to take.** At the flight master, your journey's route uses the game's own

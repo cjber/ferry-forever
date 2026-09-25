@@ -46,7 +46,10 @@ local failures = {}
 local function check(name, beforeLogin, body)
 	local fixture = source:gsub('fireEvent%("ADDON_LOADED", "ShortestPathForever"%)', function()
 		return beforeLogin
-			.. '\nwaypointProvider:RefreshAllData()\nfireEvent("ADDON_LOADED", "ShortestPathForever")\nfireEvent("PLAYER_LOGIN")'
+			.. '\nwaypointProvider:RefreshAllData()\nfireEvent("ADDON_LOADED", "ShortestPathForever")'
+			-- Only What's New reads the TOC at login; the other checks run with no C_AddOns, as before.
+			.. '\n_G.C_AddOns = { GetAddOnMetadata = function() return "@project-version@" end }'
+			.. '\nfireEvent("PLAYER_LOGIN")\n_G.C_AddOns = nil'
 	end, 1)
 	local run = assert(
 		loadstring(

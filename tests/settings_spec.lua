@@ -70,7 +70,7 @@ local ns = {
 }
 setfenv(assert(loadfile("Settings.lua")), env)("ShortestPathForever", ns)
 
-assert(#registered == 17, #registered)
+assert(#registered == 18, #registered)
 for index, initializer in ipairs(registered) do
 	assert(initializer.setting == settings[index], "rows keep their setting and order")
 end
@@ -82,6 +82,7 @@ assert(registered[14].tooltip:find("flight master", 1, true))
 registered[14].setting.onChanged()
 assert(taxiRefreshed == 1, "flight route updates when its setting changes")
 assert(registered[15].setting.key == "corpse" and registered[15].setting.default == true)
+assert(registered[18].setting.key == "whatsNew" and registered[18].setting.default == true)
 registered[1].setting.onChanged()
 assert(refreshed == 1, "value callbacks still fire")
 print("settings: ok")

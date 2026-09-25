@@ -22,6 +22,7 @@ local DEFAULTS = {
 	guideStops = true,
 	compass = false,
 	corpse = true,
+	whatsNew = true,
 }
 ns.Defaults = DEFAULTS
 

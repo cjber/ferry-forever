@@ -111,7 +111,8 @@ pinned WoW API annotations, local declarations and intentional multi-value calls
 [AGENTS.md](AGENTS.md), and [SECURITY.md](https://github.com/cjber/.github/blob/main/SECURITY.md) for private
 security reports.
 
-**Releasing:** move the `[Unreleased]` notes in `CHANGELOG.md` under `## [X.Y.Z] - YYYY-MM-DD`, then
+**Releasing:** move the `[Unreleased]` notes in `CHANGELOG.md` under `## [X.Y.Z] - YYYY-MM-DD`, set
+`ns.WHATS_NEW` in `WhatsNew.lua` to that entry's headline in one sentence, then
 `git tag -s vX.Y.Z && git push --tags`. The [BigWigs packager](https://github.com/BigWigsMods/packager) builds the zip
 and uploads it to GitHub Releases, CurseForge and Wago.
 
