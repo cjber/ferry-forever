@@ -1,5 +1,6 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 local Model = ns.Model
 ---@class SPFPlanner
@@ -54,7 +55,7 @@ function Planner.QuestDestination(questID, title, complete, uiMapID, pois, waypo
 		destination = { uiMapID = waypoint.uiMapID, x = waypoint.x, y = waypoint.y }
 	end
 	if destination and title and title ~= "" then
-		destination.label = title .. (complete and " (turn in)" or "")
+		destination.label = complete and string.format(L["%s (turn in)"], title) or title
 		return destination
 	end
 end

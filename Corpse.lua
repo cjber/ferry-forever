@@ -1,11 +1,12 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 -- A corpse run: while you are a ghost, the walk back to your body, dotted in the red-orange of the game's own
 -- tombstone for your corpse (Interface\Minimap\POIIcons, its lit face 192, 76, 24). The journey you were on waits
 -- (Journey.lua) and plans again once you are alive, however that happens.
 local COLOR = CreateColor(192 / 255, 76 / 255, 24 / 255)
-local TITLE, LABEL = "Return to your corpse", "your corpse"
+local TITLE, LABEL = L["Return to your corpse"], L["your corpse"]
 local STEP_EVERY, SEARCH_EVERY = 0.5, 5
 -- The client reports the corpse in map fractions, so reading it again can move it a hair.
 local SAME = 1
@@ -141,9 +142,9 @@ function Corpse.Info()
 		return nil
 	end
 	local leg = run.leg
-	local text = string.format("1. %s %s", ns.LegVerb(leg), ns.LegLabel(leg))
+	local text = "1. " .. ns.LegStep(leg)
 	if leg.walkError then
-		text = text .. " (no walking path)"
+		text = text .. " (" .. L["no walking path"] .. ")"
 	end
 	return TITLE, { { key = 1, text = text .. "   " .. ns.LegTime(leg), current = true } }, run.plan, 1, false
 end

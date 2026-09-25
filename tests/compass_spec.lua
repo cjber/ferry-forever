@@ -121,6 +121,7 @@ local ns = {
 		return dockKind
 	end,
 }
+assert(loadfile("Locales/enUS.lua"))("ShortestPathForever", ns)
 local env = setmetatable({
 	UIParent = {},
 	CreateFrame = function()

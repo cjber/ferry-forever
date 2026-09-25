@@ -11,6 +11,9 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+- **Ready for translation.** Every line the addon writes, from the settings to the tracker and the map's tooltips,
+  now comes from one list of phrases, so the addon can be translated. Translations are welcome on GitHub; anything
+  not yet translated stays in English, as before.
 - **A line on what changed after an update.** The first time you log in on a new version, one line in chat says
   which version you are on and the main thing it changed. It stays quiet on a fresh install, and *Tell me what's new
   after an update* in `/path` turns it off.

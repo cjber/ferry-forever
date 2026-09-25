@@ -83,7 +83,10 @@ def data():
     """Use the real Lua 5.1 path implementation; table serialization is the only adapter."""
     program = r"""
 local ns = {}
-local files = { "Data/Routes", "Data/Transports", "Data/Portals", "Data/Taxi", "Model", "PathGrid", "Path", "Planner" }
+local files = { "Locales/enUS", "Data/Routes", "Data/Transports", "Data/Portals", "Data/Taxi" }
+for _, name in ipairs({ "Model", "PathGrid", "Path", "Planner" }) do
+	files[#files + 1] = name
+end
 for _, name in ipairs(files) do
 	assert(loadfile(name .. ".lua"))("ShortestPathForever", ns)
 end

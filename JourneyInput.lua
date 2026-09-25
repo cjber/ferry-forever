@@ -1,5 +1,6 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 ---@param uiMapID integer
 ---@param x number
@@ -43,7 +44,7 @@ local function PlanQuest(questID, clickedMap, isWaypoint)
 	local point = location and ns.WorldPoint(location.uiMapID, location.x, location.y)
 	if not point then
 		-- Questie.API exposes icons and update notifications, but no public coordinate lookup.
-		ns.Print("No location for that quest yet.")
+		ns.Print(L["No location for that quest yet."])
 		return
 	end
 	point.label, point.questID = location.label, questID
@@ -58,7 +59,7 @@ local function OnCanvasClick(map, button)
 	if point then
 		ns.StartJourney(point)
 	else
-		ns.Print("no journey can be planned to that spot.")
+		ns.Print(L["no journey can be planned to that spot."])
 	end
 	return true
 end
@@ -96,7 +97,7 @@ end
 
 local function AddQuestMenuEntry(root, questID)
 	if ns.db.journey and questID then
-		root:CreateButton("Plan journey", function()
+		root:CreateButton(L["Plan journey"], function()
 			PlanQuest(questID)
 		end)
 	end

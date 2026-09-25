@@ -406,6 +406,10 @@ end
 _G.GetServerTime = function()
 	return math.floor(1790000000 + T)
 end
+-- Translation files (Locales/<locale>.lua) ask for the client's language.
+_G.GetLocale = function()
+	return "enUS"
+end
 _G.GetRealmName = function()
 	return "Test"
 end

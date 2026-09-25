@@ -1,10 +1,11 @@
 local addonName = ...
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 -- One sentence on what the latest release changed, printed once after an update. Each release refreshes it from
 -- its CHANGELOG entry.
-ns.WHATS_NEW = "The flight map shows which flight to take, and route stops look like the map's own quest buttons."
+ns.WHATS_NEW = L["It's ready for translation, and translations are welcome on GitHub."]
 
 -- Once per new version, after an update: never on a first install, nor in a checkout, whose TOC still holds the
 -- packager's version keyword (matched by its "@", as the packager would rewrite the whole keyword here too).
@@ -17,7 +18,7 @@ function ns.CheckWhatsNew()
 	local seen = db.seenVersion
 	db.seenVersion = version
 	if seen and seen ~= version and db.whatsNew then
-		ns.Print(string.format("updated to %s. %s", version, ns.WHATS_NEW))
+		ns.Print(string.format(L["updated to %s. %s"], version, ns.WHATS_NEW))
 	end
 end
 
