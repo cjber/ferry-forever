@@ -11,6 +11,8 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-25
+
 **The way back to your corpse.** Release your spirit and a dotted path leads from the graveyard back to your body, in
 the red-orange of the corpse's own tombstone, on the world map and the minimap. It follows the walking paths round
 walls and hills, Guide steers along it, and the tracker reads *Return to your corpse* with the time and distance
