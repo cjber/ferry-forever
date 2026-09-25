@@ -13,15 +13,15 @@ local DOT_TEXTURE = "Interface\\AddOns\\ShortestPathForever\\media\\Dot"
 local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
 -- RouteTransports.lua fades its outlines with the same share.
 ns.RouteUnderAlpha = UNDER_ALPHA
-local GOAL_ATLAS, GOAL_SCALE = "Waypoint-MapPin-Tracked", 0.8
-local STOP_ATLAS, STOP_SIZE, MAX_NUMERAL = "adventureguide-ring", 26, 9
--- A lone stop's own mark stands alone at the size of the map's quest marks. A numbered one keeps its ring and wears the
--- mark as a badge over the ring's lower right, as Legacy Forever's entrance pins wear the Legacy shield; the pin's hit
--- rect reaches out over the badge. On the minimap the ring alone circles the game's own icon there.
-local LOOK_SIZE, BADGE_SIZE, BADGE_OFFSET, MINIMAP_GOAL, MINIMAP_RING = 22, 16, 4, 16, 22
+-- StopPin.lua's marks. On the minimap the ring alone circles the game's own icon at a stop with a known mark.
+local GOAL_ATLAS, STOP_ATLAS, STOP_SIZE = ns.GoalAtlas, ns.StopAtlas, ns.StopSize
+local MINIMAP_GOAL, MINIMAP_RING = 16, 22
 -- Everything past the stop being guided to recedes, so the way ahead reads first. Later lines keep their colour
--- but drop well back against parchment; later stop rings stay a little stronger so their numbers remain legible.
-local LATER_ALPHA, LATER_STOP_ALPHA = 0.4, 0.55
+-- but drop well back against parchment; StopPin.lua's later rings stay a little stronger.
+local LATER_ALPHA = 0.4
+-- Breadcrumbs stop short of each stop's mark, so the way runs up to a ring rather than under it: a dot is left out when
+-- its rim would come within STOP_GAP of the mark, on screen, at either end of a leg.
+local STOP_GAP = 2
 local COLORS = {
 	walk = NORMAL_FONT_COLOR,
 	flight = CreateColor(0.2, 1, 0.35),
@@ -43,6 +43,8 @@ local provider, goal, paths, worldPaths, stops, stopIndex
 ---@field spacing number
 ---@field used number
 ---@field Goal Texture
+---@field circles number[]
+---@field near number[]
 ---@field strokeLayer SPFStrokeLayer
 ---@field elapsed number
 ---@field lastX? number
@@ -175,6 +177,34 @@ local function Stroke(owner, x1, y1, x2, y2, color, scale, dot)
 	end
 end
 
+-- The stop marks this segment passes near, copied from owner.circles (x, y and reach, flat) into owner.near; returns
+-- the length copied.
+local function Near(owner, x1, y1, x2, y2)
+	local circles, near, count = owner.circles, owner.near, 0
+	local dx, dy = x2 - x1, y2 - y1
+	local lengthSquared = dx * dx + dy * dy
+	for i = 1, #circles, 3 do
+		local cx, cy, reach = circles[i], circles[i + 1], circles[i + 2]
+		local t = math.max(0, math.min(1, ((cx - x1) * dx + (cy - y1) * dy) / lengthSquared))
+		local ex, ey = x1 + t * dx - cx, y1 + t * dy - cy
+		if ex * ex + ey * ey < reach * reach then
+			near[count + 1], near[count + 2], near[count + 3] = cx, cy, reach
+			count = count + 3
+		end
+	end
+	return count
+end
+
+local function Clear(near, count, x, y)
+	for i = 1, count, 3 do
+		local dx, dy = x - near[i], y - near[i + 1]
+		if dx * dx + dy * dy < near[i + 2] * near[i + 2] then
+			return false
+		end
+	end
+	return true
+end
+
 -- Clip before subdividing: even continent-sized walks need only the visible breadcrumbs. Dots sit at every SPACING
 -- along the whole walk, owner.walked carrying the distance across segment joins so bends never bunch them.
 local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale)
@@ -200,19 +230,27 @@ local function Segment(owner, x1, y1, x2, y2, low, high, color, dashed, scale)
 	-- so rounding in the running total cannot push it out of both.
 	local half, spacing = owner.dot / 2 / length, owner.spacing
 	local first = math.ceil((start + low * length - 0.001) / spacing) * spacing - start
+	local near = Near(owner, x1, y1, x2, y2)
 	for distance = first, high * length - 0.001, spacing do
 		local t = distance / length
-		Stroke(
-			owner,
-			x1 + (t - half) * dx,
-			y1 + (t - half) * dy,
-			x1 + (t + half) * dx,
-			y1 + (t + half) * dy,
-			color,
-			scale,
-			true
-		)
+		if near == 0 or Clear(owner.near, near, x1 + t * dx, y1 + t * dy) then
+			Stroke(
+				owner,
+				x1 + (t - half) * dx,
+				y1 + (t - half) * dy,
+				x1 + (t + half) * dx,
+				y1 + (t + half) * dy,
+				color,
+				scale,
+				true
+			)
+		end
 	end
+end
+
+-- How far past a mark's own radius (in the owner's units) a dot must sit to leave STOP_GAP on screen.
+local function DotMargin(owner, scale)
+	return (STOP_GAP + owner.dot / 2 + RIM) / scale
 end
 
 local function HideUnused(owner)
@@ -283,6 +321,8 @@ end
 ---@field dot number
 ---@field spacing number
 ---@field strokeLayer? SPFStrokeLayer
+---@field circles number[]
+---@field near number[]
 ---@field pathAlpha? number
 ---@field UpdateAlpha? fun(self: SPFRoutePin)
 ShortestPathForeverRoutePinMixin = CreateFromMixins(MapCanvasPinMixin)
@@ -292,7 +332,7 @@ function ShortestPathForeverRoutePinMixin:OnLoad()
 	self:SetIgnoreGlobalPinScale(true)
 	self:SetScaleStyle(AM_PIN_SCALE_STYLE_WITH_TERRAIN)
 	self.lines, self.underlines, self.dots, self.walked = {}, {}, {}, 0
-	self.dot, self.spacing = DOT, SPACING
+	self.dot, self.spacing, self.circles, self.near = DOT, SPACING, {}, {}
 end
 
 function ShortestPathForeverRoutePinMixin:Line(x1, y1, x2, y2, color, dashed)
@@ -444,6 +484,16 @@ function ShortestPathForeverRoutePinMixin:Draw()
 	local small = info and info.mapType <= Enum.UIMapType.Continent
 	self.dot, self.spacing = small and SMALL_DOT or DOT, small and SMALL_SPACING or SPACING
 	self.used = 0
+	-- The journey's stop pins keep their size on screen while the canvas zooms under them (MapCanvasPinMixin's
+	-- ApplyCurrentScale sets 1 / canvas scale), so their reach in canvas units grows as the map zooms out.
+	local circles, marks = {}, self.paths == worldPaths and provider and provider.stopMarks or {}
+	local margin, zoom = DotMargin(self, self:GetEffectiveScale()), map:GetCanvasScale()
+	for _, mark in ipairs(marks) do
+		circles[#circles + 1] = mark.x * self:GetWidth()
+		circles[#circles + 1] = -mark.y * self:GetHeight()
+		circles[#circles + 1] = mark.radius / zoom + margin
+	end
+	self.circles = circles
 	if self.hits then
 		self.hits = {}
 	end
@@ -540,143 +590,13 @@ function ShortestPathForeverRoutePinMixin:OnCanvasSizeChanged()
 	self:Draw()
 end
 
--- Ascending stop numbers as a label: runs joined by a hyphen, the rest by commas (4-7, or 2, 5). Past two parts it
--- would outgrow the ring, so it names the first and a plus (2+); the tooltip lists them all.
----@param numbers integer[]
-local function StopLabel(numbers)
-	local parts, i = {}, 1
-	while i <= #numbers do
-		local j = i
-		while numbers[j + 1] == numbers[j] + 1 do
-			j = j + 1
-		end
-		parts[#parts + 1] = j > i and numbers[i] .. "-" .. numbers[j] or tostring(numbers[i])
-		i = j + 1
-	end
-	return #parts > 2 and numbers[1] .. "+" or table.concat(parts, ", ")
-end
-
----@class SPFGoalPin : SPFMapPin
----@field Texture Texture
----@field Icon Texture
----@field Disc Texture
----@field Glow Texture
----@field Numeral Texture
----@field Number FontString
----@field stopTitles? string[]
-ShortestPathForeverGoalPinMixin = CreateFromMixins(MapCanvasPinMixin)
-
-function ShortestPathForeverGoalPinMixin:OnLoad()
-	-- The user waypoint's level (WaypointLocationDataProvider), above every quest POI, super-tracked ones included.
-	self:UseFrameLevelType("PIN_FRAME_LEVEL_WAYPOINT_LOCATION")
-	self:SetIgnoreGlobalPinScale(true)
-	self:SetScalingLimits(1, 1, 1)
-	self.Number = self:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	self.Number:SetPoint("CENTER")
-	self:SetScript("OnHide", self.OnMouseLeave)
-end
-
--- A lone destination wears the waypoint pin; a numbered stop wears the ring the Adventure Guide draws for the same
--- step. Blizzard's numerals (centred in their atlas boxes, unlike font digits) stop at 9; later stops use the font.
--- Stops whose rings would overlap share one, labelled with their numbers: a run as 4-7, others apart as 2, 5.
--- A numbered stop whose caller said what stands there wears that mark as a badge on the ring's lower right, so the pin
--- reads as step 3 at the quest giver or flight master; a lone one wears the mark alone, full size.
----@param numbers integer[]? the stops this pin marks, in order; nil for a lone destination
----@param titles string[]
----@param look? SPFAPIStopKind
-function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, numbers, titles, later, look)
-	self:SetPosition(x, y)
-	-- The disc stays opaque, so a faded ring still hides the POI beneath it.
-	local alpha = later and LATER_STOP_ALPHA or 1
-	self.Texture:SetAlpha(alpha)
-	self.Icon:SetAlpha(alpha)
-	self.Numeral:SetAlpha(alpha)
-	self.Number:SetAlpha(alpha)
-	self.stopTitles = titles[1] and titles or nil
-	local marked = look ~= nil and ns.SetStopLook(self.Icon, look, numbers and BADGE_SIZE or LOOK_SIZE)
-	local badge = marked and numbers ~= nil
-	self.Icon:SetShown(marked)
-	self.Icon:ClearAllPoints()
-	self.Icon:SetPoint(badge and "BOTTOMRIGHT" or "CENTER", badge and BADGE_OFFSET or 0, badge and -BADGE_OFFSET or 0)
-	self:SetHitRectInsets(0, badge and -BADGE_OFFSET or 0, 0, badge and -BADGE_OFFSET or 0)
-	self.Texture:SetShown(not marked or badge)
-	if marked and not badge then
-		self:SetSize(LOOK_SIZE, LOOK_SIZE)
-		self.Disc:Hide()
-		self.Numeral:Hide()
-		self.Number:SetText("")
-		return
-	end
-	local number = numbers and #numbers == 1 and numbers[1]
-	local numeral = number and number <= MAX_NUMERAL
-	self.Disc:SetShown(numbers ~= nil)
-	self.Numeral:SetShown(numeral == true)
-	self.Number:SetText(numbers and not numeral and StopLabel(numbers) or "")
-	if numbers then
-		self:SetSize(STOP_SIZE, STOP_SIZE)
-		self.Texture:SetAtlas(STOP_ATLAS)
-		if numeral then
-			self.Numeral:SetAtlas("services-number-" .. number)
-		end
-	else
-		-- The native waypoint pin (SuperTrackedFrame.lua:219) that Guide's marker wears, so map and marker agree.
-		local atlas = C_Texture.GetAtlasInfo(GOAL_ATLAS)
-		self:SetSize(atlas.width * GOAL_SCALE, atlas.height * GOAL_SCALE)
-		self.Texture:SetAtlas(GOAL_ATLAS)
-	end
-end
-
-function ShortestPathForeverGoalPinMixin:OnMouseEnter()
-	local title, rows = ns.JourneyInfo()
-	if not title or not rows then
-		return
-	end
-	self.Glow:SetShown(self.Disc:IsShown() or self.Icon:IsShown())
-	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-	-- A shared ring names every stop it marks, in order.
-	local stopTitles = self.stopTitles or {}
-	GameTooltip_SetTitle(GameTooltip, stopTitles[1] or title)
-	for i = 2, #stopTitles do
-		GameTooltip_AddColoredLine(GameTooltip, stopTitles[i], HIGHLIGHT_FONT_COLOR)
-	end
-	for _, row in ipairs(not stopTitles[1] and rows or {}) do
-		GameTooltip_AddColoredLine(GameTooltip, row.text, row.current and HIGHLIGHT_FONT_COLOR or NORMAL_FONT_COLOR)
-	end
-	GameTooltip_AddNormalLine(GameTooltip, "Right-click to clear")
-	GameTooltip:Show()
-end
-
-function ShortestPathForeverGoalPinMixin:OnMouseLeave()
-	self.Glow:Hide()
-	if GameTooltip:IsOwned(self) then
-		GameTooltip:Hide()
-	end
-end
-
--- Pins pass right clicks to the canvas to zoom out (Blizzard_MapCanvas.lua:328); this one clears instead.
-function ShortestPathForeverGoalPinMixin.ShouldMouseButtonBePassthrough()
-	return false
-end
-
-function ShortestPathForeverGoalPinMixin.OnMouseClickAction(_, button)
-	if button == "RightButton" then
-		ns.ClearJourney()
-	end
-end
-
-function ShortestPathForeverGoalPinMixin:OnReleased()
-	self:OnMouseLeave()
-	self.stopTitles = nil
-	MapCanvasPinMixin.OnReleased(self)
-end
-
 ---@class SPFRouteProvider : SPFMapProvider
 local ProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin)
 
 function ProviderMixin:RemoveAllData()
 	self:GetMap():RemoveAllPinsByTemplate(LINE_TEMPLATE)
 	self:GetMap():RemoveAllPinsByTemplate(GOAL_TEMPLATE)
-	self.stopsKey = nil
+	self.stopsKey, self.stopMarks = nil, nil
 end
 
 function ProviderMixin:RefreshAllData()
@@ -686,15 +606,16 @@ function ProviderMixin:RefreshAllData()
 	if not (map:GetMapID() and map:IsVisible() and goal and (ns.db.journey or goal.corpse)) then
 		return
 	end
+	-- The stops go first: the line leaves a gap at each.
+	self:RefreshStops()
 	if #worldPaths > 0 then
 		map:AcquirePin(LINE_TEMPLATE, worldPaths)
 	end
-	self:RefreshStops()
 end
 
 -- Stops whose rings would overlap at this zoom share one, as the map's docks do: at their middle, faded, or at the
 -- stop being guided to and at full strength when it is among them. The rings are rebuilt only when that grouping
--- changes.
+-- changes, and the line redrawn around them.
 function ProviderMixin:RefreshStops()
 	local map = self:GetMap()
 	local mapID = map:GetMapID()
@@ -724,6 +645,7 @@ function ProviderMixin:RefreshStops()
 	end
 	self.stopsKey = key
 	map:RemoveAllPinsByTemplate(GOAL_TEMPLATE)
+	self.stopMarks = {}
 	for _, group in ipairs(groups) do
 		local x, y, numbers, titles = 0, 0, {}, {}
 		for i, mark in ipairs(group) do
@@ -732,11 +654,18 @@ function ProviderMixin:RefreshStops()
 		local lead = group[1]
 		-- A shared ring stands for several places, so only a stop on its own wears its badge.
 		local look = #group == 1 and lead.look or nil
-		if lead.index == first then
-			map:AcquirePin(GOAL_TEMPLATE, lead.x, lead.y, stops and numbers, titles, false, look)
+		local later, numbered = lead.index ~= first, numbers
+		if later then
+			x, y = x / #group, y / #group
 		else
-			map:AcquirePin(GOAL_TEMPLATE, x / #group, y / #group, numbers, titles, true, look)
+			x, y, numbered = lead.x, lead.y, stops and numbers
 		end
+		local pin = map:AcquirePin(GOAL_TEMPLATE, x, y, numbered, titles, later, look)
+		self.stopMarks[#self.stopMarks + 1] = { x = x, y = y, radius = pin:GetWidth() / 2 }
+	end
+	for pin in WorldMapFrame:EnumeratePinsByTemplate(LINE_TEMPLATE) do
+		---@cast pin SPFRoutePin
+		pin:Draw()
 	end
 end
 
@@ -833,6 +762,8 @@ local function DrawMinimap(self)
 	self.fadeX = nil
 	self:SetAlpha(1)
 	self.Goal:Hide()
+	local circles = {}
+	self.circles = circles
 	local border = UNDER_THICKNESS / scale
 	if x and facing and radius and radius > 0 and width > border and height > border then
 		local cosine, sine = math.cos(facing), math.sin(facing)
@@ -841,6 +772,8 @@ local function DrawMinimap(self)
 			if not goal.corpse and math.abs(gx) <= 1 and math.abs(gy) <= 1 and (square or gx * gx + gy * gy <= 1) then
 				self.Goal:SetPoint("CENTER", self, "CENTER", gx * width / 2, gy * height / 2)
 				self.Goal:Show()
+				circles[1], circles[2] = (gx + 1) * width / 2, (gy - 1) * height / 2
+				circles[3] = (goal.look and MINIMAP_RING or MINIMAP_GOAL) / 2 + DotMargin(self, scale)
 			end
 			self.fadeX, self.fadeY = (gx + 1) * width / 2, (gy - 1) * height / 2
 			self.fadeScaleX, self.fadeScaleY = 2 * radius / width, 2 * radius / height
@@ -971,7 +904,7 @@ ns.Init(function()
 	minimap:SetAllPoints(Minimap)
 	minimap:EnableMouse(false)
 	minimap.lines, minimap.underlines, minimap.dots, minimap.walked, minimap.used = {}, {}, {}, 0, 0
-	minimap.dot, minimap.spacing = DOT, SPACING
+	minimap.dot, minimap.spacing, minimap.circles, minimap.near = DOT, SPACING, {}, {}
 	StrokeLayer(minimap)
 	minimap.Goal = Minimap:CreateTexture(nil, "OVERLAY")
 	minimap.Goal:SetAtlas(GOAL_ATLAS)

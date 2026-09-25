@@ -133,7 +133,8 @@ print(json({ portals = ns.Portals, docks = ns.Docks, taxis = ns.TaxiNodes, route
 	walk = walk(1, start, ns.Docks[10]), boat = boat,
 	theramore = theramore, silithus = walk(1, ns.Docks[6], ns.TaxiNodes[73]),
 	wetlands = walk(0, ns.Docks[9], goal), darkshore = walk(1, start, darkshore),
-	stops = { walk(0, thelsamar, stops[1]), walk(0, stops[1], stops[2]), walk(0, stops[2], stops[3]) } }))
+	stops = { walk(0, thelsamar, stops[1]), walk(0, stops[1], stops[2]), walk(0, stops[2], stops[3]),
+		walk(0, stops[3], stops[2]) } }))
 """
     result = subprocess.run(["luajit", "-"], input=program, text=True, cwd=ROOT, capture_output=True, check=True)
     return json.loads(result.stdout)
@@ -224,7 +225,7 @@ def walk_dots(strokes, spacing):
     return dots
 
 
-def flush_strokes(canvas, small=False):
+def flush_strokes(canvas, small=False, marks=()):
     # ARTWORK sublevel -1 puts every outline and rim beneath every core, including at bends and crossings.
     # Sizes in UI units draw at that many units' worth of pixels at every UI scale, so they widen with the render
     # scale like everything else: 2-unit lines in 4-unit outlines, and dots in rims one unit wider on every side:
@@ -232,7 +233,12 @@ def flush_strokes(canvas, small=False):
     k = canvas.ui.scale
     dot, spacing = (3, 7) if small else (4, 9)
     strokes = getattr(canvas, "strokes", [])
-    dots = walk_dots(strokes, spacing * k)
+    # Route.lua's STOP_GAP: a dot whose rim would come within 2 units of a stop's mark (x, y, radius) is left out.
+    dots = [
+        (x, y, color, alpha)
+        for x, y, color, alpha in walk_dots(strokes, spacing * k)
+        if all(math.hypot(x - mx * k, y - my * k) >= (radius + 2 + dot / 2 + 1) * k for mx, my, radius in marks)
+    ]
     for under in (True, False):
         layer = Image.new("RGBA", canvas.image.size)
         draw = ImageDraw.Draw(layer)
@@ -502,13 +508,16 @@ def render_docks(ui):
 
 
 THELSAMAR = {"map": 0, "x": -5640.0, "y": -2760.0}
-# A caller's route through Thelsamar (API.lua NavigateRoute with kinds): the flight master, a quest giver, a hand-in.
-STOP_BADGES = ("taxinode_alliance", "QuestNormal", "QuestTurnin")
+# A caller's route through Thelsamar (API.lua NavigateRoute with kinds): the flight master, a quest giver, a hand-in,
+# and back to the quest giver, whose ring then holds stops 2 and 4.
+STOP_BADGES = ("taxinode_alliance", "QuestNormal", "QuestTurnin", "QuestTurnin")
 
 
-def stop_pin(canvas, x, y, number, badge, later):
-    """Route.lua's numbered stop: the Adventure Guide ring over an opaque dark disc, Blizzard's numeral in it, and the
-    stop's kind as a 16-unit badge hanging 4 units off the ring's lower right. Later stops fade all but the disc."""
+def stop_pin(canvas, x, y, number, badge, later, others=0):
+    """StopPin.lua's numbered stop: the Adventure Guide ring over an opaque dark disc, Blizzard's numeral in it, and the
+    stop's kind as a 16-unit badge hanging 4 units off the ring's lower right. A ring shared by several stops shows the
+    first's number and, in the badge's place, how many more (NumberFontNormal, BOTTOMRIGHT at 4, -4). Later stops fade
+    all but the disc."""
     alpha = 0.55 if later else 1
     k = canvas.ui.scale
     disc = Image.new("RGBA", (round(22 * k), round(22 * k)))
@@ -516,6 +525,16 @@ def stop_pin(canvas, x, y, number, badge, later):
     canvas.composite(disc, canvas.px(x - 11), canvas.px(y - 11))
     canvas.draw(canvas.ui.atlas("adventureguide-ring"), x - 13, y - 13, 26, 26, (1, 1, 1, alpha))
     canvas.draw(canvas.ui.atlas(f"services-number-{number}"), x - 11, y - 12.5, 22, 25, (1, 1, 1, alpha))
+    if others:
+        font = FONTS["NumberFontNormal"]
+        text = f"+{others}"
+        w = canvas.text_width(text, font)
+        piece = canvas.ui.canvas(w + 2, font.height + 2)
+        piece.text(1, 1, text, font)
+        faded = piece.image
+        faded.putalpha(faded.getchannel("A").point(lambda a: round(a * alpha)))
+        canvas.composite(faded, canvas.px(x + 13 + 4 - w - 1), canvas.px(y + 13 + 4 - font.height - 1))
+        return
     art = canvas.ui.atlas(badge)
     factor = 16 / max(art.width, art.height)
     w, h = art.width * factor, art.height * factor
@@ -535,18 +554,22 @@ def render_stops(ui):
         normal = projection(ui, p, map_id)
         return (normal[0] * mw, normal[1] * mh)
 
+    ends = [ordered(walk)[-1] for walk in ordered(data()["stops"])]
+    # Route.lua RefreshStops: stops at one place share a ring, which holds each of them.
+    rings = {}
+    for number, end in enumerate(ends, 1):
+        rings.setdefault(tuple(point(end)), []).append(number)
     # Route.lua: everything past the stop being guided to recedes to LATER_ALPHA.
     for index, walk in enumerate(ordered(data()["stops"])):
         points = [point(p) for p in ordered(walk)]
         for a, b in zip(points, points[1:], strict=False):
             segment(route, a, b, NORMAL, True, 1 if index == 0 else 0.4)
-    flush_strokes(route)
+    flush_strokes(route, marks=[(px, py, 13) for px, py in rings])
     canvas.paste(route, mx, my)
     map_landmarks(canvas, map_id, rects["map"])
-    ends = [ordered(walk)[-1] for walk in ordered(data()["stops"])]
-    for number, (end, badge) in reversed(list(enumerate(zip(ends, STOP_BADGES, strict=True), 1))):
-        px, py = point(end)
-        stop_pin(canvas, mx + px, my + py, number, badge, number > 1)
+    for (px, py), numbers in reversed(rings.items()):
+        badge = STOP_BADGES[numbers[0] - 1] if len(numbers) == 1 else None
+        stop_pin(canvas, mx + px, my + py, numbers[0], badge, numbers[0] > 1, len(numbers) - 1)
     sx, sy = point(THELSAMAR)
     icon(canvas, "UI-WorldMapArrow", mx + sx, my + sy, 27)
     xs = [point(p)[0] for p in (*ends, THELSAMAR)]
