@@ -1,9 +1,11 @@
 -- Each case boots a fresh addon against Blizzard's real waypoint provider, without a game client.
-local harness = os.getenv("SPF_HARNESS") or os.getenv("HOME") .. "/drive/proj/wow-handoff/scratch/harness2.lua"
-local file = assert(io.open(harness))
-local source = file:read("*a")
-file:close()
-source = source:sub(1, assert(source:find("visible = true\nlocal function advance", 1, true)) - 1)
+local dir = arg[0]:match("^(.*)/") or "tests"
+local source = ""
+for _, part in ipairs({ "ui_client.lua", "ui_map.lua" }) do
+	local file = assert(io.open(dir .. "/" .. part))
+	source = source .. file:read("*a")
+	file:close()
+end
 local setup = [[
 visible, WorldMapFrame.shown = true, true
 posX, posY, posMap, facing = 0, 0, 1, 0
@@ -113,6 +115,8 @@ check(
 	"quantized read-back stays owned",
 	"",
 	[[
+-- Turn by turn, so Guide moves along the walk's bends (step-end marks are the default since #44).
+ns.db.guideStops = false
 start()
 waypoint = UiMapPoint.CreateFromCoordinates(1414, waypoint.position.x + 0.00001, waypoint.position.y)
 fireEvent("USER_WAYPOINT_UPDATED")

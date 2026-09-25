@@ -1,9 +1,11 @@
 -- Reuse the client UI fixture without its integration scenarios.
-local harness = os.getenv("SPF_HARNESS") or os.getenv("HOME") .. "/drive/proj/wow-handoff/scratch/harness2.lua"
-local file = assert(io.open(harness))
-local source = file:read("*a")
-file:close()
-source = source:sub(1, assert(source:find("visible = true\nlocal function advance", 1, true)) - 1)
+local dir = arg[0]:match("^(.*)/") or "tests"
+local source = ""
+for _, part in ipairs({ "ui_client.lua", "ui_map.lua" }) do
+	local file = assert(io.open(dir .. "/" .. part))
+	source = source .. file:read("*a")
+	file:close()
+end
 assert(loadstring(source .. [[
 local tracker = ShortestPathForeverObjectiveTracker
 local dirty, headers, geometry = 0, 0, 0

@@ -164,7 +164,7 @@ Baseline: `9921ef4` on `cb/ferry`; after: the uncommitted runtime changes. All w
 
 ## Frame time, allocation and retained memory
 
-`tests/runtime_bench.lua` uses the UI stubs from the offline harness (`$SPF_HARNESS`, kept outside the repo; see `tests/ui.sh`), `luajit -joff` and simulated 60 Hz frames. Each version/scenario runs in three fresh processes, serially, alternating before/after. Means, allocations and resident sizes below are medians; **worst is the largest frame across all three runs**. Times cover addon Lua and stub calls, not client rendering. CPU frequency and slice boundaries affect timings.
+`tests/runtime_bench.lua` uses the UI stubs in `tests/ui_client.lua` and `tests/ui_map.lua`, `luajit -joff` and simulated 60 Hz frames. Each version/scenario runs in three fresh processes, serially, alternating before/after. Means, allocations and resident sizes below are medians; **worst is the largest frame across all three runs**. Times cover addon Lua and stub calls, not client rendering. CPU frequency and slice boundaries affect timings.
 
 Allocation runs stop GC during the measured interval. KB/frame is the resulting heap growth, not live memory. Resident KB is the post-full-GC increase above the initialized harness/addon, including loaded nav strings, retained endpoint searches and UI geometry. The excluded harness/addon base is approximately 1,407 KB before and 1,506 KB after (including shared link masks). Zero means no additional retained scenario state.
 
@@ -212,7 +212,7 @@ All required checks pass, plus `runtime_spec.lua`, `path_many_spec.lua`, `journe
 
 ## Reproduction
 
-Run from the repo root. `SPF_HARNESS` can override the external stub harness path. The archive command only reads git state.
+Run from the repo root. `$SPF_HARNESS` in these records is the external harness these runs used; its stubs are now `tests/ui_client.lua` and `tests/ui_map.lua`; its own scenarios had gone stale and were not kept. The archive command only reads git state.
 
 ```sh
 mkdir -p /tmp/spf-runtime-before

@@ -18,6 +18,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y luajit lua-check
       - run: luacheck .
       - run: for spec in tests/*_spec.lua; do luajit "$spec" || exit 1; done
+      - run: tests/ui.sh
       - uses: JohnnyMorganz/stylua-action@76fd70c03e6340ceaf673366712db9b20560b402 # v5.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -25,8 +26,8 @@ jobs:
           args: --check .
       - run: pipx run ruff==0.16.8 check .
       - run: pipx run ruff==0.16.8 format --check .
-      - run: pipx run --spec shellcheck-py==0.11.0.1 shellcheck tools/baker/bake.sh tools/typecheck.sh
-      - run: pipx run --spec shfmt-py==4.2.0 shfmt -d tools/baker/bake.sh tools/typecheck.sh
+      - run: pipx run --spec shellcheck-py==0.11.0.1 shellcheck tools/baker/bake.sh tools/typecheck.sh tools/fetch_blizzard_ui.sh tests/ui.sh
+      - run: pipx run --spec shfmt-py==4.2.0 shfmt -d tools/baker/bake.sh tools/typecheck.sh tools/fetch_blizzard_ui.sh tests/ui.sh
 
   typecheck:
     runs-on: ubuntu-latest
