@@ -42,6 +42,7 @@ JourneyGuide.lua
 Journey.lua
 JourneyInput.lua
 Corpse.lua
+StopPin.lua
 Route.lua
 RouteTransports.lua
 Alert.lua

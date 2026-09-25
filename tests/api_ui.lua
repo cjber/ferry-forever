@@ -85,8 +85,9 @@ assert(api.CurrentStop("Test") == nil and not ns.HasJourney())
 assert(#active[goalTemplate] == 0 and #active[lineTemplate] == 0)
 assert(not ShortestPathForeverMinimapRoute.scripts.OnUpdate)
 assert(not ShortestPathForeverJourneyDriver:IsShown() and not arrowFrame:IsShown())
--- Stops whose rings would overlap at this zoom share one ring, labelled with their numbers and naming each stop in
--- order. A ring holding the stop being guided to sits on that stop at full strength; the rest sit at their middle.
+-- Stops whose rings would overlap at this zoom share one ring, showing the first stop's number with a +N corner count
+-- and naming each stop in order. A ring holding the stop being guided to sits on that stop at full strength; the rest
+-- sit at their middle.
 local routeProvider
 for _, candidate in ipairs(providers) do
  if candidate.RefreshStops then routeProvider = candidate end
@@ -112,10 +113,9 @@ local function rings(expected)
    local expected = string.format("Stop %d of 7: %s", n, close[n].title)
    assert(pin.stopTitles[j] == expected, "the tooltip names each stop in order")
   end
-  if #want.stops == 1 then
-   assert(pin.Numeral.atlas == "services-number-" .. want.stops[1] and pin.Number.text == "")
-  else
-   assert(pin.Number.text == want.label, tostring(pin.Number.text))
+  assert(pin.Numeral.atlas == "services-number-" .. want.stops[1] and pin.Number.text == "")
+  assert(pin.Count.text == (#want.stops == 1 and "" or "+" .. #want.stops - 1), tostring(pin.Count.text))
+  if #want.stops > 1 then
    local x = 0
    for _, n in ipairs(want.stops) do x = x + close[n].x end
    if i == 1 then
@@ -133,7 +133,7 @@ assert(api.NavigateRoute("Test", close))
 zoom = 0
 routeProvider:OnCanvasScaleChanged()
 -- The current stop's ring takes the later stops overlapping it, rather than drawing over them.
-local zoomedOut = rings({ {stops={1,2,3,4}, label="1-4"}, {stops={5,7}, label="5, 7"}, {stops={6}} })
+local zoomedOut = rings({ {stops={1,2,3,4}}, {stops={5,7}}, {stops={6}} })
 zoomedOut[1]:OnMouseEnter()
 assert(tip[1] == "# Stop 1 of 7: A" and tip[2] == "  Stop 2 of 7: B" and tip[4] == "  Stop 4 of 7: D")
 zoomedOut[1]:OnMouseLeave()
@@ -147,7 +147,7 @@ zoom = 1
 routeProvider:OnCanvasScaleChanged()
 map.AcquirePin = acquire
 assert(acquisitions == 6 and #pools[goalTemplate] == 0, "the split reuses pooled rings, plus three more")
-rings({ {stops={1}}, {stops={2}}, {stops={3}}, {stops={4}}, {stops={5,7}, label="5, 7"}, {stops={6}} })
+rings({ {stops={1}}, {stops={2}}, {stops={3}}, {stops={4}}, {stops={5,7}}, {stops={6}} })
 -- Arriving at a stop moves the full-strength ring on, still holding the later stops overlapping it.
 zoom = 0
 routeProvider:OnCanvasScaleChanged()
@@ -156,8 +156,9 @@ posX, posY = arrive.x, arrive.y
 tick()
 assert(api.CurrentStop("Test") == 2)
 local pins = active[goalTemplate]
-assert(#pins == 3 and pins[1].Number.text == "2-4" and pins[1].Numeral.alpha == 1 and #pins[1].stopTitles == 3)
-assert(pins[1].x == close[2].x and pins[2].Number.text == "5, 7" and pins[2].Numeral.alpha == 0.55)
+assert(#pins == 3 and pins[1].Numeral.atlas == "services-number-2" and pins[1].Count.text == "+2")
+assert(pins[1].Numeral.alpha == 1 and #pins[1].stopTitles == 3)
+assert(pins[1].x == close[2].x and pins[2].Count.text == "+1" and pins[2].Numeral.alpha == 0.55)
 api.Cancel("Test")
 zoom = 1
 posX, posY = 0, 0
@@ -229,11 +230,11 @@ assert(api.NavigateRoute("Test", many))
 local startMS = (os.clock()-started)*1000
 assert(calls == 1, "only the current stop is planned")
 local line = active[lineTemplate][1]
--- They share two rings, one per row, too many apart to list on the ring; the current stop's row sits on it.
+-- They share two rings, one per row; the current stop's row sits on it.
 local pins = active[goalTemplate]
 assert(#pins == 2 and #line.paths[#line.paths].points == 64)
-assert(pins[1].Number.text == "1+" and pins[1].Numeral.alpha == 1 and #pins[1].stopTitles == 32)
-assert(pins[2].Number.text == "2+" and #pins[2].stopTitles == 32)
+assert(pins[1].Count.text == "+31" and pins[1].Numeral.alpha == 1 and #pins[1].stopTitles == 32)
+assert(pins[2].Count.text == "+31" and pins[2].Numeral.atlas == "services-number-2" and #pins[2].stopTitles == 32)
 local drawCPU, drawWorst = 0, 0
 for _=1,30 do
  started = os.clock()

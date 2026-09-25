@@ -14,6 +14,10 @@ verbatim rather than rewritten as the addon moves.
 - **A route stop that says what stands there keeps its number.** When another addon marks a stop as a flight master,
   a quest giver, a boat and so on, the map shows the numbered step circle with that icon as a small badge on its
   lower right, rather than the icon with a loose number beside it. A single destination still shows the icon alone.
+- **The dotted path stops short of each stop.** The dots end a little before every numbered circle, on the map at any
+  zoom and on the minimap, instead of running under it.
+- **A place you go back to shows one circle.** Stops at the same place, or close enough to overlap on the map, share
+  one circle with the first stop's number and a small *+1*, *+2* on its lower right. Hovering it names each stop.
 
 ## [1.2.0] - 2026-09-25
 
