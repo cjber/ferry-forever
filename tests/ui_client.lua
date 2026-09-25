@@ -406,6 +406,9 @@ end
 _G.GetServerTime = function()
 	return math.floor(1790000000 + T)
 end
+_G.GetLocale = function()
+	return "enUS"
+end
 _G.GetRealmName = function()
 	return "Test"
 end

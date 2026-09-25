@@ -1,19 +1,20 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 -- How a journey step reads. The tracker and the public API's EstimateDetail share these words, so a step names
 -- the same place in SPF's list and in another addon's travel line.
 local SCHEDULED = { boat = true, zeppelin = true, lift = true, tram = true }
-local VERB = {
-	walk = "Walk to",
-	flight = "Fly to",
-	boat = "Boat to",
-	zeppelin = "Zeppelin to",
-	lift = "Lift to",
-	tram = "Tram to",
-	portal = "Portal to",
-	passage = "Go through to",
-	teleport = "Teleport to",
+local STEP = {
+	walk = L["Walk to %s"],
+	flight = L["Fly to %s"],
+	boat = L["Boat to %s"],
+	zeppelin = L["Zeppelin to %s"],
+	lift = L["Lift to %s"],
+	tram = L["Tram to %s"],
+	portal = L["Portal to %s"],
+	passage = L["Go through to %s"],
+	teleport = L["Teleport to %s"],
 }
 
 -- A place with no kind is the destination point as clicked or picked from a quest.
@@ -22,7 +23,7 @@ local VERB = {
 ---@return string
 function ns.PlaceLabel(node, mode)
 	if node.kind == "start" then
-		return "your position"
+		return L["your position"]
 	elseif node.kind == "dock" then
 		return (mode == "boat" or mode == "zeppelin") and ns.DockLabel(node.id) or ns.DockTitle(node.id)
 	elseif node.kind == "taxi" then
@@ -43,10 +44,11 @@ function ns.LegLabel(leg)
 	return ns.PlaceLabel(leg.to, leg.mode)
 end
 
+-- What to do on a leg: "Boat to Menethil Harbor".
 ---@param leg SPFLeg
 ---@return string
-function ns.LegVerb(leg)
-	return VERB[leg.mode]
+function ns.LegStep(leg)
+	return string.format(STEP[leg.mode], ns.LegLabel(leg))
 end
 
 -- Whole seconds as a countdown shows them, so totals add up to the times on screen.
@@ -61,9 +63,10 @@ end
 function ns.LegTime(leg)
 	local text = ns.FormatCountdown(leg.arrive - leg.depart)
 	if leg.wait and leg.wait > 0 then
-		local guess = leg.estimated and SCHEDULED[leg.mode] and "about " or ""
-		local lead = leg.mode == "teleport" and "ready in " or "leaves in "
-		text = lead .. guess .. ns.FormatCountdown(leg.wait) .. " · " .. text
+		local lead = leg.mode == "teleport" and L["ready in %s"]
+			or leg.estimated and SCHEDULED[leg.mode] and L["leaves in about %s"]
+			or L["leaves in %s"]
+		text = string.format(lead, ns.FormatCountdown(leg.wait)) .. " · " .. text
 	end
 	return text
 end

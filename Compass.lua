@@ -1,5 +1,6 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 local WIDTH, HEIGHT, POLL_EVERY = 360, 60, 0.1
 local TURN, EASE, SETTLED = 2 * math.pi, 18, 0.001
@@ -145,7 +146,7 @@ local function Render(x, y, map)
 		local distance = math.floor(math.sqrt((point.x - x) ^ 2 + (point.y - y) ^ 2))
 		if distance ~= frame.distance then
 			frame.distance = distance
-			frame.Distance:SetFormattedText("%d yd", distance)
+			frame.Distance:SetFormattedText(L["%d yd"], distance)
 		end
 		-- A merged bend keeps its distance under the surviving destination or transport icon.
 		if owner ~= frame.distanceOwner then
@@ -269,7 +270,7 @@ local function Create()
 	frame:SetBackdropColor(0.06, 0.06, 0.06, 0.7)
 	frame:SetBackdropBorderColor(0.55, 0.52, 0.46, 0.65)
 	frame.ticks = {}
-	local directions = { "N", "W", "S", "E" }
+	local directions = { L["N"], L["W"], L["S"], L["E"] }
 	for index = 0, 23 do
 		---@class SPFCompassTick : Texture
 		---@field angle number

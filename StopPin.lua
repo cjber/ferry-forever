@@ -1,5 +1,6 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 local GOAL_ATLAS, GOAL_SCALE = "Waypoint-MapPin-Tracked", 0.8
 -- The map's own quest button (POIButtonTemplate): a 20-unit button whose 32-unit disc art overhangs it.
@@ -115,7 +116,7 @@ function ShortestPathForeverGoalPinMixin:OnMouseEnter()
 	for _, row in ipairs(not stopTitles[1] and rows or {}) do
 		GameTooltip_AddColoredLine(GameTooltip, row.text, row.current and HIGHLIGHT_FONT_COLOR or NORMAL_FONT_COLOR)
 	end
-	GameTooltip_AddNormalLine(GameTooltip, "Right-click to clear")
+	GameTooltip_AddNormalLine(GameTooltip, L["Right-click to clear"])
 	GameTooltip:Show()
 end
 
