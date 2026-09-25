@@ -13,13 +13,13 @@ local DOT_TEXTURE = "Interface\\AddOns\\ShortestPathForever\\media\\Dot"
 local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
 -- RouteTransports.lua fades its outlines with the same share.
 ns.RouteUnderAlpha = UNDER_ALPHA
--- StopPin.lua's marks. On the minimap the ring alone circles the game's own icon at a stop with a known mark.
-local GOAL_ATLAS, STOP_ATLAS, STOP_SIZE = ns.GoalAtlas, ns.StopAtlas, ns.StopSize
+-- StopPin.lua's marks. On the minimap a hollow ring circles the game's own icon at a stop with a known mark.
+local GOAL_ATLAS, RING_ATLAS, STOP_SIZE = ns.GoalAtlas, "adventureguide-ring", ns.StopSize
 local MINIMAP_GOAL, MINIMAP_RING = 16, 22
 -- Everything past the stop being guided to recedes, so the way ahead reads first. Later lines keep their colour
--- but drop well back against parchment; StopPin.lua's later rings stay a little stronger.
+-- but drop well back against parchment; StopPin.lua's later stops stay a little stronger.
 local LATER_ALPHA = 0.4
--- Breadcrumbs stop short of each stop's mark, so the way runs up to a ring rather than under it: a dot is left out when
+-- Breadcrumbs stop short of each stop's mark, so the way runs up to a stop rather than under it: a dot is left out when
 -- its rim would come within STOP_GAP of the mark, on screen, at either end of a leg.
 local STOP_GAP = 2
 local COLORS = {
@@ -613,8 +613,8 @@ function ProviderMixin:RefreshAllData()
 	end
 end
 
--- Stops whose rings would overlap at this zoom share one, as the map's docks do: at their middle, faded, or at the
--- stop being guided to and at full strength when it is among them. The rings are rebuilt only when that grouping
+-- Stops whose buttons would overlap at this zoom share one, as the map's docks do: at their middle, faded, or at the
+-- stop being guided to and at full strength when it is among them. The buttons are rebuilt only when that grouping
 -- changes, and the line redrawn around them.
 function ProviderMixin:RefreshStops()
 	local map = self:GetMap()
@@ -652,7 +652,7 @@ function ProviderMixin:RefreshStops()
 			x, y, numbers[i], titles[i] = x + mark.x, y + mark.y, mark.index, mark.title
 		end
 		local lead = group[1]
-		-- A shared ring stands for several places, so only a stop on its own wears its badge.
+		-- A shared button stands for several places, so only a stop on its own wears its badge.
 		local look = #group == 1 and lead.look or nil
 		local later, numbered = lead.index ~= first, numbers
 		if later then
@@ -880,7 +880,7 @@ function ns.SetJourneyRoute(destination, route)
 		-- Addon textures draw over the minimap's own icons, so a stop with a known mark (a "?", a flight master) is only
 		-- circled there: the game's icon shows through the ring.
 		local ringed = destination and destination.look ~= nil
-		minimap.Goal:SetAtlas(ringed and STOP_ATLAS or GOAL_ATLAS)
+		minimap.Goal:SetAtlas(ringed and RING_ATLAS or GOAL_ATLAS)
 		minimap.Goal:SetSize(ringed and MINIMAP_RING or MINIMAP_GOAL, ringed and MINIMAP_RING or MINIMAP_GOAL)
 		if destination then
 			minimap.elapsed = 0

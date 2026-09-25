@@ -11,6 +11,9 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+- **Route stops look like the map's own quest buttons.** Each numbered stop on the world map is now the brown disc
+  with the gold ring the game uses for quests, with the game's own yellow number in it and the same glow on hover,
+  rather than a thinner ring of its own.
 - **A route stop that says what stands there keeps its number.** When another addon marks a stop as a flight master,
   a quest giver, a boat and so on, the map shows the numbered step circle with that icon as a small badge on its
   lower right, rather than the icon with a loose number beside it. A single destination still shows the icon alone.

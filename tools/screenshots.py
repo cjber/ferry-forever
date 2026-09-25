@@ -41,6 +41,7 @@ from wowmock import (
     Ui,
     backdrop,
     colored,
+    crop_coords,
     draw_overlay,
     map_art,
     map_overlays,
@@ -511,20 +512,25 @@ THELSAMAR = {"map": 0, "x": -5640.0, "y": -2760.0}
 # A caller's route through Thelsamar (API.lua NavigateRoute with kinds): the flight master, a quest giver, a hand-in,
 # and back to the quest giver, whose ring then holds stops 2 and 4.
 STOP_BADGES = ("taxinode_alliance", "QuestNormal", "QuestTurnin", "QuestTurnin")
+STOP_SIZE = 20
+NUMBER_ICONS = "interface/worldmap/ui-questpoi-numbericons.blp"
 
 
 def stop_pin(canvas, x, y, number, badge, later, others=0):
-    """StopPin.lua's numbered stop: the Adventure Guide ring over an opaque dark disc, Blizzard's numeral in it, and the
-    stop's kind as a 16-unit badge hanging 4 units off the ring's lower right. A ring shared by several stops shows the
+    """StopPin.lua's numbered stop: the map's quest button (UI-QuestPoi-QuestNumber, 32 units on a 20-unit pin) over
+    its own black silhouette, and the numbered quest button's yellow numeral from UI-QuestPoi-NumberIcons over it. The
+    stop's kind hangs as a 16-unit badge 4 units off the pin's lower right. A button shared by several stops shows the
     first's number and, in the badge's place, how many more (NumberFontNormal, BOTTOMRIGHT at 4, -4). Later stops fade
-    all but the disc."""
+    all but the silhouette."""
     alpha = 0.55 if later else 1
-    k = canvas.ui.scale
-    disc = Image.new("RGBA", (round(22 * k), round(22 * k)))
-    ImageDraw.Draw(disc).ellipse((0, 0, disc.width - 1, disc.height - 1), fill=(0, 0, 0, round(255 * 0.75)))
-    canvas.composite(disc, canvas.px(x - 11), canvas.px(y - 11))
-    canvas.draw(canvas.ui.atlas("adventureguide-ring"), x - 13, y - 13, 26, 26, (1, 1, 1, alpha))
-    canvas.draw(canvas.ui.atlas(f"services-number-{number}"), x - 11, y - 12.5, 22, 25, (1, 1, 1, alpha))
+    button = canvas.ui.atlas("UI-QuestPoi-QuestNumber")
+    canvas.draw(button, x - 16, y - 16, 32, 32, (0, 0, 0, 1))
+    canvas.draw(button, x - 16, y - 16, 32, 32, (1, 1, 1, alpha))
+    cell = number - 1
+    left, top = cell % 8 * 0.125, 0.5 + cell // 8 * 0.125
+    numeral = crop_coords(canvas.ui.texture(NUMBER_ICONS), left, left + 0.125, top, top + 0.125)
+    canvas.draw(numeral, x - 16, y - 16, 32, 32, (1, 1, 1, alpha))
+    edge = STOP_SIZE / 2 + 4
     if others:
         font = FONTS["NumberFontNormal"]
         text = f"+{others}"
@@ -533,12 +539,12 @@ def stop_pin(canvas, x, y, number, badge, later, others=0):
         piece.text(1, 1, text, font)
         faded = piece.image
         faded.putalpha(faded.getchannel("A").point(lambda a: round(a * alpha)))
-        canvas.composite(faded, canvas.px(x + 13 + 4 - w - 1), canvas.px(y + 13 + 4 - font.height - 1))
+        canvas.composite(faded, canvas.px(x + edge - w - 1), canvas.px(y + edge - font.height - 1))
         return
     art = canvas.ui.atlas(badge)
     factor = 16 / max(art.width, art.height)
     w, h = art.width * factor, art.height * factor
-    canvas.draw(art, x + 13 + 4 - w, y + 13 + 4 - h, w, h, (1, 1, 1, alpha))
+    canvas.draw(art, x + edge - w, y + edge - h, w, h, (1, 1, 1, alpha))
 
 
 def render_stops(ui):
@@ -564,7 +570,7 @@ def render_stops(ui):
         points = [point(p) for p in ordered(walk)]
         for a, b in zip(points, points[1:], strict=False):
             segment(route, a, b, NORMAL, True, 1 if index == 0 else 0.4)
-    flush_strokes(route, marks=[(px, py, 13) for px, py in rings])
+    flush_strokes(route, marks=[(px, py, STOP_SIZE / 2) for px, py in rings])
     canvas.paste(route, mx, my)
     map_landmarks(canvas, map_id, rects["map"])
     for (px, py), numbers in reversed(rings.items()):
