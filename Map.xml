@@ -22,42 +22,40 @@
 	<Frame name="ShortestPathForeverRoutePinTemplate" mixin="ShortestPathForeverRoutePinMixin" virtual="true"/>
 	<Frame name="ShortestPathForeverGoalPinTemplate" mixin="ShortestPathForeverGoalPinMixin" enableMouse="true" virtual="true">
 		<Layers>
-			<!-- A numbered stop of a multi-stop journey: the Adventure Guide's ring over a dark disc (cut round with the
-			     stock portrait mask), Blizzard's gold numeral in it, and the quest POI's glow on hover. A stop whose
-			     caller said what stands there wears that mark as a badge over the ring's lower right; a lone one shows the
-			     mark alone, with no ring or disc. -->
+			<!-- A numbered stop of a multi-stop journey is the map's own quest button (POIButtonTemplate in
+			     Blizzard_POIButton): its brown disc and gold ring, the numbered quest button's yellow numeral from
+			     UI-QuestPoi-NumberIcons (QuestPOINumericTemplate), and its inner glow on hover. A shadow of the disc
+			     stays opaque under it, so a faded later stop still hides the POI beneath. A stop whose caller said what
+			     stands there wears that mark as a badge over the button's lower right; a lone one shows the mark alone,
+			     and a lone destination the waypoint pin. -->
 			<Layer level="BACKGROUND">
-				<Texture parentKey="Disc" hidden="true">
-					<Size x="22" y="22"/>
+				<Texture parentKey="Disc" atlas="UI-QuestPoi-QuestNumber" hidden="true">
+					<Size x="32" y="32"/>
 					<Anchors>
 						<Anchor point="CENTER"/>
 					</Anchors>
-					<Color r="0" g="0" b="0" a="0.75"/>
 				</Texture>
-				<MaskTexture parentKey="DiscMask" file="Interface\CharacterFrame\TempPortraitAlphaMask" hWrapMode="CLAMPTOBLACKADDITIVE" vWrapMode="CLAMPTOBLACKADDITIVE">
-					<Anchors>
-						<Anchor point="TOPLEFT" relativeKey="$parent.Disc"/>
-						<Anchor point="BOTTOMRIGHT" relativeKey="$parent.Disc"/>
-					</Anchors>
-					<MaskedTextures>
-						<MaskedTexture childKey="Disc"/>
-					</MaskedTextures>
-				</MaskTexture>
 			</Layer>
 			<Layer level="ARTWORK">
 				<Texture parentKey="Texture" setAllPoints="true"/>
+				<Texture parentKey="Button" atlas="UI-QuestPoi-QuestNumber" hidden="true">
+					<Size x="32" y="32"/>
+					<Anchors>
+						<Anchor point="CENTER"/>
+					</Anchors>
+				</Texture>
 			</Layer>
 			<Layer level="ARTWORK" textureSubLevel="1">
-				<Texture parentKey="Glow" atlas="UI-QuestPoi-InnerGlow" alphaMode="ADD" hidden="true">
-					<Size x="30" y="30"/>
+				<Texture parentKey="Numeral" file="Interface\WorldMap\UI-QuestPoi-NumberIcons" hidden="true">
+					<Size x="32" y="32"/>
 					<Anchors>
 						<Anchor point="CENTER"/>
 					</Anchors>
 				</Texture>
 			</Layer>
 			<Layer level="OVERLAY">
-				<Texture parentKey="Numeral" hidden="true">
-					<Size x="22" y="25"/>
+				<Texture parentKey="Glow" atlas="UI-QuestPoi-InnerGlow" alphaMode="ADD" hidden="true">
+					<Size x="32" y="32"/>
 					<Anchors>
 						<Anchor point="CENTER"/>
 					</Anchors>

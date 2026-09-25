@@ -98,11 +98,11 @@ invalid input, combat or disabled Journeys return `false` without replacing guid
 A stop's optional `kind` says what stands there: `"pickup"`, `"turnin"`, `"objective"`, `"trainer"`,
 `"innkeeper"`, `"flightmaster"`, `"battlemaster"`, `"dungeon"`, `"boat"`, `"zeppelin"`, `"lift"`, `"tram"` or
 `"portal"`. Its numbered map pin then wears the game's own mark for it (a quest's “!” or “?”, a flight master, a
-boat) as a small badge on the ring's lower right; a lone stop shows the mark alone. The minimap circles the spot
+boat) as a small badge on its lower right; a lone stop shows the mark alone. The minimap circles the spot
 rather than covering the game's icon there. Any other kind is ignored, as is a kind whose art the client lacks: the
 stop keeps the plain pin.
 
-![Three stops through Thelsamar: the flight master, a quest giver and a hand-in, each badged on its numbered ring](docs/screenshots/stops.png)
+![Three stops through Thelsamar: the flight master, a quest giver and a hand-in, each badged on its numbered quest button](docs/screenshots/stops.png)
 `CurrentStop(owner)` returns the current 1-based stop or `nil`; `Cancel(owner)` returns `true` only when it
 clears that owner's whole route. Use your addon's name as `owner`; starting another journey replaces ownership.
 `Active()` says whether any journey is guiding, yours or another addon's. `Ended(owner)` says why that owner's

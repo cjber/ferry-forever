@@ -1,5 +1,5 @@
 -- The journey's breadcrumbs stop a little short of each stop's mark, on the world map at any zoom and on the minimap,
--- and a place the route visits twice shows one ring: the first visit's number with a +N corner count.
+-- and a place the route visits twice shows one button: the first visit's number with a +N corner count.
 local checks = 0
 local function check(value, label)
 	checks = checks + 1
@@ -29,6 +29,12 @@ function region:SetText(text)
 end
 function region:SetAtlas(atlas)
 	self.atlas = atlas
+end
+function region:SetAlpha(alpha)
+	self.alpha = alpha
+end
+function region:SetTexCoord(left, right, top, bottom)
+	self.coords = { left, right, top, bottom }
 end
 function region:SetSize(width, height)
 	self.width, self.height = width, height
@@ -122,7 +128,8 @@ function map.RemoveAllPinsByTemplate(_, template)
 	active[template] = {}
 end
 function map.AcquirePin(_, template, ...)
-	local pin = stub({ Texture = stub(), Icon = stub(), Disc = stub(), Numeral = stub(), Glow = stub() })
+	local pin =
+		stub({ Texture = stub(), Icon = stub(), Disc = stub(), Button = stub(), Numeral = stub(), Glow = stub() })
 	for key, value in pairs(_G[template:gsub("Template$", "Mixin")]) do
 		pin[key] = value
 	end
@@ -243,10 +250,21 @@ preview = { { mode = "walk", points = { first, second, first } } }
 ns.SetJourneyRoute(stops[1], { legs = { { mode = "walk", points = { player, first } } } })
 
 local rings = active.ShortestPathForeverGoalPinTemplate
-check(#rings == 2, "the place visited twice shares one ring")
-check(rings[1].Numeral.atlas == "services-number-1" and rings[1].Count.text == "+1", "first visit's number, +1")
+-- UI-QuestPoi-NumberIcons' yellow numerals start halfway down, eight to a row of eighths.
+local function numeral(pin, left, top)
+	local coords = pin.Numeral.coords
+	return pin.Numeral.shown
+		and coords[1] == left
+		and coords[2] == left + 0.125
+		and coords[3] == top
+		and coords[4] == top + 0.125
+end
+check(#rings == 2, "the place visited twice shares one button")
+check(rings[1].Button.shown and rings[1].Disc.shown and rings[1].width == 20, "the map's quest button, 20 units")
+check(numeral(rings[1], 0, 0.5) and rings[1].Count.text == "+1", "first visit's number, +1")
 check(rings[1].stopTitles[1] == stops[1].routeTitle and rings[1].stopTitles[2] == stops[3].routeTitle)
-check(rings[2].Numeral.atlas == "services-number-2" and rings[2].Count.text == "", "a single visit has no count")
+check(numeral(rings[2], 0.125, 0.5) and rings[2].Count.text == "", "a single visit has no count")
+check(rings[2].Button.alpha == 0.55 and rings[2].Disc.alpha == nil, "a later stop fades over its opaque shadow")
 
 -- Dot centres, in the owner's units.
 local function dots(owner)
@@ -276,7 +294,7 @@ for _, zoom in ipairs({ 2, 0.5 }) do
 	line:OnCanvasScaleChanged()
 	local scale = UI_SCALE * zoom
 	for _, place in ipairs({ first, second }) do
-		clears(line, place.x * CANVAS, -place.y * CANVAS, 13 / zoom, scale, "world map at " .. zoom)
+		clears(line, place.x * CANVAS, -place.y * CANVAS, 10 / zoom, scale, "world map at " .. zoom)
 	end
 end
 

@@ -21,6 +21,11 @@ C_Item = C_Item or {
 ns.Docks, ns.Routes, ns.TaxiNodes, ns.TaxiPaths, ns.Portals, ns.Landmasses = {}, {}, {}, {}, {}, {}
 local api = ShortestPathForever.API
 local lineTemplate, goalTemplate = "ShortestPathForeverRoutePinTemplate", "ShortestPathForeverGoalPinTemplate"
+-- UI-QuestPoi-NumberIcons' yellow numerals fill its lower half in eighths, eight to a row.
+local function numeral(pin)
+ local left, _, top = unpack(pin.Numeral.coords)
+ return (top - 0.5) * 64 + left * 8 + 1
+end
 local stops = {
  {map=1414,x=0.51,y=0.5,title="First"},
  {map=1414,x=0.53,y=0.49,title="Second"},
@@ -37,13 +42,13 @@ local function check(index, count)
  local pins = active[goalTemplate]
  assert(#pins == count-index+1)
  for i, pin in ipairs(pins) do
-  -- Stops up to 9 wear Blizzard's numeral atlas on the Adventure Guide ring; later stops use the font.
-  assert(pin.Numeral.atlas == "services-number-" .. (index+i-1), "remaining pins retain original stop numbers")
+  -- Stops up to 25 wear the numbered quest button's numeral on the map's quest button; later stops use the font.
+  assert(numeral(pin) == index+i-1, "remaining pins retain original stop numbers")
   assert(pin.Number.text == "")
-  assert(pin.Texture.atlas == "adventureguide-ring")
+  assert(not pin.Button.hidden and pin.Button.alpha == (i == 1 and 1 or 0.55))
   assert(pin.Numeral.alpha == (i == 1 and 1 or 0.55), "only the stop being guided to is at full strength")
   assert(pin.alpha == nil and pin.Disc.alpha == nil, "the disc stays opaque over the POI beneath")
-  assert(pin.frameLevelType == "PIN_FRAME_LEVEL_WAYPOINT_LOCATION", "rings draw above quest POIs")
+  assert(pin.frameLevelType == "PIN_FRAME_LEVEL_WAYPOINT_LOCATION", "stops draw above quest POIs")
   assert(pin.stopTitles[1] == string.format("Stop %d of %d: %s", index+i-1, count, stops[index+i-1].title))
  end
  local line = active[lineTemplate][1]
@@ -99,7 +104,7 @@ local close = {
  {map=1414,x=0.536,y=0.5,title="D"},
  {map=1414,x=0.3,y=0.3,title="E"},
  {map=1414,x=0.7,y=0.7,title="F"},
- {map=1414,x=0.31,y=0.3,title="G"},
+ {map=1414,x=0.306,y=0.3,title="G"},
 }
 local function rings(expected)
  local pins = active[goalTemplate]
@@ -113,7 +118,7 @@ local function rings(expected)
    local expected = string.format("Stop %d of 7: %s", n, close[n].title)
    assert(pin.stopTitles[j] == expected, "the tooltip names each stop in order")
   end
-  assert(pin.Numeral.atlas == "services-number-" .. want.stops[1] and pin.Number.text == "")
+  assert(numeral(pin) == want.stops[1] and pin.Number.text == "")
   assert(pin.Count.text == (#want.stops == 1 and "" or "+" .. #want.stops - 1), tostring(pin.Count.text))
   if #want.stops > 1 then
    local x = 0
@@ -146,7 +151,7 @@ assert(acquisitions == 0 and active[goalTemplate][1] == zoomedOut[1])
 zoom = 1
 routeProvider:OnCanvasScaleChanged()
 map.AcquirePin = acquire
-assert(acquisitions == 6 and #pools[goalTemplate] == 0, "the split reuses pooled rings, plus three more")
+assert(acquisitions == 6 and #pools[goalTemplate] == 0, "the split reuses pooled buttons, plus three more")
 rings({ {stops={1}}, {stops={2}}, {stops={3}}, {stops={4}}, {stops={5,7}}, {stops={6}} })
 -- Arriving at a stop moves the full-strength ring on, still holding the later stops overlapping it.
 zoom = 0
@@ -156,7 +161,7 @@ posX, posY = arrive.x, arrive.y
 tick()
 assert(api.CurrentStop("Test") == 2)
 local pins = active[goalTemplate]
-assert(#pins == 3 and pins[1].Numeral.atlas == "services-number-2" and pins[1].Count.text == "+2")
+assert(#pins == 3 and numeral(pins[1]) == 2 and pins[1].Count.text == "+2")
 assert(pins[1].Numeral.alpha == 1 and #pins[1].stopTitles == 3)
 assert(pins[1].x == close[2].x and pins[2].Count.text == "+1" and pins[2].Numeral.alpha == 0.55)
 api.Cancel("Test")
@@ -169,8 +174,8 @@ assert(#active[goalTemplate] == 1 and active[goalTemplate][1].Number.text == "")
 assert(active[goalTemplate][1].Texture.atlas == "Waypoint-MapPin-Tracked")
 assert(active[goalTemplate][1].stopTitles == nil and arrowFrame.Progress.text == "")
 assert(api.Cancel("Test"))
--- A numbered stop that says what stands there keeps its numbered ring and wears that mark as a small badge over the
--- ring's lower right; a lone one wears the mark alone. The minimap only rings it. Pooled pins go back to plain.
+-- A numbered stop that says what stands there keeps its numbered button and wears that mark as a small badge over the
+-- button's lower right; a lone one wears the mark alone. The minimap only rings it. Pooled pins go back to plain.
 posX, posY = 0, 0
 -- The fixture's pin ring is a bare stub; record whether it is shown.
 local stubIndex = mt.__index
@@ -182,17 +187,17 @@ assert(api.NavigateRoute("Test", {{map=1414,x=0.51,y=0.5,title="Hand in",kind="t
 local marked, plain = active[goalTemplate][1], active[goalTemplate][2]
 assert(marked.Icon.atlas == "QuestTurnin" and not marked.Icon.hidden and math.abs(marked.Icon.height - 16) < 1e-9)
 assert(marked.Icon.anchor[1] == "BOTTOMRIGHT" and marked.Icon.anchor[2] == 4 and marked.Icon.anchor[3] == -4)
-assert(not marked.Texture.hidden and marked.Texture.atlas == "adventureguide-ring" and not marked.Disc.hidden)
-assert(not marked.Numeral.hidden and marked.Numeral.atlas == "services-number-1" and marked.Number.text == "")
-assert(plain.Icon.hidden and not plain.Texture.hidden and not plain.Disc.hidden)
-assert(plain.Numeral.atlas == "services-number-2")
+assert(marked.Texture.hidden and not marked.Button.hidden and not marked.Disc.hidden)
+assert(not marked.Numeral.hidden and numeral(marked) == 1 and marked.Number.text == "")
+assert(plain.Icon.hidden and plain.Texture.hidden and not plain.Button.hidden and not plain.Disc.hidden)
+assert(numeral(plain) == 2)
 assert(ShortestPathForeverMinimapRoute.Goal.atlas == "adventureguide-ring")
 assert(api.Cancel("Test"))
 assert(api.Navigate("Test", 1414, 0.51, 0.5, "Trainer", "trainer"))
--- The trainer's tracking icon is a file, which the harness does not record; a lone stop has no number or ring.
+-- The trainer's tracking icon is a file, which the harness does not record; a lone stop has no number or button.
 local lone = active[goalTemplate][1]
 assert(not lone.Icon.hidden and lone.Icon.width == 22 and lone.Icon.anchor[1] == "CENTER")
-assert(lone.Texture.hidden and lone.Number.text == "")
+assert(lone.Texture.hidden and lone.Button.hidden and lone.Number.text == "")
 mt.__index = stubIndex
 assert(api.Cancel("Test"))
 assert(api.Navigate("Test", 1414, 0.51, 0.5, "Only"))
@@ -234,7 +239,7 @@ local line = active[lineTemplate][1]
 local pins = active[goalTemplate]
 assert(#pins == 2 and #line.paths[#line.paths].points == 64)
 assert(pins[1].Count.text == "+31" and pins[1].Numeral.alpha == 1 and #pins[1].stopTitles == 32)
-assert(pins[2].Count.text == "+31" and pins[2].Numeral.atlas == "services-number-2" and #pins[2].stopTitles == 32)
+assert(pins[2].Count.text == "+31" and numeral(pins[2]) == 2 and #pins[2].stopTitles == 32)
 local drawCPU, drawWorst = 0, 0
 for _=1,30 do
  started = os.clock()
