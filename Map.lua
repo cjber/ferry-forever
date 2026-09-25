@@ -564,6 +564,8 @@ function ShortestPathForeverPortalPinMixin:OnLoad()
 	self:UseFrameLevelType("PIN_FRAME_LEVEL_GOSSIP")
 	self:SetScalingLimits(1, 1, 1.2)
 	self:SetSize(PIN_SIZE, PIN_SIZE)
+	-- Closing the map hides the pin without an OnMouseLeave.
+	self:SetScript("OnHide", self.OnMouseLeave)
 end
 
 function ShortestPathForeverPortalPinMixin:OnAcquired(portal, x, y)
@@ -633,6 +635,12 @@ end
 -- Reuse the native flight-point template and acquisition (atlas size, nudging and supertracking).
 ---@class SPFAddonFlightPin : SPFFlightPin
 ShortestPathForeverFlightPinMixin = CreateFromMixins(FlightPointPinMixin)
+
+function ShortestPathForeverFlightPinMixin:OnLoad()
+	FlightPointPinMixin.OnLoad(self)
+	-- Closing the map hides the pin without an OnMouseLeave.
+	self:SetScript("OnHide", self.OnMouseLeave)
+end
 
 function ShortestPathForeverFlightPinMixin:OnMouseEnter()
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
