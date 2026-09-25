@@ -1,5 +1,6 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 -- A heads-up for anyone waiting away from the keyboard: the stock raid-warning banner, the transport's own
 -- in-world sound on the Master channel (heard with the game in the background) and a flashing taskbar icon,
@@ -10,7 +11,11 @@ local AT_DOCK = 30000
 local ON_BOARD = 20000
 local RADIUS = 120
 -- Lifts come round every few seconds, so they never alert.
-local KIND = { boat = "Boat", zeppelin = "Zeppelin", tram = "Tram" }
+local ARRIVES = {
+	boat = L["Boat to %s arrives in %s"],
+	zeppelin = L["Zeppelin to %s arrives in %s"],
+	tram = L["Tram to %s arrives in %s"],
+}
 -- What the game itself plays for each, as FileDataIDs in the Forever build (sound/doodad/): the bell a ship
 -- rings as it docks (boatdockedwarning.ogg), the zeppelin's horn (zeppelinhorn.ogg), the tram pulling in
 -- (subwaystop.ogg).
@@ -43,11 +48,11 @@ local function Check(dockID, yards)
 	if riding then
 		local kind = ns.Routes[riding].kind
 		local nextDock, arriveIn = ns.NextStop(riding)
-		if KIND[kind] and nextDock and arriveIn and Due(arriveIn, ON_BOARD) then
+		if ARRIVES[kind] and nextDock and arriveIn and Due(arriveIn, ON_BOARD) then
 			Alert(
 				riding .. ":" .. nextDock,
 				kind,
-				"Arriving at " .. ns.DockLabel(nextDock) .. " in " .. ns.FormatCountdown(arriveIn)
+				string.format(L["Arriving at %s in %s"], ns.DockLabel(nextDock), ns.FormatCountdown(arriveIn))
 			)
 		end
 		return
@@ -56,14 +61,10 @@ local function Check(dockID, yards)
 		return
 	end
 	for _, departure in ipairs(ns.DockDepartures(dockID)) do
-		local kind = KIND[departure.kind]
-		if kind and departure.known and not departure.docked and Due(departure.arriveIn, AT_DOCK) then
-			local text = string.format(
-				"%s to %s arrives in %s",
-				kind,
-				ns.DepartureDestination(departure),
-				ns.FormatCountdown(departure.arriveIn)
-			)
+		local arrives = ARRIVES[departure.kind]
+		if arrives and departure.known and not departure.docked and Due(departure.arriveIn, AT_DOCK) then
+			local text =
+				string.format(arrives, ns.DepartureDestination(departure), ns.FormatCountdown(departure.arriveIn))
 			Alert(departure.route .. ":" .. dockID, departure.kind, text)
 		end
 	end

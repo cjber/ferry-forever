@@ -1,4 +1,5 @@
 local ns = {}
+assert(loadfile("Locales/enUS.lua"))("ShortestPathForever", ns)
 assert(loadfile("Model.lua"))("ShortestPathForever", ns)
 assert(loadfile("Planner.lua"))("ShortestPathForever", ns)
 local Plan = ns.Planner.Plan

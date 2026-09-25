@@ -11,6 +11,10 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+- **Ready for translation.** Every line the addon writes, from the settings to the tracker and the map's tooltips,
+  now comes from one list of phrases, so the addon can be translated. Translations are welcome on GitHub; anything
+  not yet translated stays in English, as before.
+
 ## [1.3.0] - 2026-09-25
 
 - **The flight map shows which flight to take.** At the flight master, your journey's route uses the game's own

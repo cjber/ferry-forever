@@ -1,5 +1,6 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 -- Shift-click the world map: the fastest way there from here, by foot, flight, boat, zeppelin, tram and portal,
 -- with the boats' live waits. Search candidates stay private until costs and geometry settle, with a grace
@@ -9,7 +10,7 @@ local REPLAN_DUE = REPLAN_EVERY - 0.5 -- from here Itinerary.lua leaves the fram
 local DRAW_EVERY, SEARCH_GRACE = 0.5, 3
 -- A teleport step, by the item's or spell's own name in the game's language, after its own icon at the font's
 -- height: the one step you act on from your bags or spellbook stands out from the travel around it.
-local USE_ITEM, CAST_SPELL = "Use %s", "Cast %s"
+local USE_ITEM, CAST_SPELL = L["Use %s"], L["Cast %s"]
 local ICON = "|T%d:0|t "
 
 local goal, result
@@ -50,11 +51,11 @@ local WATER_SPELLS = { 546, 1706 }
 local WATER_HINT = 20
 local waterMode
 local WALK_FAILURE = {
-	unreachable = "no walking path",
-	offmesh = "no walking path",
-	outside = "no walking path",
-	nodata = "walking map unavailable",
-	error = "walking search failed",
+	unreachable = L["no walking path"],
+	offmesh = L["no walking path"],
+	outside = L["no walking path"],
+	nodata = L["walking map unavailable"],
+	error = L["walking search failed"],
 }
 
 -- While you are a ghost, Corpse.lua's run borrows the route drawing, the tracker and Guide; the journey waits.
@@ -241,11 +242,11 @@ function ns.JourneyInfo()
 	if not goal then
 		return nil
 	end
-	local title = goal.routeTitle or ("Journey to " .. ns.PlaceLabel(goal))
+	local title = goal.routeTitle or string.format(L["Journey to %s"], ns.PlaceLabel(goal))
 	local rows = {}
 	local loading = search and search.initial or false
 	if not result and loading then
-		rows[1] = { key = "searching", text = "Finding the fastest way…", grey = true }
+		rows[1] = { key = "searching", text = L["Finding the fastest way…"], grey = true }
 	elseif result then
 		local _, spell = WaterWalking()
 		for index = progress.index, #result.legs do
@@ -265,16 +266,16 @@ function ns.JourneyInfo()
 					name
 				)
 			else
-				text = string.format("%d. %s %s", index, ns.LegVerb(leg), ns.LegLabel(leg))
+				text = string.format("%d. %s", index, ns.LegStep(leg))
 			end
 			if leg.mode == "walk" and leg.to.undiscovered then
-				text = text .. " (new flight path)"
+				text = string.format(L["%s (new flight path)"], text)
 			end
 			if leg.walkError then
-				text = text .. " (" .. (WALK_FAILURE[leg.walkError] or "walking search failed") .. ")"
+				text = text .. " (" .. (WALK_FAILURE[leg.walkError] or L["walking search failed"]) .. ")"
 			end
 			if spell and leg.wet and leg.wet >= WATER_HINT then
-				text = text .. " (cast " .. C_Spell.GetSpellName(spell) .. ")"
+				text = string.format(L["%s (cast %s)"], text, C_Spell.GetSpellName(spell))
 			end
 			rows[#rows + 1] = {
 				key = index,
@@ -284,7 +285,7 @@ function ns.JourneyInfo()
 		end
 	else
 		local _, _, costError = Costs.Status()
-		rows[1] = { key = "unreachable", text = costError and WALK_FAILURE[costError] or "No way there from here." }
+		rows[1] = { key = "unreachable", text = costError and WALK_FAILURE[costError] or L["No way there from here."] }
 	end
 	return title, rows, result, progress.index, loading
 end

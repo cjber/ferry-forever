@@ -1,5 +1,6 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 -- Docks, lifts, tram stations and portals on the minimap, with the world map's icons and tooltips. The
 -- minimap's own tracking icons (flight masters, mailboxes) vanish at the rim rather than cling to it, and so do
@@ -225,7 +226,7 @@ end
 -- Minimap tracking (Blizzard_Minimap Mainline/Minimap.lua MiniMapTrackingButtonMixin:OnLoad) tags its menu
 -- MENU_MINIMAP_TRACKING; this adds one checkbox in the style of its CreateCheckboxWithIcon.
 local function AddTracking(_, rootDescription)
-	local checkbox = rootDescription:CreateCheckbox("Transport", function()
+	local checkbox = rootDescription:CreateCheckbox(L["Transport"], function()
 		return ns.db.minimapPins
 	end, function()
 		ns.SetOption("minimapPins", not ns.db.minimapPins)

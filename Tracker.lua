@@ -1,5 +1,6 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 ---@type SPFTracker
 local module
@@ -16,8 +17,8 @@ local module
 ---@field Spinner Frame
 ---@field mapDock? number
 ---@field blocks {key: number|string, title: string, rows: SPFRow[]}[]
-local ModuleMixin = { headerText = "Boats" }
-local HEADER = { boat = "Boats", zeppelin = "Boats", lift = "Lifts", tram = "Deeprun Tram" }
+local ModuleMixin = { headerText = L["Boats"] }
+local HEADER = { boat = L["Boats"], zeppelin = L["Boats"], lift = L["Lifts"], tram = L["Deeprun Tram"] }
 
 local function OpenDockMap(dockID)
 	local location = dockID and ns.DockLocation(dockID)
@@ -30,11 +31,11 @@ function ModuleMixin:OnBlockHeaderClick(block, button)
 			ns.ToggleJourneyGuide()
 		elseif button == "RightButton" then
 			MenuUtil.CreateContextMenu(block, function(_, root)
-				root:CreateCheckbox("Guide me", ns.IsJourneyGuided, ns.ToggleJourneyGuide)
-				root:CreateButton("Show on map", ns.ShowJourneyMap)
+				root:CreateCheckbox(L["Guide me"], ns.IsJourneyGuided, ns.ToggleJourneyGuide)
+				root:CreateButton(L["Show on map"], ns.ShowJourneyMap)
 				-- A corpse run ends only when you live again.
 				if not ns.Corpse.Active() then
-					root:CreateButton("Clear journey", ns.ClearJourney)
+					root:CreateButton(L["Clear journey"], ns.ClearJourney)
 				end
 			end)
 		end
@@ -85,7 +86,7 @@ local function RideRows(routeID)
 		return nil
 	end
 	local kind = ns.Routes[routeID].kind
-	local text = "arrives " .. ns.FormatCountdown(arriveIn)
+	local text = string.format(L["arrives %s"], ns.FormatCountdown(arriveIn))
 	return { { key = routeID, text = text } }, kind, dockID
 end
 
@@ -152,12 +153,12 @@ end
 local function JourneyHeader(result, index, loading)
 	if not result or loading then
 		module.distance = nil
-		return "Journey"
+		return L["Journey"]
 	end
 	local yards = JourneyDistance(result, index)
-	local distance = yards >= 999.5 and string.format("%.1fk yd", yards / 1000)
-		or string.format("%d yd", math.floor(yards + 0.5))
-	return "Journey  " .. ns.FormatCountdown(ns.JourneyTime(result.legs, index)) .. " · " .. distance
+	local distance = yards >= 999.5 and string.format(L["%.1fk yd"], yards / 1000)
+		or string.format(L["%d yd"], math.floor(yards + 0.5))
+	return string.format(L["Journey  %s · %s"], ns.FormatCountdown(ns.JourneyTime(result.legs, index)), distance)
 end
 
 local function RefreshBlockText(blocks)
@@ -229,7 +230,7 @@ local function RefreshTracker(dockID, yards)
 	elseif riding then
 		rows, kind, mapDock = RideRows(riding)
 		if rows and mapDock then
-			title, blockKey = "On board to " .. ns.DockTitle(mapDock), "ride" .. mapDock
+			title, blockKey = string.format(L["On board to %s"], ns.DockTitle(mapDock)), "ride" .. mapDock
 		end
 	end
 	local blocks = {}
@@ -242,7 +243,7 @@ local function RefreshTracker(dockID, yards)
 	end
 	module.dockID, module.mapDock = dockID, mapDock
 	module.hasDisplayPriority = journeyTitle ~= nil
-	local section = journeyTitle and "Journey" or kind and HEADER[kind] or ModuleMixin.headerText
+	local section = journeyTitle and L["Journey"] or kind and HEADER[kind] or ModuleMixin.headerText
 	local header = journeyTitle and JourneyHeader(journeyResult, journeyIndex, loading) or section
 	if not journeyTitle then
 		module.distance = nil
@@ -294,7 +295,7 @@ end
 
 ns.Init(function()
 	if not (ObjectiveTrackerManager and ObjectiveTrackerFrame) then
-		ns.Print("The objective tracker is unavailable.")
+		ns.Print(L["The objective tracker is unavailable."])
 		return
 	end
 	local tracker =

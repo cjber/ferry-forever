@@ -52,7 +52,6 @@ local refreshed, taxiRefreshed = 0, 0
 -- Core.lua's defaults: every row on except the compass.
 local ns = {
 	db = {},
-	L = { taxiRoute = "Flight route", taxiRouteTooltip = "Flight route tooltip" },
 	Defaults = setmetatable({ compass = false }, {
 		__index = function()
 			return true
@@ -68,6 +67,7 @@ local ns = {
 		taxiRefreshed = taxiRefreshed + 1
 	end,
 }
+assert(loadfile("Locales/enUS.lua"))("ShortestPathForever", ns)
 setfenv(assert(loadfile("Settings.lua")), env)("ShortestPathForever", ns)
 
 assert(#registered == 17, #registered)

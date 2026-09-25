@@ -13,6 +13,7 @@
 ## IconTexture: Interface\AddOns\ShortestPathForever\media\Icon
 ## AddonCompartmentFunc: ShortestPathForever_OnAddonCompartmentClick
 
+Locales\enUS.lua
 Data\Routes.lua
 Data\Transports.lua
 Data\Taxi.lua

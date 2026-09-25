@@ -1,5 +1,6 @@
 local root = ... or "."
 local ns = { db = { journey = true }, charDB = {} }
+assert(loadfile(root .. "/Locales/enUS.lua"))("ShortestPathForever", ns)
 local now, here, target, shown, click = 0, { map = 1, x = 0, y = 0, z = 0 }
 local function noop() end
 local frames, events, waypoint, tracked, quest = {}, {}, nil, false, 0
