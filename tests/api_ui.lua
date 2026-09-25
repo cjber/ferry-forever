@@ -168,15 +168,23 @@ assert(#active[goalTemplate] == 1 and active[goalTemplate][1].Number.text == "")
 assert(active[goalTemplate][1].Texture.atlas == "Waypoint-MapPin-Tracked")
 assert(active[goalTemplate][1].stopTitles == nil and arrowFrame.Progress.text == "")
 assert(api.Cancel("Test"))
--- A stop that says what stands there wears that mark in the ring, numbered at its foot, with no disc over the map's
--- own icon; the minimap only rings it. The pooled pins go back to the plain look after.
+-- A stop that says what stands there wears that mark alone, numbered at its lower right, with no ring or disc over
+-- the map's own icon; the minimap only rings it. The pooled pins go back to the plain look after.
 posX, posY = 0, 0
+-- The fixture's pin ring is a bare stub; record whether it is shown.
+local stubIndex = mt.__index
+mt.__index = function(t, k)
+ if k == "SetShown" then return function(self, shown) self.hidden = not shown end end
+ return stubIndex(t, k)
+end
 assert(api.NavigateRoute("Test", {{map=1414,x=0.51,y=0.5,title="Hand in",kind="turnin"}, stops[4]}))
 local marked, plain = active[goalTemplate][1], active[goalTemplate][2]
-assert(marked.Icon.atlas == "QuestTurnin" and not marked.Icon.hidden and marked.Texture.atlas == "adventureguide-ring")
+assert(marked.Icon.atlas == "QuestTurnin" and not marked.Icon.hidden and marked.Texture.hidden)
 assert(marked.Disc.hidden and marked.Numeral.hidden and marked.Number.text == "1")
-assert(plain.Icon.hidden and not plain.Disc.hidden and plain.Numeral.atlas == "services-number-2")
+assert(plain.Icon.hidden and not plain.Texture.hidden and not plain.Disc.hidden)
+assert(plain.Numeral.atlas == "services-number-2")
 assert(ShortestPathForeverMinimapRoute.Goal.atlas == "adventureguide-ring")
+mt.__index = stubIndex
 assert(api.Cancel("Test"))
 assert(api.Navigate("Test", 1414, 0.51, 0.5, "Trainer", "trainer"))
 -- The trainer's tracking icon is a file, which the harness does not record; a lone stop has no number.
