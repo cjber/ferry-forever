@@ -93,6 +93,9 @@ Other addons can plan and guide journeys through `ShortestPathForever.API`: trav
 up to 64 stops that wear the game's own quest, flight master or boat marks. [docs/api.md](docs/api.md) has the
 calls and what they return.
 
+Used by my other Forever addons when both are installed:
+[Adventure Guide Forever](https://www.curseforge.com/wow/addons/adventure-guide-forever), [SkillUp Forever](https://www.curseforge.com/wow/addons/skillup-forever), [Legacy Forever](https://www.curseforge.com/wow/addons/legacy-forever) and [Tweaks Forever](https://www.curseforge.com/wow/addons/tweaks-forever).
+
 ## Development
 
 ```sh
