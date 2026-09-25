@@ -11,6 +11,9 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+- **The flight map shows which flight to take.** At the flight master, your journey's route uses the game's own
+  lines and lights up the final destination, including flights through several stops. Hover other flight points
+  as usual; your route comes back when you move away. *Show the flight to take on the flight map* in `/path` turns it off.
 - **Route stops look like the map's own quest buttons.** Each numbered stop on the world map is now the brown disc
   with the gold ring the game uses for quests, with the game's own yellow number in it and the same glow on hover,
   rather than a thinner ring of its own.

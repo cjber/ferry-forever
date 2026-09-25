@@ -48,10 +48,11 @@ local env = setmetatable({
 	SlashCmdList = {},
 }, { __index = _G })
 
-local refreshed = 0
+local refreshed, taxiRefreshed = 0, 0
 -- Core.lua's defaults: every row on except the compass.
 local ns = {
 	db = {},
+	L = { taxiRoute = "Flight route", taxiRouteTooltip = "Flight route tooltip" },
 	Defaults = setmetatable({ compass = false }, {
 		__index = function()
 			return true
@@ -63,17 +64,24 @@ local ns = {
 	RefreshMap = function()
 		refreshed = refreshed + 1
 	end,
+	RefreshTaxiRoute = function()
+		taxiRefreshed = taxiRefreshed + 1
+	end,
 }
 setfenv(assert(loadfile("Settings.lua")), env)("ShortestPathForever", ns)
 
-assert(#registered == 16, #registered)
+assert(#registered == 17, #registered)
 for index, initializer in ipairs(registered) do
 	assert(initializer.setting == settings[index], "rows keep their setting and order")
 end
 assert(registered[1].setting.variable == "ShortestPathForever_pins" and registered[1].setting.default)
 assert(registered[5].tooltip == "Also under Transport in the minimap's tracking menu.")
 assert(registered[13].setting.key == "guideStops" and registered[13].setting.default == true)
-assert(registered[14].setting.key == "corpse" and registered[14].setting.default == true)
+assert(registered[14].setting.key == "taxiRoute" and registered[14].setting.default == true)
+assert(registered[14].tooltip:find("flight master", 1, true))
+registered[14].setting.onChanged()
+assert(taxiRefreshed == 1, "flight route updates when its setting changes")
+assert(registered[15].setting.key == "corpse" and registered[15].setting.default == true)
 registered[1].setting.onChanged()
 assert(refreshed == 1, "value callbacks still fire")
 print("settings: ok")

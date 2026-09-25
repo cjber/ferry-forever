@@ -16,6 +16,7 @@ local DEFAULTS = {
 	alerts = true,
 	alertSound = true,
 	journey = true,
+	taxiRoute = true,
 	teleports = true,
 	share = true,
 	guideStops = true,

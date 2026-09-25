@@ -126,6 +126,7 @@
 ---@field alerts? boolean
 ---@field alertSound? boolean
 ---@field journey? boolean
+---@field taxiRoute? boolean
 ---@field teleports? boolean
 ---@field share? boolean
 ---@field guideStops? boolean

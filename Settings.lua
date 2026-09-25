@@ -127,6 +127,12 @@ ns.Init(function()
 		ns.RefreshGuideStops
 	)
 	Checkbox(
+		"taxiRoute",
+		"Show the flight to take on the flight map",
+		"Your journey's next flight is drawn on the flight master's map, with its destination lit up.",
+		ns.RefreshTaxiRoute
+	)
+	Checkbox(
 		"corpse",
 		"Show the way back to your corpse",
 		"While you are a ghost, a red dotted path leads to your body. Your journey waits until you are alive again.",
