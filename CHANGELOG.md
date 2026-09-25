@@ -11,6 +11,8 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-25
+
 - **The flight map shows which flight to take.** At the flight master, your journey's route uses the game's own
   lines and lights up the final destination, including flights through several stops. Hover other flight points
   as usual; your route comes back when you move away. *Show the flight to take on the flight map* in `/path` turns it off.
