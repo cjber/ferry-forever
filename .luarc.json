@@ -6,6 +6,7 @@
 	],
 	"workspace.ignoreDir": [
 		".git",
+		".claude",
 		".types",
 		".sift",
 		"tests",

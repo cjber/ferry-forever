@@ -1,6 +1,6 @@
 std = "lua51"
 max_line_length = 120
-exclude_files = { "tools/.cache/**", ".types/**", "types/**", ".release/**", "ShortestPathForever_Nav*/**" }
+exclude_files = { ".claude/**", "tools/.cache/**", ".types/**", "types/**", ".release/**", "ShortestPathForever_Nav*/**" }
 ignore = { "212/_.*" } -- unused args prefixed with _
 globals = {
 	"ShortestPathForever",
@@ -134,3 +134,14 @@ read_globals[#read_globals + 1] = "GetAddOnMemoryUsage"
 read_globals[#read_globals + 1] = "C_Item"
 read_globals[#read_globals + 1] = "C_SpellBook"
 read_globals[#read_globals + 1] = "GetBindLocation"
+
+-- tests/ui_stubs.lua defines the client for the UI checks, which append code reading its locals.
+files["tests/ui_stubs.lua"] = {
+	std = "+luajit",
+	allow_defined_top = true,
+	-- 13x/2xx: globals, locals and arguments only the appended checks use; 43x: stub methods named like the client's.
+	ignore = { "13", "2", "43" },
+	globals = { "BaseMapPoiPinMixin", "Enum", "SuperTrackedFrame", "WorldFrame", "math" },
+	-- Blizzard_SharedXML/Spinner.lua, loaded from the pinned UI source.
+	read_globals = { "SpinnerMixin" },
+}
