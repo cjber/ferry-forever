@@ -150,6 +150,11 @@ ns.Init(function()
 		L["Share departure times with other players"],
 		L["Sends and receives sighting times over guild, party and at the dock. No chat messages are shown."]
 	)
+	Checkbox(
+		"whatsNew",
+		L["Tell me what's new after an update"],
+		L["One line in chat the first time you log in after an update."]
+	)
 	Settings.RegisterAddOnCategory(category)
 	SLASH_SHORTESTPATHFOREVER1 = "/path"
 	SLASH_SHORTESTPATHFOREVER2 = "/shortestpath"
