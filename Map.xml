@@ -24,7 +24,7 @@
 		<Layers>
 			<!-- A numbered stop of a multi-stop journey: the Adventure Guide's ring over a dark disc (cut round with the
 			     stock portrait mask), Blizzard's gold numeral in it, and the quest POI's glow on hover. A stop whose
-			     caller said what stands there shows that mark in the ring instead, with no disc. -->
+			     caller said what stands there shows that mark alone instead, with no ring or disc. -->
 			<Layer level="BACKGROUND">
 				<Texture parentKey="Disc" hidden="true">
 					<Size x="22" y="22"/>
