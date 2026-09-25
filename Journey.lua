@@ -5,8 +5,7 @@ local ns = select(2, ...)
 -- with the boats' live waits. Search candidates stay private until costs and geometry settle, with a grace
 -- period for longer searches. The tracker owns the list; closing the map leaves the journey running.
 local REPLAN_EVERY, REFRESH_EVERY = 5, 60
--- The frames around a timed replan, which Itinerary.lua leaves to it.
-local REPLAN_MARGIN = 0.5
+local REPLAN_DUE = REPLAN_EVERY - 0.5 -- from here Itinerary.lua leaves the frames to the timed replan
 local DRAW_EVERY, SEARCH_GRACE = 0.5, 3
 -- A teleport step, by the item's or spell's own name in the game's language, after its own icon at the font's
 -- height: the one step you act on from your bags or spellbook stands out from the travel around it.
@@ -729,11 +728,11 @@ local function Plan(preview)
 	return planned
 end
 
--- The timed replan in Update plans in the frame; Itinerary.lua keeps its own planning and drawing off that frame. A
--- frame's GetTime is fixed, and the margin covers the frame the replan will take whichever handler runs first.
+-- The timed replan in Update plans in the frame, and from just before it Itinerary.lua keeps off that frame (a frame's
+-- GetTime is fixed). A corpse run holds the replan, so a route queued behind it plans its hops meanwhile.
 ---@return boolean
 function ns.JourneyReplanning()
-	return driver ~= nil and (driver.elapsed >= REPLAN_EVERY - REPLAN_MARGIN or driver.replannedAt == GetTime())
+	return driver ~= nil and not CorpseRun() and (driver.elapsed >= REPLAN_DUE or driver.replannedAt == GetTime())
 end
 
 ---@param self SPFJourneyDriver
@@ -968,6 +967,7 @@ ns.Init(function()
 	local journeyDriver = CreateFrame("Frame", "ShortestPathForeverJourneyDriver", UIParent)
 	---@cast journeyDriver SPFJourneyDriver
 	driver = journeyDriver
+	driver.elapsed, driver.progressElapsed = 0, 0
 	driver:SetScript("OnUpdate", Update)
 	driver:RegisterEvent("PLAYER_REGEN_DISABLED")
 	driver:RegisterEvent("PLAYER_REGEN_ENABLED")
