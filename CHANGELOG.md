@@ -62,8 +62,9 @@ cost nothing away from them. *Transport* in the minimap's tracking menu, or the 
 them off.
 
 A journey step on a boat, lift or tram that nobody has timed yet no longer says “no sighting yet” beside a
-wait it cannot know. Its wait reads *wait about 2:45* instead: half the loop, the average wait. Timed
-crossings show their real wait as before.
+wait it cannot know. It reads *leaves in about 2:45* instead: half the loop, the average wait. Timed
+crossings read *leaves in 2:28*, a teleport on cooldown *ready in 4:12*, and a flight step no longer shows a
+wait, since taxis leave the moment you pick where to go.
 
 Journeys through the Deeprun Tram no longer tell you to walk to “Unknown”. A step towards a passage or portal
 names it, such as *Walk to Passage to Stormwind*, and a tram passage's map pin says where it leads.
