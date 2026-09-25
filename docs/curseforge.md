@@ -43,4 +43,6 @@ Shift-click the world map or minimap to plan a journey. For a quest, choose **Pl
 
 Every feature has its own switch in the settings. The world map's filter menu hides flight masters, docks, lifts, the tram, portals and the other faction's routes.
 
+Used by my other Forever addons when both are installed: [Adventure Guide Forever](https://www.curseforge.com/wow/addons/adventure-guide-forever), [SkillUp Forever](https://www.curseforge.com/wow/addons/skillup-forever), [Legacy Forever](https://www.curseforge.com/wow/addons/legacy-forever) and [Tweaks Forever](https://www.curseforge.com/wow/addons/tweaks-forever).
+
 Source code and issues: [github.com/cjber/shortest-path-forever](https://github.com/cjber/shortest-path-forever) (GPL-3.0).
