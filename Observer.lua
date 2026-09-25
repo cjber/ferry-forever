@@ -1,7 +1,10 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 local Model = ns.Model
+-- How the sync line names a route with no site of its own.
+local KIND = { boat = L["boat"], zeppelin = L["zeppelin"], lift = L["lift"], tram = L["tram"] }
 -- A ride ends once the boat has not moved for this long: it docked (a minute), or the player got off. A
 -- continent crossing's loading screen takes a few seconds; the far side is the same ride.
 local RIDE_GAP = 30000
@@ -50,7 +53,7 @@ local function Record()
 	ride.announced = routeID
 	if ns.Sighted(routeID, { epoch = fits[routeID].epoch, seen = now, source = "you" }) and not routine then
 		local route = ns.Routes[routeID]
-		ns.Print(string.format("synced the %s schedule from your ride.", route.site or route.kind))
+		ns.Print(string.format(L["synced the %s schedule from your ride."], route.site or KIND[route.kind]))
 		ns.Share(routeID)
 	end
 end

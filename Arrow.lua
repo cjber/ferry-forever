@@ -1,5 +1,6 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 -- Guide follows the map's walking path bend by bend. Journey places Blizzard's native navigation marker at
 -- this target; our screen arrow is the fallback when that marker is unavailable or the player owns tracking.
@@ -68,7 +69,7 @@ local function Update()
 	local yards = math.floor(distance)
 	if yards ~= frame.yards then
 		frame.yards = yards
-		frame.Distance:SetFormattedText("%d yd", yards)
+		frame.Distance:SetFormattedText(L["%d yd"], yards)
 	end
 end
 

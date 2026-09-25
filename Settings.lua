@@ -1,6 +1,7 @@
 local addonName = ...
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 local settings = {}
 
@@ -73,26 +74,26 @@ ns.Init(function()
 		settings[key] = setting
 	end
 
-	Checkbox("pins", "Show boats and zeppelins on the world map", nil, ns.RefreshMap)
-	Checkbox("transit", "Show lifts and the Deeprun Tram on the world map", nil, ns.RefreshMap)
-	Checkbox("portals", "Show portals on the world map", nil, ns.RefreshMap)
-	Checkbox("mapFlightMasters", "Show flight masters on the world map", nil, ns.RefreshMap)
+	Checkbox("pins", L["Show boats and zeppelins on the world map"], nil, ns.RefreshMap)
+	Checkbox("transit", L["Show lifts and the Deeprun Tram on the world map"], nil, ns.RefreshMap)
+	Checkbox("portals", L["Show portals on the world map"], nil, ns.RefreshMap)
+	Checkbox("mapFlightMasters", L["Show flight masters on the world map"], nil, ns.RefreshMap)
 	Checkbox(
 		"minimapPins",
-		"Show docks, lifts, the tram and portals on the minimap",
-		"Also under Transport in the minimap's tracking menu.",
+		L["Show docks, lifts, the tram and portals on the minimap"],
+		L["Also under Transport in the minimap's tracking menu."],
 		ns.RefreshMinimapPins
 	)
 	Checkbox(
 		"mapRoutes",
-		"Show boat and zeppelin routes on the world map",
-		"Drawn while you point at a dock.",
+		L["Show boat and zeppelin routes on the world map"],
+		L["Drawn while you point at a dock."],
 		ns.RefreshMap
 	)
 	Checkbox(
 		"otherFaction",
-		"Show the other faction's routes",
-		"Either faction can ride any boat or zeppelin.",
+		L["Show the other faction's routes"],
+		L["Either faction can ride any boat or zeppelin."],
 		function()
 			ns.RefreshMap()
 			ns.RefreshTracker()
@@ -100,54 +101,59 @@ ns.Init(function()
 	)
 	Checkbox(
 		"tracker",
-		"Show the next departures in the objective tracker near a dock, lift or tram",
+		L["Show the next departures in the objective tracker near a dock, lift or tram"],
 		nil,
 		ns.RefreshTracker
 	)
 	Checkbox(
 		"alerts",
-		"Alert when a boat is about to arrive",
-		"While you wait at a dock or ride a timed boat: a warning on screen and a flashing taskbar icon."
+		L["Alert when a boat is about to arrive"],
+		L["While you wait at a dock or ride a timed boat: a warning on screen and a flashing taskbar icon."]
 	)
-	Checkbox("alertSound", "Play a sound with arrival alerts", "Plays even with the game in the background.")
-	Checkbox("journey", "Plan journeys with Shift-click on the world map or minimap", nil, function()
+	Checkbox("alertSound", L["Play a sound with arrival alerts"], L["Plays even with the game in the background."])
+	Checkbox("journey", L["Plan journeys with Shift-click on the world map or minimap"], nil, function()
 		if not ns.db.journey then
 			ns.ClearJourney()
 		end
 	end)
 	Checkbox(
 		"teleports",
-		"Use your hearthstone and teleports",
-		"Journeys, and other addons' estimates from where you stand, can start with one, counting its cooldown."
+		L["Use your hearthstone and teleports"],
+		L["Journeys, and other addons' estimates from where you stand, can start with one, counting its cooldown."]
 	)
 	Checkbox(
 		"guideStops",
-		"Guide marks only where each step ends",
-		"The next boat, lift, flight master or your destination, rather than each turn of the walk on the way.",
+		L["Guide marks only where each step ends"],
+		L["The next boat, lift, flight master or your destination, rather than each turn of the walk on the way."],
 		ns.RefreshGuideStops
 	)
 	Checkbox(
 		"taxiRoute",
-		"Show the flight to take on the flight map",
-		"Your journey's next flight is drawn on the flight master's map, with its destination lit up.",
+		L["Show the flight to take on the flight map"],
+		L["Your journey's next flight is drawn on the flight master's map, with its destination lit up."],
 		ns.RefreshTaxiRoute
 	)
 	Checkbox(
 		"corpse",
-		"Show the way back to your corpse",
-		"While you are a ghost, a red dotted path leads to your body. Your journey waits until you are alive again.",
+		L["Show the way back to your corpse"],
+		L["While you are a ghost, a red dotted path leads to your body. Your journey waits until you are alive again."],
 		ns.RefreshCorpseRun
 	)
 	Checkbox(
 		"compass",
-		"Show a compass while Guide is on",
-		"Your next turns, the next stop and your destination across the top of the screen.",
+		L["Show a compass while Guide is on"],
+		L["Your next turns, the next stop and your destination across the top of the screen."],
 		ns.RefreshCompass
 	)
 	Checkbox(
 		"share",
-		"Share departure times with other players",
-		"Sends and receives sighting times over guild, party and at the dock. No chat messages are shown."
+		L["Share departure times with other players"],
+		L["Sends and receives sighting times over guild, party and at the dock. No chat messages are shown."]
+	)
+	Checkbox(
+		"whatsNew",
+		L["Tell me what's new after an update"],
+		L["One line in chat the first time you log in after an update."]
 	)
 	Settings.RegisterAddOnCategory(category)
 	SLASH_SHORTESTPATHFOREVER1 = "/path"

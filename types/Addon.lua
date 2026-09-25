@@ -132,6 +132,8 @@
 ---@field guideStops? boolean
 ---@field compass? boolean
 ---@field corpse? boolean
+---@field whatsNew? boolean
+---@field seenVersion? string -- the version last loaded, for the line after an update (WhatsNew.lua)
 ---@field debug? boolean
 ---@field anchors table<string, table<number, SPFAnchor>>
 ---@field trace? (number|string)[][]

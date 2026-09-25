@@ -1,5 +1,6 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 local PIN_TEMPLATE = "ShortestPathForeverDockPinTemplate"
 local FLIGHT_TEMPLATE = "ShortestPathForeverFlightPinTemplate"
@@ -16,29 +17,32 @@ local provider
 ---@param departure SPFDeparture
 ---@return string
 function ns.DepartureDestination(departure)
-	local zones = {}
+	local text
 	for _, dockID in ipairs(departure.to) do
-		zones[#zones + 1] = ns.DockLabel(dockID)
+		text = text and string.format(L["%s, then %s"], text, ns.DockLabel(dockID)) or ns.DockLabel(dockID)
 	end
-	return table.concat(zones, ", then ")
+	return text or ""
 end
 
-local HERE = { boat = "docked", zeppelin = "docked", lift = "here", tram = "boarding" }
+local HERE = { boat = L["docked"], zeppelin = L["docked"], lift = L["here"], tram = L["boarding"] }
 
 ---@param departure SPFDeparture
 ---@return string
 function ns.DepartureStatus(departure)
 	if not departure.known then
-		return "no sighting yet"
+		return L["no sighting yet"]
 	end
-	local leaves = "leaves " .. ns.FormatCountdown(departure.departIn)
-	if departure.thenIn then
-		leaves = leaves .. ", then " .. ns.FormatCountdown(departure.thenIn)
-	end
+	local leaves = departure.thenIn
+			and string.format(
+				L["leaves %s, then %s"],
+				ns.FormatCountdown(departure.departIn),
+				ns.FormatCountdown(departure.thenIn)
+			)
+		or string.format(L["leaves %s"], ns.FormatCountdown(departure.departIn))
 	if departure.docked then
 		return HERE[departure.kind] .. " · " .. leaves
 	end
-	return "arrives " .. ns.FormatCountdown(departure.arriveIn) .. " · " .. leaves
+	return string.format(L["arrives %s"], ns.FormatCountdown(departure.arriveIn)) .. " · " .. leaves
 end
 
 -- The stock ferry for boats. There is no zeppelin map icon in the game (only top-down vehicle sprites), so
@@ -81,11 +85,28 @@ function ns.DockKind(dockID)
 	return dockKinds[dockID]
 end
 
-local KIND = { boat = "Boat", zeppelin = "Zeppelin", lift = "Lift", tram = "Tram", portal = "Portal" }
-local KINDS = { boat = "Boats", zeppelin = "Zeppelins", lift = "Lifts", tram = "Deeprun Tram" }
+local TO = {
+	boat = L["Boat to %s"],
+	zeppelin = L["Zeppelin to %s"],
+	lift = L["Lift to %s"],
+	tram = L["Tram to %s"],
+	portal = L["Portal to %s"],
+}
+local KINDS = { boat = L["Boats"], zeppelin = L["Zeppelins"], lift = L["Lifts"], tram = L["Deeprun Tram"] }
 local ORDER = { "boat", "zeppelin", "lift", "tram" }
-local LANDING = { boat = "pier", zeppelin = "tower", lift = "landing", tram = "station" }
-local COMPASS = { "east", "northeast", "north", "northwest", "west", "southwest", "south", "southeast" }
+-- A landing named by the way it lies from the others ("north pier"), or by itself when it is the only one.
+local LANDING = { boat = L["%s pier"], zeppelin = L["%s tower"], lift = L["%s landing"], tram = L["%s station"] }
+local LANDING_ALONE = { boat = L["dock"], zeppelin = L["tower"], lift = L["landing"], tram = L["station"] }
+local COMPASS = {
+	L["east"],
+	L["northeast"],
+	L["north"],
+	L["northwest"],
+	L["west"],
+	L["southwest"],
+	L["south"],
+	L["southeast"],
+}
 
 local function StatusColor(departure)
 	return departure.known and HIGHLIGHT_FONT_COLOR or GRAY_FONT_COLOR
@@ -94,9 +115,9 @@ end
 -- The click hint, only when a click has somewhere to go.
 local function AddEndsLine(ends)
 	if #ends == 1 then
-		GameTooltip_AddInstructionLine(GameTooltip, "Click to show " .. ends[1].zone)
+		GameTooltip_AddInstructionLine(GameTooltip, string.format(L["Click to show %s"], ends[1].zone))
 	elseif #ends > 1 then
-		GameTooltip_AddInstructionLine(GameTooltip, "Click to show where they go")
+		GameTooltip_AddInstructionLine(GameTooltip, L["Click to show where they go"])
 	end
 end
 
@@ -104,7 +125,7 @@ local function AddDepartureLines(departures)
 	for _, departure in ipairs(departures) do
 		GameTooltip_AddColoredDoubleLine(
 			GameTooltip,
-			"to " .. ns.DepartureDestination(departure),
+			string.format(L["to %s"], ns.DepartureDestination(departure)),
 			ns.DepartureStatus(departure),
 			NORMAL_FONT_COLOR,
 			StatusColor(departure)
@@ -138,7 +159,7 @@ end
 local function PierName(x, y, cx, cy, kind)
 	local angle = math.atan2(cy - y, x - cx)
 	local direction = COMPASS[math.floor(angle / (2 * math.pi) * 8 + 0.5) % 8 + 1]
-	return direction .. " " .. LANDING[kind]
+	return string.format(LANDING[kind], direction)
 end
 
 -- Which of a cluster's docks this is: a lift's landing or tram station by name (with its site where sites
@@ -188,8 +209,7 @@ function ns.DockPierName(dockID)
 				x, y, count = x - other.y, y - other.x, count + 1
 			end
 		end
-		local landing = count > 1 and PierName(-dock.y, -dock.x, x / count, y / count, kind)
-			or (kind == "boat" and "dock" or LANDING[kind])
+		local landing = count > 1 and PierName(-dock.y, -dock.x, x / count, y / count, kind) or LANDING_ALONE[kind]
 		dockNames[dockID] = place .. " " .. landing
 	end
 	return dockNames[dockID]
@@ -209,7 +229,7 @@ function ns.AddDockTooltip(cluster)
 	end
 	if #all == 1 then
 		local departure = all[1]
-		GameTooltip_SetTitle(GameTooltip, KIND[departure.kind] .. " to " .. ns.DepartureDestination(departure))
+		GameTooltip_SetTitle(GameTooltip, string.format(TO[departure.kind], ns.DepartureDestination(departure)))
 		local status = ns.DepartureStatus(departure):gsub("^%l", string.upper)
 		GameTooltip_AddColoredLine(GameTooltip, status, StatusColor(departure))
 	else
@@ -236,9 +256,8 @@ function ns.AddDockTooltip(cluster)
 	end
 	if freshest then
 		local text = string.format(
-			"Last seen %d min ago by %s",
-			math.floor(freshest.seen / 60),
-			freshest.source == "you" and "you" or "another player"
+			freshest.source == "you" and L["Last seen %d min ago by you"] or L["Last seen %d min ago by another player"],
+			math.floor(freshest.seen / 60)
 		)
 		GameTooltip_AddNormalLine(GameTooltip, GRAY_FONT_COLOR:WrapTextInColorCode(text))
 	end
@@ -405,7 +424,7 @@ local function OpenEnds(pin, button)
 	elseif #ends > 1 then
 		MenuUtil.CreateContextMenu(pin, function(_, root)
 			for _, target in ipairs(ends) do
-				root:CreateButton(KIND[target.kind] .. " to " .. target.zone, function()
+				root:CreateButton(string.format(TO[target.kind], target.zone), function()
 					ShowEnd(map, target)
 				end)
 			end
@@ -580,7 +599,7 @@ function ns.AddPortalTooltip(portal)
 	GameTooltip_SetTitle(GameTooltip, portal.name)
 	GameTooltip_AddNormalLine(
 		GameTooltip,
-		"to " .. (destination and destination.zone or ns.Planner.PortalDestination(portal))
+		string.format(L["to %s"], destination and destination.zone or ns.Planner.PortalDestination(portal))
 	)
 end
 
@@ -646,7 +665,7 @@ function ShortestPathForeverFlightPinMixin:OnMouseEnter()
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 	GameTooltip_SetTitle(GameTooltip, self.poiInfo.name)
 	if self.poiInfo.isUndiscovered then
-		GameTooltip_AddNormalLine(GameTooltip, "Not discovered")
+		GameTooltip_AddNormalLine(GameTooltip, L["Not discovered"])
 	end
 	GameTooltip:Show()
 end
@@ -737,12 +756,12 @@ local function AddFilters(_, rootDescription)
 			ns.SetOption(key, not ns.db[key])
 		end)
 	end
-	AddFilter("mapFlightMasters", "Flight Masters")
-	AddFilter("mapRoutes", "Boat and Zeppelin Routes")
-	AddFilter("pins", "Boats & Zeppelins")
-	AddFilter("transit", "Lifts & Tram")
-	AddFilter("portals", "Portals")
-	AddFilter("otherFaction", "Other Faction's Routes")
+	AddFilter("mapFlightMasters", L["Flight Masters"])
+	AddFilter("mapRoutes", L["Boat and Zeppelin Routes"])
+	AddFilter("pins", L["Boats & Zeppelins"])
+	AddFilter("transit", L["Lifts & Tram"])
+	AddFilter("portals", L["Portals"])
+	AddFilter("otherFaction", L["Other Faction's Routes"])
 end
 
 ns.Init(function()

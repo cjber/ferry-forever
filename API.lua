@@ -1,5 +1,6 @@
 ---@class SPFNamespace
 local ns = select(2, ...)
+local L = ns.L
 
 -- This topology belongs exclusively to estimates: Planner.Plan mutates its cache between calls.
 -- Never borrow the active journey's cache, path jobs, progress, waypoint or route drawing.
@@ -299,8 +300,12 @@ function API.NavigateRoute(owner, stops)
 		point.look = ns.StopKind(stop.kind)
 		if count > 1 then
 			local location = not point.label and ns.Locate(point)
-			point.routeTitle =
-				string.format("Stop %d of %d: %s", index, count, point.label or location and location.zone or UNKNOWN)
+			point.routeTitle = string.format(
+				L["Stop %d of %d: %s"],
+				index,
+				count,
+				point.label or location and location.zone or UNKNOWN
+			)
 		end
 		points[index] = point
 	end
