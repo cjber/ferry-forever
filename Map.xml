@@ -24,7 +24,8 @@
 		<Layers>
 			<!-- A numbered stop of a multi-stop journey: the Adventure Guide's ring over a dark disc (cut round with the
 			     stock portrait mask), Blizzard's gold numeral in it, and the quest POI's glow on hover. A stop whose
-			     caller said what stands there shows that mark alone instead, with no ring or disc. -->
+			     caller said what stands there wears that mark as a badge over the ring's lower right; a lone one shows the
+			     mark alone, with no ring or disc. -->
 			<Layer level="BACKGROUND">
 				<Texture parentKey="Disc" hidden="true">
 					<Size x="22" y="22"/>
@@ -42,13 +43,6 @@
 						<MaskedTexture childKey="Disc"/>
 					</MaskedTextures>
 				</MaskTexture>
-			</Layer>
-			<Layer level="ARTWORK" textureSubLevel="-1">
-				<Texture parentKey="Icon" hidden="true">
-					<Anchors>
-						<Anchor point="CENTER"/>
-					</Anchors>
-				</Texture>
 			</Layer>
 			<Layer level="ARTWORK">
 				<Texture parentKey="Texture" setAllPoints="true"/>
@@ -68,6 +62,9 @@
 						<Anchor point="CENTER"/>
 					</Anchors>
 				</Texture>
+			</Layer>
+			<Layer level="OVERLAY" textureSubLevel="1">
+				<Texture parentKey="Icon" hidden="true"/>
 			</Layer>
 		</Layers>
 	</Frame>

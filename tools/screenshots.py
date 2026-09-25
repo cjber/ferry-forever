@@ -96,6 +96,8 @@ end
 local start = { map = 1, x = 6341.38, y = 557.68, z = 16.29 }
 local goal = { map = 0, x = -3263, y = -1353 }
 local darkshore = { map = 1, x = 4990, y = 170 }
+local thelsamar = { map = 0, x = -5640, y = -2760 }
+local stops = { ns.TaxiNodes[8], { map = 0, x = -5250, y = -2990 }, { map = 0, x = -5060, y = -3120 } }
 local routeID, boarding, alighting = 295
 for _, stop in ipairs(ns.Routes[routeID].stops) do
 	if stop.dock == 10 then boarding = stop end
@@ -130,7 +132,8 @@ end
 print(json({ portals = ns.Portals, docks = ns.Docks, taxis = ns.TaxiNodes, routes = ns.Routes, hovered = hovered,
 	walk = walk(1, start, ns.Docks[10]), boat = boat,
 	theramore = theramore, silithus = walk(1, ns.Docks[6], ns.TaxiNodes[73]),
-	wetlands = walk(0, ns.Docks[9], goal), darkshore = walk(1, start, darkshore) }))
+	wetlands = walk(0, ns.Docks[9], goal), darkshore = walk(1, start, darkshore),
+	stops = { walk(0, thelsamar, stops[1]), walk(0, stops[1], stops[2]), walk(0, stops[2], stops[3]) } }))
 """
     result = subprocess.run(["luajit", "-"], input=program, text=True, cwd=ROOT, capture_output=True, check=True)
     return json.loads(result.stdout)
@@ -315,7 +318,12 @@ def map_base(ui, map_id):
     art = map_art(ui, map_id)
     for overlay in map_overlays(ui, map_id):
         draw_overlay(ui, art, overlay.offset_x, overlay.offset_y, overlay.width, overlay.height, overlay.tiles)
-    names = {947: ("World",), 1414: ("World", "Kalimdor"), 1439: ("World", "Kalimdor", "Darkshore")}
+    names = {
+        947: ("World",),
+        1414: ("World", "Kalimdor"),
+        1439: ("World", "Kalimdor", "Darkshore"),
+        1432: ("World", "Eastern Kingdoms", "Loch Modan"),
+    }
     return world_map_frame(ui, art, names[map_id], arrows=names[map_id][1:])
 
 
@@ -493,6 +501,64 @@ def render_docks(ui):
     return scene(ui, [(canvas, 0, 0), (tip, pin[0] + 10, pin[1] - 10 - tip.height)])
 
 
+THELSAMAR = {"map": 0, "x": -5640.0, "y": -2760.0}
+# A caller's route through Thelsamar (API.lua NavigateRoute with kinds): the flight master, a quest giver, a hand-in.
+STOP_BADGES = ("taxinode_alliance", "QuestNormal", "QuestTurnin")
+
+
+def stop_pin(canvas, x, y, number, badge, later):
+    """Route.lua's numbered stop: the Adventure Guide ring over an opaque dark disc, Blizzard's numeral in it, and the
+    stop's kind as a 16-unit badge hanging 4 units off the ring's lower right. Later stops fade all but the disc."""
+    alpha = 0.55 if later else 1
+    k = canvas.ui.scale
+    disc = Image.new("RGBA", (round(22 * k), round(22 * k)))
+    ImageDraw.Draw(disc).ellipse((0, 0, disc.width - 1, disc.height - 1), fill=(0, 0, 0, round(255 * 0.75)))
+    canvas.composite(disc, canvas.px(x - 11), canvas.px(y - 11))
+    canvas.draw(canvas.ui.atlas("adventureguide-ring"), x - 13, y - 13, 26, 26, (1, 1, 1, alpha))
+    canvas.draw(canvas.ui.atlas(f"services-number-{number}"), x - 11, y - 12.5, 22, 25, (1, 1, 1, alpha))
+    art = canvas.ui.atlas(badge)
+    factor = 16 / max(art.width, art.height)
+    w, h = art.width * factor, art.height * factor
+    canvas.draw(art, x + 13 + 4 - w, y + 13 + 4 - h, w, h, (1, 1, 1, alpha))
+
+
+def render_stops(ui):
+    """Loch Modan around Thelsamar with a three-stop route another addon asked for, cropped to the stops."""
+    map_id = 1432
+    base, rects = map_base(ui, map_id)
+    canvas = ui.canvas(base.width, base.height)
+    canvas.image = base.image.copy()
+    mx, my, mw, mh = rects["map"]
+    route = ui.canvas(mw, mh)
+
+    def point(p):
+        normal = projection(ui, p, map_id)
+        return (normal[0] * mw, normal[1] * mh)
+
+    # Route.lua: everything past the stop being guided to recedes to LATER_ALPHA.
+    for index, walk in enumerate(ordered(data()["stops"])):
+        points = [point(p) for p in ordered(walk)]
+        for a, b in zip(points, points[1:], strict=False):
+            segment(route, a, b, NORMAL, True, 1 if index == 0 else 0.4)
+    flush_strokes(route)
+    canvas.paste(route, mx, my)
+    map_landmarks(canvas, map_id, rects["map"])
+    ends = [ordered(walk)[-1] for walk in ordered(data()["stops"])]
+    for number, (end, badge) in reversed(list(enumerate(zip(ends, STOP_BADGES, strict=True), 1))):
+        px, py = point(end)
+        stop_pin(canvas, mx + px, my + py, number, badge, number > 1)
+    sx, sy = point(THELSAMAR)
+    icon(canvas, "UI-WorldMapArrow", mx + sx, my + sy, 27)
+    xs = [point(p)[0] for p in (*ends, THELSAMAR)]
+    ys = [point(p)[1] for p in (*ends, THELSAMAR)]
+    left, top = mx + min(xs) - 70, my + min(ys) - 50
+    crop = ui.canvas(max(xs) - min(xs) + 140, max(ys) - min(ys) + 100)
+    crop.image = canvas.image.crop(
+        (canvas.px(left), canvas.px(top), canvas.px(left) + crop.image.width, canvas.px(top) + crop.image.height)
+    )
+    return scene(ui, [(crop, 0, 0)])
+
+
 def tracker_canvas(ui, seconds=0, settling=False):
     # Reference 21 is a captured itinerary, not a new optimality claim for these timings.
     rows = [
@@ -651,6 +717,7 @@ SCENES = {
     "kalimdor": lambda ui: render_map(ui, 1414),
     "darkshore": lambda ui: render_map(ui, 1439),
     "docks": render_docks,
+    "stops": render_stops,
     "tracker": render_tracker,
     "minimap": render_minimap,
     "compass": render_compass,
