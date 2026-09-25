@@ -11,6 +11,10 @@ verbatim rather than rewritten as the addon moves.
 
 ## [Unreleased]
 
+- **A route stop that says what stands there keeps its number.** When another addon marks a stop as a flight master,
+  a quest giver, a boat and so on, the map shows the numbered step circle with that icon as a small badge on its
+  lower right, rather than the icon with a loose number beside it. A single destination still shows the icon alone.
+
 ## [1.2.0] - 2026-09-25
 
 **The way back to your corpse.** Release your spirit and a dotted path leads from the graveyard back to your body, in

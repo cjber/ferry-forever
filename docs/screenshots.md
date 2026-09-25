@@ -24,6 +24,7 @@ pixels never enter product media.
 | `kalimdor.png` | Auberdine → Menethil → Theramore → Cenarion Hold, Silithus |
 | `darkshore.png` | A measured walk south from Auberdine to the Grove of the Ancients |
 | `docks.png` | Auberdine's clustered piers; arrivals/departures and destination glows |
+| `stops.png` | A three-stop API route through Thelsamar: flight master, quest giver, hand-in badges on numbered rings |
 | `tracker.png` | Capture 21's five Auberdine → Silithus steps, with the current totals header |
 | `minimap.png` | Auberdine's piers as minimap pins, the last dotted stretch to the south pier, native Guide waypoint |
 | `compass.png` | Current optional compass, enabled for this scene |

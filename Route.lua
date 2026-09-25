@@ -15,9 +15,10 @@ local UNDER_THICKNESS, UNDER_ALPHA = THICKNESS + 2, 0.5
 ns.RouteUnderAlpha = UNDER_ALPHA
 local GOAL_ATLAS, GOAL_SCALE = "Waypoint-MapPin-Tracked", 0.8
 local STOP_ATLAS, STOP_SIZE, MAX_NUMERAL = "adventureguide-ring", 26, 9
--- A stop's own mark stands alone at the size of the map's quest marks, its number hanging off its lower right; on the
--- minimap the ring alone circles the game's own icon there.
-local LOOK_SIZE, MINIMAP_GOAL, MINIMAP_RING = 22, 16, 22
+-- A lone stop's own mark stands alone at the size of the map's quest marks. A numbered one keeps its ring and wears the
+-- mark as a badge over the ring's lower right, as Legacy Forever's entrance pins wear the Legacy shield; the pin's hit
+-- rect reaches out over the badge. On the minimap the ring alone circles the game's own icon there.
+local LOOK_SIZE, BADGE_SIZE, BADGE_OFFSET, MINIMAP_GOAL, MINIMAP_RING = 22, 16, 4, 16, 22
 -- Everything past the stop being guided to recedes, so the way ahead reads first. Later lines keep their colour
 -- but drop well back against parchment; later stop rings stay a little stronger so their numbers remain legible.
 local LATER_ALPHA, LATER_STOP_ALPHA = 0.4, 0.55
@@ -578,8 +579,8 @@ end
 -- A lone destination wears the waypoint pin; a numbered stop wears the ring the Adventure Guide draws for the same
 -- step. Blizzard's numerals (centred in their atlas boxes, unlike font digits) stop at 9; later stops use the font.
 -- Stops whose rings would overlap share one, labelled with their numbers: a run as 4-7, others apart as 2, 5.
--- A stop whose caller said what stands there wears that mark itself, with no ring or disc, numbered in the game's
--- outlined gold at its lower right, so the pin reads as the quest giver or flight master rather than hiding it.
+-- A numbered stop whose caller said what stands there wears that mark as a badge on the ring's lower right, so the pin
+-- reads as step 3 at the quest giver or flight master; a lone one wears the mark alone, full size.
 ---@param numbers integer[]? the stops this pin marks, in order; nil for a lone destination
 ---@param titles string[]
 ---@param look? SPFAPIStopKind
@@ -592,21 +593,20 @@ function ShortestPathForeverGoalPinMixin:OnAcquired(x, y, numbers, titles, later
 	self.Numeral:SetAlpha(alpha)
 	self.Number:SetAlpha(alpha)
 	self.stopTitles = titles[1] and titles or nil
-	local marked = look ~= nil and ns.SetStopLook(self.Icon, look, LOOK_SIZE)
+	local marked = look ~= nil and ns.SetStopLook(self.Icon, look, numbers and BADGE_SIZE or LOOK_SIZE)
+	local badge = marked and numbers ~= nil
 	self.Icon:SetShown(marked)
-	self.Number:ClearAllPoints()
-	self.Texture:SetShown(not marked)
-	if marked then
+	self.Icon:ClearAllPoints()
+	self.Icon:SetPoint(badge and "BOTTOMRIGHT" or "CENTER", badge and BADGE_OFFSET or 0, badge and -BADGE_OFFSET or 0)
+	self:SetHitRectInsets(0, badge and -BADGE_OFFSET or 0, 0, badge and -BADGE_OFFSET or 0)
+	self.Texture:SetShown(not marked or badge)
+	if marked and not badge then
 		self:SetSize(LOOK_SIZE, LOOK_SIZE)
 		self.Disc:Hide()
 		self.Numeral:Hide()
-		self.Number:SetFontObject("GameFontNormalOutline")
-		self.Number:SetPoint("BOTTOMLEFT", self, "BOTTOMRIGHT", -6, -3)
-		self.Number:SetText(numbers and StopLabel(numbers) or "")
+		self.Number:SetText("")
 		return
 	end
-	self.Number:SetFontObject("GameFontNormal")
-	self.Number:SetPoint("CENTER")
 	local number = numbers and #numbers == 1 and numbers[1]
 	local numeral = number and number <= MAX_NUMERAL
 	self.Disc:SetShown(numbers ~= nil)
@@ -730,7 +730,7 @@ function ProviderMixin:RefreshStops()
 			x, y, numbers[i], titles[i] = x + mark.x, y + mark.y, mark.index, mark.title
 		end
 		local lead = group[1]
-		-- A shared ring stands for several places, so only a stop on its own wears its mark.
+		-- A shared ring stands for several places, so only a stop on its own wears its badge.
 		local look = #group == 1 and lead.look or nil
 		if lead.index == first then
 			map:AcquirePin(GOAL_TEMPLATE, lead.x, lead.y, stops and numbers, titles, false, look)
