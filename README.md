@@ -71,8 +71,8 @@ Install it from [CurseForge](https://www.curseforge.com/wow/addons/shortest-path
 
 Every feature has its own switch in the settings. Searches and tracker updates wait until combat ends.
 
-It's in English for now. Translations are welcome on the CurseForge project's
-[Localization page](https://legacy.curseforge.com/wow/addons/shortest-path-forever/localization).
+It's in English for now. Translations are welcome as a pull request, or pasted into an issue, on
+[GitHub](https://github.com/cjber/shortest-path-forever/tree/main/Locales).
 
 ## How the times work
 

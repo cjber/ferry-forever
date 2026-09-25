@@ -38,7 +38,6 @@ read_globals = {
 	"GameTooltip_AddNormalLine",
 	"GameTooltip_SetTitle",
 	"geterrorhandler",
-	"GetLocale",
 	"GetNormalizedRealmName",
 	"GetRealmName",
 	"GetServerTime",

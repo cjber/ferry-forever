@@ -29,8 +29,9 @@ the history, and the pinned sift checks.
   budgets. `PathGrid.lua` decodes the walking maps, `Path.lua` searches them, `PathJobs.lua` slices the
   searches over frames. `Journey.lua` runs the journey, `JourneyCosts.lua` its endpoint costs and
   `JourneyGuide.lua` the arrow and native waypoint.
-- `Locales/` — `Locales/enUS.lua` makes `L`, whose English phrases are their own keys; the packager fills
-  `Locales/Translations.lua` from CurseForge. After changing a phrase, `python3 tools/phrases.py > Locales/phrases.txt`.
+- `Locales/` — `Locales/enUS.lua` makes `L`, whose English phrases are their own keys; a translation is a
+  `Locales/<locale>.lua` listed after it (`Locales/README.md`). After changing a phrase,
+  `python3 tools/phrases.py > Locales/phrases.txt`. No packager localization keyword: CurseForge no longer serves translations.
 - `docs/curseforge.md` — the store description, pasted into CurseForge and Wago by hand.
 
 ## Rules

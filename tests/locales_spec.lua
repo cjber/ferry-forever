@@ -1,5 +1,5 @@
--- Every phrase a player reads goes through L, so it can be translated, and Locales/phrases.txt (what the
--- maintainer pastes into CurseForge) lists exactly the phrases the code uses.
+-- Every phrase a player reads goes through L, so it can be translated, and Locales/phrases.txt (the file a
+-- translator copies) lists exactly the phrases the code uses.
 
 local function read(path)
 	local file = assert(io.open(path, "rb"))
@@ -50,7 +50,7 @@ for line in io.lines("ShortestPathForever.toc") do
 	end
 end
 assert(#shipped > 20, "the TOC lists the addon's files")
-assert(shipped[1] == "Locales/enUS.lua" and shipped[2] == "Locales/Translations.lua", "locales load first")
+assert(shipped[1] == "Locales/enUS.lua", "L exists before any file uses it")
 
 local found = {}
 for _, file in ipairs(shipped) do
@@ -77,22 +77,28 @@ local printed = pipe:read("*a")
 assert(pipe:close(), "tools/phrases.py failed")
 assert(printed ~= "" and printed == read("Locales/phrases.txt"), "run: python3 tools/phrases.py > Locales/phrases.txt")
 
--- A missing phrase reads as English; a translation the packager writes into a locale's block replaces it.
+-- A missing phrase reads as English. The template is a working translation file: in its own language it
+-- replaces the English, in any other it changes nothing.
 local ns = {}
 assert(loadfile("Locales/enUS.lua"))("ShortestPathForever", ns)
 assert(ns.L["Journey"] == "Journey")
-local translations = read("Locales/Translations.lua")
-local released, count = translations:gsub('%-%-@localization%(locale="deDE"[^\n]*', 'L["Journey"] = "Reise"')
-assert(count == 1, "one deDE block")
-local env = setmetatable({
-	GetLocale = function()
-		return "deDE"
-	end,
-}, { __index = _G })
-setfenv(assert(loadstring(released)), env)("ShortestPathForever", ns)
-assert(ns.L["Journey"] == "Reise" and ns.L["Boats"] == "Boats")
-for _, locale in ipairs({ "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }) do
-	assert(translations:find('@localization(locale="' .. locale .. '"', 1, true), locale)
+local template, count = read("Locales/phrases.txt"):gsub('\nL%["Journey"%] = "Journey"\n', '\nL["Journey"] = "Reise"\n')
+assert(count == 1, "the template lists Journey")
+for _, case in ipairs({ { "frFR", "Journey" }, { "deDE", "Reise" } }) do
+	local env = setmetatable({
+		GetLocale = function()
+			return case[1]
+		end,
+	}, { __index = _G })
+	setfenv(assert(loadstring(template)), env)("ShortestPathForever", ns)
+	assert(ns.L["Journey"] == case[2] and ns.L["Boats"] == "Boats", case[1])
 end
+
+-- The packager's CurseForge localization keyword would fail the release: CurseForge no longer serves translations.
+local keyword = "@" .. "localization"
+local grep = assert(io.popen("git grep -l -F '" .. keyword .. "'"))
+local hits = grep:read("*a")
+grep:close()
+assert(hits == "", "remove the packager localization keyword from:\n" .. hits)
 
 print("locales_spec: ok")

@@ -43,6 +43,6 @@ Shift-click the world map or minimap to plan a journey. For a quest, choose **Pl
 
 Every feature has its own switch in the settings. The world map's filter menu hides flight masters, docks, lifts, the tram, portals and the other faction's routes.
 
-It's in English for now. Translations are welcome on the project's [Localization page](https://legacy.curseforge.com/wow/addons/shortest-path-forever/localization).
+It's in English for now. Translations are welcome as a pull request, or pasted into an issue, on [GitHub](https://github.com/cjber/shortest-path-forever/tree/main/Locales).
 
 Source code and issues: [github.com/cjber/shortest-path-forever](https://github.com/cjber/shortest-path-forever) (GPL-3.0).

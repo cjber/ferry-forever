@@ -12,8 +12,8 @@ verbatim rather than rewritten as the addon moves.
 ## [Unreleased]
 
 - **Ready for translation.** Every line the addon writes, from the settings to the tracker and the map's tooltips,
-  can now be translated on the CurseForge project's Localization page, and a release ships whatever has been
-  translated. Anything not yet translated stays in English, as before.
+  now comes from one list of phrases, so the addon can be translated. Translations are welcome on GitHub; anything
+  not yet translated stays in English, as before.
 
 ## [1.3.0] - 2026-09-25
 
