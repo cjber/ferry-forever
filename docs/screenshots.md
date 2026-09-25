@@ -96,5 +96,5 @@ python3 tools/screenshots.py --refs /path/to/refs --tooltip-ref /tmp/tooltip-ref
 ```
 
 Live timings, engine rendering and interaction remain unverified in game, by design.
-The offline UI-stub harness (`$SPF_HARNESS`) checks route pixel sizing, overview/edge
+The UI checks (`tests/ui.sh`) check route pixel sizing, overview/edge
 curves, native waypoints, tracker totals/countdowns and compass bearings.

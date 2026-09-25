@@ -1,6 +1,6 @@
 -- Run from the source tree being measured; the harness only supplies offline UI stubs.
 -- luajit -joff /path/to/tests/runtime_bench.lua <scenario> [gc]
-local harness = os.getenv("SPF_HARNESS") or os.getenv("HOME") .. "/drive/proj/wow-handoff/scratch/harness2.lua"
+local harness = (arg[0]:match("^(.*)/") or "tests") .. "/ui_stubs.lua"
 local file = assert(io.open(harness))
 local source = file:read("*a")
 file:close()

@@ -1,5 +1,5 @@
 -- Minimap transport pins: placement, rim, tooltips, the tracking menu, idle cost and a redraw bench.
-local harness = os.getenv("SPF_HARNESS") or os.getenv("HOME") .. "/drive/proj/wow-handoff/scratch/harness2.lua"
+local harness = (arg[0]:match("^(.*)/") or "tests") .. "/ui_stubs.lua"
 local file = assert(io.open(harness))
 local source = file:read("*a")
 file:close()

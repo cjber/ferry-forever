@@ -1,8 +1,6 @@
 #!/bin/sh
-# UI checks that need the local client-UI harness (stubs + Blizzard UI source), which cannot ship here.
-# Set SPF_HARNESS to harness2.lua if it is not at the default path. CI runs only tests/*_spec.lua.
+# The UI checks: stubbed client frames plus Blizzard's own map, tracker and menu code, fetched pinned.
 set -e
-harness=${SPF_HARNESS:-$HOME/drive/proj/wow-handoff/scratch/harness2.lua}
-luajit "$harness" >/dev/null
+tools/fetch_blizzard_ui.sh
 for t in tests/*_ui.lua; do luajit "$t"; done
 echo "ui checks ok"

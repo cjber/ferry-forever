@@ -1,5 +1,5 @@
 -- Exercise the real route layers, tracker, Guide and compass against the offline client fixture.
-local harness = os.getenv("SPF_HARNESS") or os.getenv("HOME") .. "/drive/proj/wow-handoff/scratch/harness2.lua"
+local harness = (arg[0]:match("^(.*)/") or "tests") .. "/ui_stubs.lua"
 local file = assert(io.open(harness))
 local source = file:read("*a")
 file:close()
@@ -9,6 +9,8 @@ visible, WorldMapFrame.shown = true, true
 posX, posY, posMap, facing = 0, 0, 1, 0
 mapID, cursorX, cursorY, shiftDown = 1414, 0.5, 0.496, true
 ns.db.tracker, ns.db.compass = false, true
+-- Zoomed in on a zone-sized canvas, so the dots between here and a 100-yard goal clear the stop gaps (#51).
+zoom, canvas.width, canvas.height = 1, 10000, 7000
 local batches, jobs = {}, {}
 local splitRoute = false
 ns.Path = {

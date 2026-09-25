@@ -38,9 +38,8 @@ and `uvx zizmor --offline .github` run the same checks.
 
 Not in the gate but worth running after touching the planner: `luajit -joff tests/journey_bench.lua`,
 `luajit tests/walk_sim.lua` (README lists both). After touching Map, Route, Tracker, Settings or the
-public API, run each `tests/*_ui.lua` on its own with `luajit`: they load the external UI harness
-(`$SPF_HARNESS`), so CI never runs them and they can go stale unnoticed (api_ui.lua did after #27).
-`tests/ui.sh` also runs the harness's own scenarios, which can lag the addon.
+public API, run `tests/ui.sh`: the `tests/*_ui.lua` checks load `tests/ui_stubs.lua` and Blizzard's UI source
+(fetched pinned by `tools/fetch_blizzard_ui.sh`). CI runs it too.
 
 ## Evidence
 
@@ -105,7 +104,7 @@ How each part of the tree is reviewed. Unlisted paths are `production`.
 | `tools/` | script | offline data generators, never shipped |
 | `tools/baker/mappster.patch` | vendor | patch against upstream Mappster |
 | `tests/` | test | headless LuaJIT specs, harnesses and a bench |
-| `tests/*_ui.lua`, `tests/activity_bench.lua`, `tests/runtime_bench.lua` | test (external) | load `$SPF_HARNESS`, outside the repo and CI |
+| `tests/*_ui.lua`, `tests/activity_bench.lua`, `tests/runtime_bench.lua` | test | load `tests/ui_stubs.lua`; the UI checks run in CI, the benches locally |
 | `tests/*_performance.md`, `README.md`, `docs/*.md`, `types/README.md`, `tools/baker/README.md` | docs | `docs/curseforge.md` is store copy: proposals only |
 | `types/` | config (types) | LuaLS declarations for Forever and addon contracts; never shipped |
 | `CHANGELOG.md` | docs (history) | each entry is a release note; kept verbatim by policy |
