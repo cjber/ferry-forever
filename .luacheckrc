@@ -135,13 +135,16 @@ read_globals[#read_globals + 1] = "C_Item"
 read_globals[#read_globals + 1] = "C_SpellBook"
 read_globals[#read_globals + 1] = "GetBindLocation"
 
--- tests/ui_stubs.lua defines the client for the UI checks, which append code reading its locals.
-files["tests/ui_stubs.lua"] = {
+-- tests/ui_client.lua and tests/ui_map.lua are one chunk defining the client for the UI checks, which append code
+-- reading their locals. 13x/2xx: globals, locals and arguments only the appended checks use; 43x: stub methods named
+-- like the client's.
+files["tests/ui_client.lua"] = {
 	std = "+luajit",
 	allow_defined_top = true,
-	-- 13x/2xx: globals, locals and arguments only the appended checks use; 43x: stub methods named like the client's.
 	ignore = { "13", "2", "43" },
-	globals = { "BaseMapPoiPinMixin", "Enum", "SuperTrackedFrame", "WorldFrame", "math" },
-	-- Blizzard_SharedXML/Spinner.lua, loaded from the pinned UI source.
-	read_globals = { "SpinnerMixin" },
+	globals = { "Enum", "math" },
+	-- ui_map.lua defines WorldFrame; Blizzard_SharedXML/Spinner.lua defines SpinnerMixin.
+	read_globals = { "SpinnerMixin", "WorldFrame" },
 }
+-- ui_map.lua continues ui_client.lua's chunk, so its "globals" are ui_client.lua's locals.
+files["tests/ui_map.lua"] = { std = "+luajit", ignore = { "1", "2", "43" } }

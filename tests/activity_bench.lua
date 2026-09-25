@@ -1,9 +1,11 @@
 -- Offline travel/event cost, including the harness dispatcher at 60 Hz; run with luajit -joff.
-local harness = (arg[0]:match("^(.*)/") or "tests") .. "/ui_stubs.lua"
-local file = assert(io.open(harness))
-local source = file:read("*a")
-file:close()
-source = source:sub(1, assert(source:find("visible = true\nlocal function advance", 1, true)) - 1)
+local dir = arg[0]:match("^(.*)/") or "tests"
+local source = ""
+for _, part in ipairs({ "ui_client.lua", "ui_map.lua" }) do
+	local file = assert(io.open(dir .. "/" .. part))
+	source = source .. file:read("*a")
+	file:close()
+end
 source = source:gsub(
 	"local ns = {}",
 	[[
@@ -27,7 +29,7 @@ local ns = {}
 ]]
 )
 source = source:gsub(
-	"local actualPath=ns.Path",
+	"local actualPath = ns.Path",
 	[[
 local loadMs = (os.clock() - loadStart) * 1000
 loadKB = collectgarbage("count") - loadKB

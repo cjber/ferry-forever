@@ -1,9 +1,11 @@
 -- Each case boots a fresh addon against Blizzard's real waypoint provider, without a game client.
-local harness = (arg[0]:match("^(.*)/") or "tests") .. "/ui_stubs.lua"
-local file = assert(io.open(harness))
-local source = file:read("*a")
-file:close()
-source = source:sub(1, assert(source:find("visible = true\nlocal function advance", 1, true)) - 1)
+local dir = arg[0]:match("^(.*)/") or "tests"
+local source = ""
+for _, part in ipairs({ "ui_client.lua", "ui_map.lua" }) do
+	local file = assert(io.open(dir .. "/" .. part))
+	source = source .. file:read("*a")
+	file:close()
+end
 local setup = [[
 visible, WorldMapFrame.shown = true, true
 posX, posY, posMap, facing = 0, 0, 1, 0
