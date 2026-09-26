@@ -13,11 +13,13 @@ luacheck .
 tools/typecheck.sh                  # LuaLS 3.19.1 + multi-value lint; first run fetches pinned WoW types
 for s in tests/*_spec.lua; do luajit "$s" || exit 1; done
 luajit -joff tests/journey_bench.lua   # after touching the planner: frames stay under 3 ms
+python3 tools/changelog.py --check
 python3 .sift/gate.py --base origin/main && python3 .sift/agents.py check
 ```
 
 The same gate CI runs, plus shellcheck and shfmt on `tools/`, actionlint and zizmor on the workflows, gitleaks on
-the history, and the pinned sift checks.
+the history, and the pinned sift checks. Every version needs a `CHANGELOG.md` entry (prose, bold-lead bullets)
+before its `v*` tag, since the release publishes it as the notes.
 
 ## Layout
 
