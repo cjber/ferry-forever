@@ -381,9 +381,13 @@ def map_dock_pins(canvas, map_id, rect, hover):
         else:
             size = 15 if kind in ("lift", "tram") else 20
             atlas = {"boat": "flightmasterferry", "lift": "poi-door-arrow-up", "tram": "poi-door-arrow-down"}[kind]
-            canvas.draw(ui.atlas(atlas), x - size / 2, y - size / 2, size, size)
+            art = ui.atlas(atlas)
+            # Fitted at its native shape, as ns.FitAtlas does: the floor arrows are 13 by 14.
+            scale = size / max(art.width, art.height)
+            w, h = art.width * scale, art.height * scale
+            canvas.draw(art, x - w / 2, y - h / 2, w, h)
             if hover and 10 in ids:
-                canvas.draw(ui.atlas(atlas), x - 10, y - 10, 20, 20, blend="ADD")
+                canvas.draw(art, x - w / 2, y - h / 2, w, h, blend="ADD")
         if 10 in ids:
             hover_point = (x, y)
     return hover_point

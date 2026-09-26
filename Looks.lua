@@ -81,6 +81,24 @@ local function Art(kind)
 	return found[kind] or nil
 end
 
+-- Art is never stretched: `atlas` at its native shape, as large as fits in maxWidth by maxHeight. The caller anchors
+-- the texture by one point, so it stays centred in its box. False, leaving the texture alone, when the client lacks it.
+---@param texture Texture
+---@param atlas string
+---@param maxWidth number
+---@param maxHeight number
+---@return boolean
+function ns.FitAtlas(texture, atlas, maxWidth, maxHeight)
+	local info = C_Texture.GetAtlasInfo(atlas)
+	if not info then
+		return false
+	end
+	texture:SetAtlas(atlas)
+	local scale = math.min(maxWidth / info.width, maxHeight / info.height)
+	texture:SetSize(info.width * scale, info.height * scale)
+	return true
+end
+
 -- Draws the kind on `texture`, fitted into a `size` square; false, leaving the texture alone, when the client has
 -- no art for it.
 ---@param texture Texture

@@ -8,6 +8,13 @@ local PORTAL_TEMPLATE = "ShortestPathForeverPortalPinTemplate"
 local PING_TEMPLATE = "ShortestPathForeverPingPinTemplate"
 local PIN_SIZE = 20
 local ARROW_SIZE = 15
+-- The floor arrows are 13 by 14 (UiTextureAtlasMember, 1.60.1.70009), so they are fitted, never squared.
+local TRANSPORT_ATLASES = {
+	boat = "flightmasterferry",
+	lift = "poi-door-arrow-up",
+	tram = "poi-door-arrow-down",
+	portal = "map-icon-suramardoor.tga",
+}
 -- Half a pin, as a fraction of a zoomed-out map.
 local EDGE = 0.015
 -- Docks closer than this many pins apart merge into one.
@@ -52,22 +59,17 @@ end
 ---@param kind SPFMode
 ---@param size number?
 function ns.SetTransportIcon(texture, kind, size)
-	if kind == "boat" then
-		texture:SetAtlas("flightmasterferry")
-	elseif kind == "zeppelin" then
+	-- The floor arrows fill their box where the ferry has a margin, so they draw smaller to match.
+	size = (size or PIN_SIZE) * ((kind == "lift" or kind == "tram") and ARROW_SIZE / PIN_SIZE or 1)
+	if kind == "zeppelin" then
+		-- Square (64 by 64), like the ferry.
 		texture:SetTexture("Interface\\AddOns\\ShortestPathForever\\media\\zeppelin")
-	elseif kind == "lift" then
-		texture:SetAtlas("poi-door-arrow-up")
-	elseif kind == "tram" then
-		texture:SetAtlas("poi-door-arrow-down")
-	elseif kind == "portal" then
-		texture:SetAtlas("map-icon-suramardoor.tga")
+		texture:SetSize(size, size)
+	elseif TRANSPORT_ATLASES[kind] then
+		ns.FitAtlas(texture, TRANSPORT_ATLASES[kind], size, size)
 	else
 		error("unknown route kind " .. tostring(kind))
 	end
-	-- The floor arrows fill their square where the ferry has a margin, so they draw smaller to match.
-	size = (size or PIN_SIZE) * ((kind == "lift" or kind == "tram") and ARROW_SIZE / PIN_SIZE or 1)
-	texture:SetSize(size, size)
 end
 
 local dockKinds

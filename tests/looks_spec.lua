@@ -12,6 +12,7 @@ local atlases = {
 	SideInProgressquesticon = { width = 16, height = 18 },
 	taxinode_horde = { width = 32, height = 32 },
 	taxinode_neutral = { width = 32, height = 32 },
+	["poi-door-arrow-up"] = { width = 13, height = 14 },
 }
 local lookups = {}
 local faction = "Horde"
@@ -80,6 +81,19 @@ plain:SetAtlas("Waypoint-MapPin-Tracked")
 check(not ns.SetStopLook(plain, "innkeeper", 18), "no innkeeper art in this client")
 check(not ns.SetStopLook(plain, "dungeon", 18), "no dungeon art in this client")
 check(plain.atlas == "Waypoint-MapPin-Tracked" and plain.width == nil, "the texture is left alone")
+
+-- Art is never stretched: an atlas keeps its native shape inside the box, whichever side is longer.
+local arrow = texture()
+check(ns.FitAtlas(arrow, "poi-door-arrow-up", 15, 15), "the lift's floor arrow")
+check(arrow.height == 15 and math.abs(arrow.width / arrow.height - 13 / 14) < 1e-9, "a 13 by 14 arrow stays 13 by 14")
+check(
+	ns.FitAtlas(arrow, "SideInProgressquesticon", 40, 9) and arrow.height == 9 and arrow.width == 8,
+	"fits a wide box"
+)
+check(
+	not ns.FitAtlas(arrow, "no-such-atlas", 15, 15) and arrow.atlas == "SideInProgressquesticon",
+	"missing art left alone"
+)
 
 -- Each kind asks the client once.
 ns.SetStopLook(pin, "pickup", 18)
